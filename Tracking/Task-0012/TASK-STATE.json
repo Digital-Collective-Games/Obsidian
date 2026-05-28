@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "task_id": "Task-0012",
+  "status": "in_progress",
+  "phase": "planning",
+  "plan_approved": false,
+  "current_pass": null,
+  "last_completed_pass": null,
+  "current_gate": "planning",
+  "latest_audit_verdict": "unknown",
+  "validation": {
+    "build": "not_run",
+    "unit_tests": "not_run",
+    "regression": "not_run"
+  },
+  "blockers": [
+    "Human approval of PLAN.md is required before implementation starts."
+  ],
+  "next_expected_artifacts": [
+    "Design/PLAN-APPROVAL/REVIEW-PACKAGE.md",
+    "Testing/PASS-0001-AUDIT.md",
+    "Testing/PASS-0001-CHECKLIST.json"
+  ],
+  "updated_at": "2026-05-27T23:45:00-04:00"
+}
