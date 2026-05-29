@@ -1,0 +1,36 @@
+Initial command:
+gh auth status -h github.com
+
+Working directory:
+C:\Agent\CodexDashboard
+
+Run timestamp:
+2026-05-28T10:33:12.3728498-04:00
+
+Exit code:
+1
+
+Output:
+You are not logged into any GitHub hosts. To log in, run: gh auth login
+
+Result:
+Blocked before GitHub issue create/update. Do not write GITHUB-ISSUE.json from
+this run.
+
+Resolution command:
+gh auth status --hostname github.com
+
+Resolution timestamp:
+2026-05-28T10:47:11.3413578-04:00
+
+Resolution output:
+github.com
+  - Logged in to github.com account gregsemple2003 (keyring)
+  - Active account: true
+  - Git operations protocol: https
+  - Token: redacted
+  - Token scopes: 'gist', 'read:org', 'repo', 'workflow'
+
+Resolution result:
+Authenticated. PASS-0002 may proceed against approved target repo
+gregsemple2003/CodexDesktop.

@@ -1,0 +1,32 @@
+diff --git "a/C:\\Agent\\CodexDashboard\\Tracking\\Task-0012\\Testing\\TaskGitHubReconcile\\Task-0012-REMOTE-BODY.md" "b/C:\\Agent\\CodexDashboard\\Tracking\\Task-0012\\Testing\\TaskGitHubReconcile\\Task-0012-LOCAL-RENDERED-BODY.md"
+index 84378d3..2b0eba9 100644
+--- "a/C:\\Agent\\CodexDashboard\\Tracking\\Task-0012\\Testing\\TaskGitHubReconcile\\Task-0012-REMOTE-BODY.md"
++++ "b/C:\\Agent\\CodexDashboard\\Tracking\\Task-0012\\Testing\\TaskGitHubReconcile\\Task-0012-LOCAL-RENDERED-BODY.md"
+@@ -63,7 +63,7 @@ concurrency.
+   `Tracking/Task-0001/TASK.md`, because GitHub issue `#1` maps to
+   local `Task-0001`.
+ - Codex validates the target GitHub repo as explicit `owner/name`.
+-- Before any write, Codex runs `scripts/Sync-TaskToGitHubIssue.ps1`, which
++- Before any write, Codex runs `skills/obsidian-operator/scripts/Sync-TaskToGitHubIssue.ps1`, which
+   performs task-id consistency checks and `gh auth status -h github.com`.
+ - When `gh` is not authenticated or cannot operate, Codex records `blocked`
+   proof and does not create/update `TASK-META.json`.
+@@ -73,7 +73,7 @@ concurrency.
+   and body for `Task-0001`.
+ - The sync script refuses to let issue `#1` carry `Task-0012` identifiers.
+ - Codex reads the issue back with `gh issue view --json
+-  number,title,body,state,labels,updatedAt,url`.
++  number,title,body,state,labels,url`.
+ - The issue title/body include:
+   - hidden stable marker
+   - source-of-truth statement
+@@ -124,5 +124,5 @@ concurrency.
+ - Issue number: `12`
+ - Local task path: `Tracking/Task-0012/TASK.md`
+ - Source commit: `75177b6dee23399358ee66676791fb41dc01d51e`
+-- Local task SHA-256: `D2E6DD76BDEC99325E2628C700F2E61E1EE00DAA23A457548E70004773964C24`
+-- Rendered at: `2026-05-28T17:20:21.5228385-04:00`
+\ No newline at end of file
++- Local task SHA-256: `7EF4DA46597AE853B3BFC62F2D027A4D6224EF27DFF32724F5D707267BF03A53`
++- Rendered at: `2026-05-28T21:22:36.1530061-04:00`
+\ No newline at end of file

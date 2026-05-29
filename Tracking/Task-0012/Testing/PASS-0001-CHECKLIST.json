@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "task_id": "Task-0012",
+  "pass_id": "PASS-0001",
+  "checklist_status": "closed",
+  "implemented": true,
+  "build": "not_applicable",
+  "unit_tests": "not_applicable",
+  "pass_audit_written": false,
+  "audit_verdict": "unknown",
+  "audit_result_ref": null,
+  "handoff_updated": false,
+  "commit_created": false,
+  "pushed_upstream": false,
+  "notify_sent": false,
+  "blockers": [],
+  "next_required_actions": [
+    "Run the one-issue gh export for Tracking/Task-0012/TASK.md.",
+    "Write minimal TASK-META.json only after successful issue readback."
+  ],
+  "updated_at": "2026-05-28T14:09:16.7488676-04:00"
+}

@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "manifest_type": "codex_repo_registry",
+  "repos": [
+    {
+      "id": "CodexDashboard",
+      "local_root": "C:\\Agent\\CodexDashboard",
+      "source_control_provider": {
+        "kind": "git",
+        "default_agent_user": "gregsemple2003",
+        "remote": "upstream",
+        "repo": "Digital-Collective-Games/Obsidian",
+        "url": "https://github.com/Digital-Collective-Games/Obsidian"
+      },
+      "task_provider": {
+        "kind": "github_issues",
+        "host": "github.com",
+        "repo": "Digital-Collective-Games/Obsidian",
+        "canonical_query": "is:issue is:open"
+      },
+      "task_proposal_provider": {
+        "kind": "github_issues",
+        "host": "github.com",
+        "repo": "Digital-Collective-Games/ObsidianProposals",
+        "canonical_query": "is:issue is:open"
+      }
+    }
+  ]
+}

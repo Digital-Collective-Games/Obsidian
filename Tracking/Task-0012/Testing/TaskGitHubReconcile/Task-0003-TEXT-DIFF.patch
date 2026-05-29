@@ -1,0 +1,21 @@
+diff --git "a/C:\\Agent\\CodexDashboard\\Tracking\\Task-0012\\Testing\\TaskGitHubReconcile\\Task-0003-REMOTE-BODY.md" "b/C:\\Agent\\CodexDashboard\\Tracking\\Task-0012\\Testing\\TaskGitHubReconcile\\Task-0003-LOCAL-RENDERED-BODY.md"
+index 97174f1..3794769 100644
+--- "a/C:\\Agent\\CodexDashboard\\Tracking\\Task-0012\\Testing\\TaskGitHubReconcile\\Task-0003-REMOTE-BODY.md"
++++ "b/C:\\Agent\\CodexDashboard\\Tracking\\Task-0012\\Testing\\TaskGitHubReconcile\\Task-0003-LOCAL-RENDERED-BODY.md"
+@@ -36,7 +36,7 @@ The goal is to make burst inspection more useful without replacing the existing
+ - In `Total` mode, the chart behaves as it does today with raw token totals.
+ - In `Norm` mode, the chart and hover values use a normalized weighted metric derived from uncached input, cached input, output, and reasoning output.
+ - Repo mode uses the selected metric mode consistently for stacked bar totals.
+-- Right-click investigation still analyzes the real raw bucket range rather than a misleading normalized ├ö├ç┬útotal tokens├ö├ç├ÿ value.
++- Right-click investigation still analyzes the real raw bucket range rather than a misleading normalized ÔÇ£total tokensÔÇØ value.
+ - The unit test suite passes.
+ - The repo-root desktop overlay regression lane is rerun honestly after the change.
+ 
+@@ -54,4 +54,4 @@ The goal is to make burst inspection more useful without replacing the existing
+ - Local task path: `Tracking/Task-0003/TASK.md`
+ - Source commit: `75177b6dee23399358ee66676791fb41dc01d51e`
+ - Local task SHA-256: `D0178312B7ECCF790DBB5F3A996471C455A8AC09E18AF7F8D7955D0922C113FA`
+-- Rendered at: `2026-05-28T22:49:03.1472320-04:00`
+\ No newline at end of file
++- Rendered at: `2026-05-28T23:20:32.4198266-04:00`
+\ No newline at end of file

@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "task_id": "Task-0012",
+  "pass_id": "PASS-0002",
+  "checklist_status": "closed",
+  "implemented": true,
+  "build": "not_applicable",
+  "unit_tests": "not_applicable",
+  "pass_audit_written": false,
+  "audit_verdict": "unknown",
+  "audit_result_ref": null,
+  "handoff_updated": false,
+  "commit_created": false,
+  "pushed_upstream": false,
+  "notify_sent": false,
+  "blockers": [],
+  "next_required_actions": [
+    "Human inspects Testing/PILOT-ISSUE-REVIEW-PACKAGE.md and issue #1 as the representation of Task-0001.",
+    "Record the convention decision separating pilot metadata from the final registry/provider model.",
+    "Keep issue #1 free of queue, priority, human-gate, and identity labels.",
+    "Keep queue and priority values out of the repo manifest; the queue/orchestration layer owns those semantics.",
+    "Keep TASK-META.json on last_synced_at checkpoint semantics; live text conflict detection comes from fresh GitHub title/body readback before overwrite.",
+    "Keep future local-to-GitHub sync on skills/obsidian-operator/scripts/Sync-TaskToGitHubIssue.ps1 so embedded task ids cannot diverge."
+  ],
+  "updated_at": "2026-05-28T15:10:08.9236550-04:00"
+}

@@ -49,6 +49,9 @@ Task bootstrap contracts, day-pass artifacts, and pass history should still star
   - shared intervention packet prompt bundles
 - `tests/`
   - focused unit coverage
+- `skills/obsidian-operator/`
+  - repo-local Codex skill and bundled scripts for operating task/GitHub
+    provider sync, reconcile, bootstrap, and conflict-resolution workflows
 - `Tracking/Task-0001/`
   - task-owned artifacts for the current workstream
 
@@ -66,6 +69,9 @@ python -m app.codex_dashboard --scan-once --print-summary
 - do not infer token usage from file counts or file sizes
 - parse real `token_count` events from `C:\Users\gregs\.codex\sessions\`
 - keep the first version Windows-only and hotkey-first
+- before changing task/GitHub provider sync, `TASK-META.json`, issue fields,
+  bootstrap, reconcile, or text-conflict handling, use
+  `skills/obsidian-operator/SKILL.md`
 - treat repo-root `REGRESSION.md` as canonical for task-level regression in this repo
 - treat repo-root `DATA-HANDLING.md` as canonical for persistent data classes, backup inventory, restore expectations, and backup-impact task obligations in this repo
 - for agent-run validation and regression, treat the human's personal dashboard lane, config, database, and live Codex data as off-limits unless the human explicitly authorizes that run; task-closure regression must use the isolated lane/data flow in `TESTING.md`

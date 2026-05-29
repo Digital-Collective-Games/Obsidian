@@ -2,24 +2,21 @@
   "schema_version": 1,
   "task_id": "Task-0012",
   "status": "in_progress",
-  "phase": "planning",
-  "plan_approved": false,
-  "current_pass": null,
-  "last_completed_pass": null,
-  "current_gate": "planning",
+  "phase": "closure",
+  "plan_approved": true,
+  "current_pass": "PASS-0004",
+  "last_completed_pass": "PASS-0004",
+  "current_gate": "closure",
   "latest_audit_verdict": "unknown",
   "validation": {
-    "build": "not_run",
-    "unit_tests": "not_run",
-    "regression": "not_run"
+    "build": "not_applicable",
+    "unit_tests": "not_applicable",
+    "regression": "not_applicable"
   },
-  "blockers": [
-    "Human approval of PLAN.md is required before implementation starts."
-  ],
+  "blockers": [],
   "next_expected_artifacts": [
-    "Design/PLAN-APPROVAL/REVIEW-PACKAGE.md",
-    "Testing/PASS-0001-AUDIT.md",
-    "Testing/PASS-0001-CHECKLIST.json"
+    "Human closure acceptance of the GitHub-backed task-state pilot plus human-approved repo-local bootstrap",
+    "TaskCreate GitHub provider-interface follow-on task (out of scope here; recorded as required follow-on in TASK.md and PLAN.md PASS-0004)"
   ],
-  "updated_at": "2026-05-27T23:45:00-04:00"
+  "updated_at": "2026-05-28T23:30:00.0000000-04:00"
 }

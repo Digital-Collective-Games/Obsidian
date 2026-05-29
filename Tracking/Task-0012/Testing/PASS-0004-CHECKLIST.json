@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "task_id": "Task-0012",
+  "pass_id": "PASS-0004",
+  "checklist_status": "ready_for_closeout",
+  "implemented": true,
+  "build": "not_applicable",
+  "unit_tests": "not_applicable",
+  "pass_audit_written": false,
+  "audit_verdict": "unknown",
+  "audit_result_ref": null,
+  "handoff_updated": true,
+  "commit_created": false,
+  "pushed_upstream": false,
+  "notify_sent": false,
+  "blockers": [],
+  "next_required_actions": [
+    "Human accepts Task-0012 closure: gh pilot accepted, human-approved repo-local bootstrap of Task-0001..Task-0012 into issues #1..#12 done, reconcile clean (difference_count 0, conflict_count 0), TaskCreate GitHub provider-interface follow-on recorded as required follow-on work.",
+    "Commit and push the closeout checkpoint (TASK.md/PLAN.md realignment, TASK-STATE, RECONCILE-PROOF realignment, BUG-0001, refreshed reconcile artifacts).",
+    "Open the TaskCreate GitHub provider-interface follow-on as a separate task when the human is ready; it is out of scope for Task-0012."
+  ],
+  "updated_at": "2026-05-28T23:30:00.0000000-04:00"
+}

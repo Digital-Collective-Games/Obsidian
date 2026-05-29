@@ -137,6 +137,7 @@ Current human-lane must-backup set:
 | dashboard config | `%LOCALAPPDATA%\CodexDashboard\config.json` | must backup | Human app settings. |
 | dashboard SQLite DB | `%LOCALAPPDATA%\CodexDashboard\dashboard.db` | must backup | Kept in backup even if parts may be reconstructable from session telemetry. |
 | job specs | `C:\Users\gregs\.codex\Orchestration\Jobs\specs\` | must backup | Durable desired job declarations. |
+| repo binding manifest | `C:\Agent\CodexDashboard\CODEX-REPO-MANIFEST.json` | must backup delta | Tracked manifest for repo-local task, proposal, backlog, and review-surface bindings. Restored with repo state. |
 | repo state delta | `C:\Agent\CodexDashboard` plus upstream git | must backup delta | If upstream is current, record commit/branch and back up only unpushed commits, uncommitted diffs, and important untracked files. |
 
 ## Service Lane
@@ -214,6 +215,7 @@ A CodexDashboard human-lane restore should restore or verify:
 - `%LOCALAPPDATA%\CodexDashboard\config.json`
 - `%LOCALAPPDATA%\CodexDashboard\dashboard.db`
 - `C:\Users\gregs\.codex\Orchestration\Jobs\specs\`
+- `C:\Agent\CodexDashboard\CODEX-REPO-MANIFEST.json`
 - scheduled task `CodexDashboard-Orchestration-ServiceLane`, if it is not recreated by the service-lane installer
 
 Validation/temp data should be intentionally discarded unless a task records a

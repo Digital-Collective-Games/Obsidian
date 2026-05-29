@@ -1,0 +1,4 @@
+interface:
+  display_name: "Obsidian Operator"
+  short_description: "Operate Obsidian task/GitHub sync safely."
+  default_prompt: "Use this skill before changing task provider sync, TASK-META.json, reconcile/bootstrap scripts, issue fields, or task/GitHub text-conflict handling."

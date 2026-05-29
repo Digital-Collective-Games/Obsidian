@@ -1,0 +1,18 @@
+{
+    "status":  "dry_run",
+    "provider_repo":  "Digital-Collective-Games/Obsidian",
+    "task_count":  1,
+    "start_task_number":  2,
+    "end_task_number":  2,
+    "output_dir":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0012\\Testing\\BulkIssueBootstrap",
+    "results":  [
+                    {
+                        "task_id":  "Task-0002",
+                        "expected_issue_number":  2,
+                        "action":  "dry_run_sync_existing",
+                        "provider_repo":  "Digital-Collective-Games/Obsidian",
+                        "title":  "Task-0002: CodexDashboard Stitch-aligned overlay redesign.",
+                        "body_path":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0012\\Testing\\BulkIssueBootstrap\\Task-0002-BODY.md"
+                    }
+                ]
+}

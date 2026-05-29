@@ -1,0 +1,164 @@
+{
+    "status":  "bootstrapped",
+    "provider_repo":  "Digital-Collective-Games/Obsidian",
+    "task_count":  11,
+    "start_task_number":  2,
+    "end_task_number":  null,
+    "output_dir":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0012\\Testing\\BulkIssueBootstrap",
+    "results":  [
+                    {
+                        "task_id":  "Task-0002",
+                        "expected_issue_number":  2,
+                        "action":  "sync_existing",
+                        "provider_repo":  "Digital-Collective-Games/Obsidian",
+                        "issue_url":  "https://github.com/Digital-Collective-Games/Obsidian/issues/2",
+                        "title":  "Task-0002: CodexDashboard Stitch-aligned overlay redesign.",
+                        "labels":  [
+
+                                   ],
+                        "body_path":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0012\\Testing\\BulkIssueBootstrap\\Task-0002-BODY.md",
+                        "view_path":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0012\\Testing\\BulkIssueBootstrap\\Task-0002-VIEW.json",
+                        "metadata_path":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0002\\TASK-META.json"
+                    },
+                    {
+                        "task_id":  "Task-0003",
+                        "expected_issue_number":  3,
+                        "action":  "sync_existing",
+                        "provider_repo":  "Digital-Collective-Games/Obsidian",
+                        "issue_url":  "https://github.com/Digital-Collective-Games/Obsidian/issues/3",
+                        "title":  "Task-0003: Add a Total/Norm metric toggle for CodexDashboard chart analysis.",
+                        "labels":  [
+
+                                   ],
+                        "body_path":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0012\\Testing\\BulkIssueBootstrap\\Task-0003-BODY.md",
+                        "view_path":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0012\\Testing\\BulkIssueBootstrap\\Task-0003-VIEW.json",
+                        "metadata_path":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0003\\TASK-META.json"
+                    },
+                    {
+                        "task_id":  "Task-0004",
+                        "expected_issue_number":  4,
+                        "action":  "sync_existing",
+                        "provider_repo":  "Digital-Collective-Games/Obsidian",
+                        "issue_url":  "https://github.com/Digital-Collective-Games/Obsidian/issues/4",
+                        "title":  "Task-0004: Declarative Codex jobs registry, Windows reconciliation, and Jobs tab for CodexDashboard.",
+                        "labels":  [
+
+                                   ],
+                        "body_path":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0012\\Testing\\BulkIssueBootstrap\\Task-0004-BODY.md",
+                        "view_path":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0012\\Testing\\BulkIssueBootstrap\\Task-0004-VIEW.json",
+                        "metadata_path":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0004\\TASK-META.json"
+                    },
+                    {
+                        "task_id":  "Task-0005",
+                        "expected_issue_number":  5,
+                        "action":  "sync_existing",
+                        "provider_repo":  "Digital-Collective-Games/Obsidian",
+                        "issue_url":  "https://github.com/Digital-Collective-Games/Obsidian/issues/5",
+                        "title":  "Task-0005: Build a Git-backed Go + Temporal jobs control plane for CodexDashboard.",
+                        "labels":  [
+
+                                   ],
+                        "body_path":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0012\\Testing\\BulkIssueBootstrap\\Task-0005-BODY.md",
+                        "view_path":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0012\\Testing\\BulkIssueBootstrap\\Task-0005-VIEW.json",
+                        "metadata_path":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0005\\TASK-META.json"
+                    },
+                    {
+                        "task_id":  "Task-0006",
+                        "expected_issue_number":  6,
+                        "action":  "sync_existing",
+                        "provider_repo":  "Digital-Collective-Games/Obsidian",
+                        "issue_url":  "https://github.com/Digital-Collective-Games/Obsidian/issues/6",
+                        "title":  "Task-0006: Capture human-facing orchestration incidents as durable evidence.",
+                        "labels":  [
+
+                                   ],
+                        "body_path":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0012\\Testing\\BulkIssueBootstrap\\Task-0006-BODY.md",
+                        "view_path":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0012\\Testing\\BulkIssueBootstrap\\Task-0006-VIEW.json",
+                        "metadata_path":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0006\\TASK-META.json"
+                    },
+                    {
+                        "task_id":  "Task-0007",
+                        "expected_issue_number":  7,
+                        "action":  "sync_existing",
+                        "provider_repo":  "Digital-Collective-Games/Obsidian",
+                        "issue_url":  "https://github.com/Digital-Collective-Games/Obsidian/issues/7",
+                        "title":  "Task-0007: Bootstrap a task-owned home for Jarvis intervention analysis and conversation capture.",
+                        "labels":  [
+
+                                   ],
+                        "body_path":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0012\\Testing\\BulkIssueBootstrap\\Task-0007-BODY.md",
+                        "view_path":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0012\\Testing\\BulkIssueBootstrap\\Task-0007-VIEW.json",
+                        "metadata_path":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0007\\TASK-META.json"
+                    },
+                    {
+                        "task_id":  "Task-0008",
+                        "expected_issue_number":  8,
+                        "action":  "sync_existing",
+                        "provider_repo":  "Digital-Collective-Games/Obsidian",
+                        "issue_url":  "https://github.com/Digital-Collective-Games/Obsidian/issues/8",
+                        "title":  "Task-0008: Build the backend task dispatch layer and durable execution-state contract.",
+                        "labels":  [
+
+                                   ],
+                        "body_path":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0012\\Testing\\BulkIssueBootstrap\\Task-0008-BODY.md",
+                        "view_path":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0012\\Testing\\BulkIssueBootstrap\\Task-0008-VIEW.json",
+                        "metadata_path":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0008\\TASK-META.json"
+                    },
+                    {
+                        "task_id":  "Task-0009",
+                        "expected_issue_number":  9,
+                        "action":  "sync_existing",
+                        "provider_repo":  "Digital-Collective-Games/Obsidian",
+                        "issue_url":  "https://github.com/Digital-Collective-Games/Obsidian/issues/9",
+                        "title":  "Task-0009: Design and build the dashboard `Tasks` tab as the primary human surface for committed task dispatch and monitoring.",
+                        "labels":  [
+
+                                   ],
+                        "body_path":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0012\\Testing\\BulkIssueBootstrap\\Task-0009-BODY.md",
+                        "view_path":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0012\\Testing\\BulkIssueBootstrap\\Task-0009-VIEW.json",
+                        "metadata_path":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0009\\TASK-META.json"
+                    },
+                    {
+                        "task_id":  "Task-0010",
+                        "expected_issue_number":  10,
+                        "action":  "sync_existing",
+                        "provider_repo":  "Digital-Collective-Games/Obsidian",
+                        "issue_url":  "https://github.com/Digital-Collective-Games/Obsidian/issues/10",
+                        "title":  "Task-0010: Run Dream daily, email the results, and promote option tasks into real tasks that the dashboard can review and enqueue.",
+                        "labels":  [
+
+                                   ],
+                        "body_path":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0012\\Testing\\BulkIssueBootstrap\\Task-0010-BODY.md",
+                        "view_path":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0012\\Testing\\BulkIssueBootstrap\\Task-0010-VIEW.json",
+                        "metadata_path":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0010\\TASK-META.json"
+                    },
+                    {
+                        "task_id":  "Task-0011",
+                        "expected_issue_number":  11,
+                        "action":  "sync_existing",
+                        "provider_repo":  "Digital-Collective-Games/Obsidian",
+                        "issue_url":  "https://github.com/Digital-Collective-Games/Obsidian/issues/11",
+                        "title":  "Task-0011: Design and build the dashboard `Review` tab as the canonical intake surface for incoming asks.",
+                        "labels":  [
+
+                                   ],
+                        "body_path":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0012\\Testing\\BulkIssueBootstrap\\Task-0011-BODY.md",
+                        "view_path":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0012\\Testing\\BulkIssueBootstrap\\Task-0011-VIEW.json",
+                        "metadata_path":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0011\\TASK-META.json"
+                    },
+                    {
+                        "task_id":  "Task-0012",
+                        "expected_issue_number":  12,
+                        "action":  "sync_existing",
+                        "provider_repo":  "Digital-Collective-Games/Obsidian",
+                        "issue_url":  "https://github.com/Digital-Collective-Games/Obsidian/issues/12",
+                        "title":  "Task-0012: Codex-operated pilot for GitHub-backed task state.",
+                        "labels":  [
+
+                                   ],
+                        "body_path":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0012\\Testing\\BulkIssueBootstrap\\Task-0012-BODY.md",
+                        "view_path":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0012\\Testing\\BulkIssueBootstrap\\Task-0012-VIEW.json",
+                        "metadata_path":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0012\\TASK-META.json"
+                    }
+                ]
+}

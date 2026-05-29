@@ -1,0 +1,147 @@
+Target repo:
+gregsemple2003/CodexDesktop
+
+Repo access preflight:
+gh repo view gregsemple2003/CodexDesktop --json nameWithOwner,url,viewerPermission,hasIssuesEnabled
+
+Result:
+{"hasIssuesEnabled":true,"nameWithOwner":"gregsemple2003/CodexDesktop","url":"https://github.com/gregsemple2003/CodexDesktop","viewerPermission":"ADMIN"}
+
+Local metadata preflight:
+No existing task metadata was present before create. The pilot wrote
+Tracking\Task-0012\GITHUB-ISSUE.json first; that artifact has been renamed to
+Tracking\Task-0012\TASK-META.json.
+
+Duplicate preflight:
+gh issue list --repo gregsemple2003/CodexDesktop --state all --search "Task-0012" --json number,title,state,url,labels --limit 20
+
+Result:
+[]
+
+Required labels created:
+codex-task
+codex-dashboard
+task-0012
+pilot
+
+Issue create command:
+gh issue create --repo gregsemple2003/CodexDesktop --title 'Task-0012: Codex-operated pilot for GitHub-backed task state' --body-file 'Tracking\Task-0012\Testing\PILOT-ISSUE-BODY.md' --label codex-task --label codex-dashboard --label task-0012 --label pilot
+
+Result:
+https://github.com/gregsemple2003/CodexDesktop/issues/1
+
+Readback command:
+gh issue view --repo gregsemple2003/CodexDesktop 1 --json number,title,body,state,labels,updatedAt,url
+
+Readback artifact:
+Testing/PILOT-ISSUE-VIEW.json
+
+Rerun update:
+The original pilot issue used task labels. After the repo registry/provider
+decision, task identity is implied by the task provider repo. The issue was
+updated with the current body and labels were removed.
+
+Rerun update command:
+gh issue edit 1 --repo gregsemple2003/CodexDesktop --body-file 'Tracking\Task-0012\Testing\PILOT-ISSUE-BODY.md' --remove-label codex-task --remove-label codex-dashboard --remove-label task-0012 --remove-label pilot
+
+Final body-only refresh command:
+gh issue edit 1 --repo gregsemple2003/CodexDesktop --body-file 'Tracking\Task-0012\Testing\PILOT-ISSUE-BODY.md'
+
+Final readback:
+Testing/PILOT-ISSUE-VIEW.json records labels as an empty array and updatedAt as
+2026-05-28T17:50:24Z.
+
+Final no-extra-codex-marker refresh:
+
+The pass-structure repair removed the hidden `codex-task-sync` marker prefix so
+the issue body no longer uses codex-prefixed labels or tags for task identity.
+Provider repo binding is the source of task/proposal meaning.
+
+Command:
+gh issue edit 1 --repo gregsemple2003/CodexDesktop --body-file 'Tracking\Task-0012\Testing\PILOT-ISSUE-BODY.md'
+
+Readback command:
+gh issue view --repo gregsemple2003/CodexDesktop 1 --json number,title,body,state,labels,updatedAt,url
+
+Result:
+Testing/PILOT-ISSUE-VIEW.json records labels as an empty array, the body marker
+as `task-sync`, and updatedAt as 2026-05-28T18:11:37Z.
+
+Identity repair:
+
+The issue-number-to-local-task-folder convention means GitHub issue #1 must map
+to Tracking\Task-0001\TASK.md. The earlier pilot body incorrectly said
+Task-0012 and was invalid under that convention.
+
+Normalized sync script:
+scripts\Sync-TaskToGitHubIssue.ps1
+
+Script command:
+powershell -NoProfile -ExecutionPolicy Bypass -File 'scripts\Sync-TaskToGitHubIssue.ps1' -TaskPath 'Tracking\Task-0001\TASK.md' -OutputBodyPath 'Tracking\Task-0012\Testing\PILOT-ISSUE-BODY.md' -ViewOutputPath 'Tracking\Task-0012\Testing\PILOT-ISSUE-VIEW.json' -MetadataPath 'Tracking\Task-0001\TASK-META.json'
+
+Result:
+https://github.com/gregsemple2003/CodexDesktop/issues/1 now has title
+Task-0001: Codex token-velocity dashboard with a hotkey-first overlay.
+
+Testing/PILOT-ISSUE-VIEW.json records labels as an empty array, marker
+task_id=Task-0001, task_path=Tracking/Task-0001/TASK.md, and updatedAt as
+2026-05-28T18:32:18Z.
+
+Final script hardening rerun:
+
+The sync script now refuses to overwrite an existing remote issue when its
+task-sync marker points to a different task unless the caller explicitly passes
+-RepairMismatchedRemote.
+
+The sync script also reads the live GitHub issue title/body before writing.
+If the live issue text differs from the rendered local task, the script stops
+unless the caller explicitly passes -ForceRemoteOverwrite after reviewing the
+diff.
+
+Live text guard proof:
+Testing\REMOTE-DRIFT-BLOCK-PROOF.md records a live readback run where
+Task-0012's local rendered issue text differs from the published GitHub issue
+body. The script exited with code 1 before writing and reported the live
+title/body mismatch.
+
+Result:
+Testing/PILOT-ISSUE-VIEW.json records labels as an empty array, marker
+task_id=Task-0001, task_path=Tracking/Task-0001/TASK.md, and updatedAt as
+2026-05-28T18:36:09Z.
+
+Rejected label-enum cleanup:
+
+The label-enum design was rejected because GitHub labels are not mutually
+exclusive and distort the human edit flow. Queue, priority, and human-gate state
+must stay out of issue labels. This repo does not define queue values or
+priority values; the queue/orchestration layer owns those semantics.
+
+Removed from issue #1:
+queue:ready
+queue:never
+priority:p2
+
+The sync script now removes rejected queue, priority, human-gate, and identity
+labels from synced issues instead of creating or enforcing label enums.
+
+Repo label picker cleanup:
+The stale identity and workflow label definitions created during the rejected
+label pilot were removed from gregsemple2003/CodexDesktop so they are not
+available as misleading human choices:
+
+codex-dashboard
+codex-task
+task-0012
+pilot
+queue:ready
+queue:never
+human-gate
+priority:p0
+priority:p1
+priority:p2
+priority:p3
+
+Result:
+Testing/PILOT-ISSUE-VIEW.json records no labels, marker task_id=Task-0001,
+task_path=Tracking/Task-0001/TASK.md, and updatedAt as
+2026-05-28T19:19:43Z.
