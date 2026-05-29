@@ -1,60 +1,117 @@
 {
   "task": "Task-0013",
-  "objective": "Objective 3 follow-up \u2014 end-to-end activation latency",
-  "measured_at": "2026-05-29T15:30:52.415917+00:00",
+  "objective": "Objective 3 activation fix \u2014 show/hide only, no rebuild on toggle",
+  "measured_at": "2026-05-29T15:58:29.756395+00:00",
   "harness": "activation_e2e_harness.py",
   "synthetic_db": {
     "path": "Tracking\\Task-0013\\Testing\\Runtime\\e2e-timing.db",
     "event_count": 1400000,
-    "db_bytes": 294158336,
+    "db_bytes": 423837696,
     "wal_bytes": 0,
     "note": "Task-owned synthetic DB seeded across 21 days, 50/50 codex/claude, sized to the human's large-live-DB class. Live dashboard.db was NOT opened or sized."
   },
-  "method": "Drove the real Tk DashboardApp in-process against the synthetic DB. Timed each production phase with perf_counter and forced real paints with update_idletasks()+update(). All Tk work ran on the main (UI-equivalent) thread.",
+  "method": "Drove the real Tk DashboardApp in-process against the synthetic DB. BEFORE reproduces the old render-on-show warm path (deiconify + _render_dashboard over the full 7-day window + paint). AFTER calls the REAL production show_overlay()/hide_overlay() on the persistent window (deiconify + lift + focus + paint, NO render). BACKGROUND POLL times the real Fix-B _load_dashboard_data() (chart window + indexed per-source 7-day SUM) plus one render. All Tk work ran on the main (UI-equivalent) thread; real paints forced with update_idletasks()+update().",
   "poll_interval_ms": 50.0,
-  "poll_latency_ms_note": "_poll_hotkey runs every 50 ms (root.after). The WM_HOTKEY is enqueued immediately by the Win32 thread but the callback only fires on the next poll tick: 0..50 ms added latency, ~25 ms on average, that the in-process harness cannot include because it calls the methods directly.",
+  "poll_latency_ms_note": "_poll_hotkey runs every 50 ms (root.after). The WM_HOTKEY is enqueued immediately by the Win32 thread but the callback only fires on the next poll tick: 0..50 ms added latency, ~25 ms on average, added to BOTH before and after (the in-process harness calls methods directly so it does not include this; add it to both for perceived latency).",
+  "summary": {
+    "before_show_to_painted_median_ms": 242.798,
+    "after_show_to_painted_median_ms": 87.854,
+    "before_perceived_median_ms": 267.798,
+    "after_perceived_median_ms": 112.854,
+    "speedup_x": 2.76,
+    "after_render_on_toggle": false,
+    "interpretation": "AFTER toggle show latency is dominated only by the OS window map/paint (no per-event work), versus the BEFORE warm path that re-aggregated the full 7-day window on every activation."
+  },
   "phases_ms": {
-    "db_read_ms": {
-      "min": 993.334,
-      "median": 1202.001,
-      "max": 1390.835,
-      "mean": 1197.424
+    "before_old_render_on_show": {
+      "deiconify_lift_focus_ms": {
+        "min": 9.37,
+        "median": 11.491,
+        "max": 12.519,
+        "mean": 11.344
+      },
+      "first_paint_ms": {
+        "min": 66.151,
+        "median": 70.602,
+        "max": 90.232,
+        "mean": 75.434
+      },
+      "render_dashboard_ms": {
+        "min": 149.78,
+        "median": 155.764,
+        "max": 232.086,
+        "mean": 162.545
+      },
+      "render_paint_ms": {
+        "min": 2.939,
+        "median": 3.54,
+        "max": 4.657,
+        "mean": 3.593
+      },
+      "show_to_painted_ms": {
+        "min": 228.842,
+        "median": 242.798,
+        "max": 337.333,
+        "mean": 252.916
+      }
     },
-    "deiconify_lift_focus_ms": {
-      "min": 9.638,
-      "median": 11.449,
-      "max": 13.09,
-      "mean": 11.606
+    "after_toggle_show_hide_only": {
+      "show_call_ms": {
+        "min": 7.958,
+        "median": 11.95,
+        "max": 14.772,
+        "mean": 11.608
+      },
+      "show_paint_ms": {
+        "min": 74.51,
+        "median": 76.625,
+        "max": 82.13,
+        "mean": 77.434
+      },
+      "show_to_painted_ms": {
+        "min": 86.037,
+        "median": 87.854,
+        "max": 96.902,
+        "mean": 89.042
+      },
+      "hide_call_ms": {
+        "min": 5.312,
+        "median": 6.093,
+        "max": 7.446,
+        "mean": 6.292
+      },
+      "hide_to_painted_ms": {
+        "min": 5.662,
+        "median": 6.695,
+        "max": 7.992,
+        "mean": 6.912
+      },
+      "toggle_round_trip_ms": {
+        "min": 92.324,
+        "median": 95.727,
+        "max": 104.616,
+        "mean": 95.954
+      }
     },
-    "first_paint_ms": {
-      "min": 67.151,
-      "median": 77.246,
-      "max": 92.337,
-      "mean": 75.988
-    },
-    "render_dashboard_ms": {
-      "min": 197.622,
-      "median": 229.545,
-      "max": 256.647,
-      "mean": 228.232
-    },
-    "render_paint_ms": {
-      "min": 2.479,
-      "median": 3.02,
-      "max": 4.947,
-      "mean": 3.215
-    },
-    "show_to_painted_ms": {
-      "min": 290.467,
-      "median": 326.043,
-      "max": 339.845,
-      "mean": 319.04
-    },
-    "end_to_end_ms": {
-      "min": 1283.801,
-      "median": 1502.586,
-      "max": 1730.68,
-      "mean": 1516.464
+    "background_poll_fixb": {
+      "load_dashboard_data_ms": {
+        "min": 55.845,
+        "median": 62.544,
+        "max": 70.622,
+        "mean": 63.284
+      },
+      "render_dashboard_ms": {
+        "min": 1.206,
+        "median": 1.607,
+        "max": 1.898,
+        "mean": 1.588
+      },
+      "poll_total_ms": {
+        "min": 57.298,
+        "median": 64.344,
+        "max": 72.229,
+        "mean": 64.871
+      }
     }
   }
 }

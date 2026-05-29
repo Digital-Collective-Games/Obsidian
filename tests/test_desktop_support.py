@@ -514,11 +514,11 @@ class DesktopSupportTests(unittest.TestCase):
         app.hide_overlay.assert_called_once_with()
         app.show_overlay.assert_not_called()
 
-    def test_show_overlay_renders_from_snapshot_without_blocking_load(self) -> None:
-        # Task-0013 Objective 3: activation must not run a synchronous DB read on
-        # the UI thread. When a snapshot is already loaded, show_overlay renders
-        # from it (no _load_dashboard_data / refresh_data call) and shows the
-        # overlay immediately.
+    def test_show_overlay_only_reveals_persistent_window_no_rebuild(self) -> None:
+        # Task-0013 activation-fix follow-up: the hotkey TOGGLES VISIBILITY ONLY
+        # of a persistent, already-rendered overlay. show_overlay must NOT
+        # re-aggregate, rebuild buckets, read the DB, or re-render on the toggle
+        # path. It only reveals the window the OS already laid out.
         overlay = mock.Mock()
         markers = {"a": []}
         app = SimpleNamespace(
@@ -538,11 +538,12 @@ class DesktopSupportTests(unittest.TestCase):
         DashboardApp.show_overlay(app)
 
         self.assertTrue(app.overlay_visible)
-        # No blocking DB read on the UI thread, and no synchronous refresh_data.
+        # No DB read, no off-thread load, and NO re-render on the toggle path.
         app._load_dashboard_data.assert_not_called()
         app.refresh_data.assert_not_called()
         app._start_activation_load.assert_not_called()
-        app._render_dashboard.assert_called_once_with(["snapshot-event"], markers)
+        app._render_dashboard.assert_not_called()
+        # It only reveals the persistent window.
         overlay.deiconify.assert_called_once_with()
         overlay.lift.assert_called_once_with()
         overlay.focus_force.assert_called_once_with()
@@ -554,10 +555,12 @@ class DesktopSupportTests(unittest.TestCase):
         app._hide_chart_tooltip.assert_called_once_with()
         overlay.withdraw.assert_called_once_with()
 
-    def test_show_overlay_cold_start_dispatches_offthread_load(self) -> None:
-        # Task-0013 Objective 3: on cold start (empty snapshot) the overlay shows
-        # immediately and dispatches an off-thread load instead of blocking the UI
-        # thread or rendering an empty overlay.
+    def test_show_overlay_cold_snapshot_still_only_reveals_no_load(self) -> None:
+        # Task-0013 activation-fix follow-up: even if the startup pre-render has
+        # not landed yet (empty snapshot), the hotkey toggle still only reveals
+        # the (pre-built empty-state) window. It does NOT dispatch a load or
+        # render on the toggle path; the startup pre-render and background poll
+        # own loading. This keeps the show instant.
         overlay = mock.Mock()
         app = SimpleNamespace(
             overlay=overlay,
@@ -578,7 +581,7 @@ class DesktopSupportTests(unittest.TestCase):
         app._load_dashboard_data.assert_not_called()
         app.refresh_data.assert_not_called()
         app._render_dashboard.assert_not_called()
-        app._start_activation_load.assert_called_once_with()
+        app._start_activation_load.assert_not_called()
 
     def test_start_activation_load_runs_load_off_thread(self) -> None:
         # Task-0013 Objective 3: the cold-start loader runs _load_dashboard_data

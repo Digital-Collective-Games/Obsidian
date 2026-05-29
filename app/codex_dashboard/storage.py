@@ -68,6 +68,20 @@ def initialize_db(connection: sqlite3.Connection) -> None:
             ON token_events(event_timestamp);
         CREATE UNIQUE INDEX IF NOT EXISTS idx_token_events_source_event
             ON token_events(source, source_event_id);
+        -- Task-0013 activation-fix follow-up (Fix B): the background poll fetches
+        -- the latest weekly advisory with an indexed lookback instead of scanning
+        -- the in-memory window. Partial index keeps it tiny (advisory rows only).
+        CREATE INDEX IF NOT EXISTS idx_token_events_advisory_ts
+            ON token_events(event_timestamp)
+            WHERE weekly_used_percent IS NOT NULL;
+        -- Task-0013 activation-fix follow-up (Fix B): covering index for the cheap
+        -- rolling per-source 7-day SUM. With (event_timestamp, source,
+        -- total_tokens) SQLite can satisfy
+        --   WHERE event_timestamp >= ? GROUP BY source -> SUM(total_tokens)
+        -- as an index-only range scan (only the ~7-day slice, not the whole
+        -- table), so background freshness stays cheap as the DB grows.
+        CREATE INDEX IF NOT EXISTS idx_token_events_ts_source_total
+            ON token_events(event_timestamp, source, total_tokens);
         """
     )
     connection.commit()
@@ -292,44 +306,104 @@ def load_events_since(
         """,
         (since.isoformat(),),
     ).fetchall()
-    events: list[TokenEvent] = []
+    return [_row_to_token_event(row) for row in rows]
+
+
+def sum_total_tokens_by_source_since(
+    connection: sqlite3.Connection,
+    since: datetime,
+) -> dict[str, int]:
+    """Return {source: SUM(total_tokens)} for events at/after `since`.
+
+    Task-0013 activation-fix follow-up (Fix B): the background poll needs the
+    rolling 7-day total but must NOT materialize every event in the window just
+    to sum it. This pushes the sum into SQLite (covered by the
+    idx_token_events_ts_source_total index) and groups by `source` so the source
+    filter can include/exclude a source from the displayed 7-day total purely in
+    memory, without re-reading the database. Legacy NULL/empty sources are folded
+    into "codex".
+    """
+    # Force the covering (event_timestamp, source, total_tokens) index: the
+    # planner otherwise prefers the (source, source_event_id) index because the
+    # GROUP BY avoids a temp B-tree, but that FULL-scans the table (~385 ms on a
+    # 1.4M-row DB). The covering index range-scans only the 7-day slice (~44 ms).
+    # initialize_db (called before this) guarantees the index exists.
+    rows = connection.execute(
+        """
+        SELECT source, COALESCE(SUM(total_tokens), 0) AS total
+        FROM token_events INDEXED BY idx_token_events_ts_source_total
+        WHERE event_timestamp >= ?
+        GROUP BY source
+        """,
+        (since.isoformat(),),
+    ).fetchall()
+    totals: dict[str, int] = {}
     for row in rows:
-        events.append(
-            TokenEvent(
-                session_path=str(row["session_path"]),
-                line_offset=int(row["line_offset"]),
-                event_timestamp=datetime.fromisoformat(str(row["event_timestamp"])),
-                total_tokens=int(row["total_tokens"]),
-                input_tokens=int(row["input_tokens"]),
-                cached_input_tokens=int(row["cached_input_tokens"]),
-                output_tokens=int(row["output_tokens"]),
-                reasoning_output_tokens=int(row["reasoning_output_tokens"]),
-                cumulative_total_tokens=int(row["cumulative_total_tokens"]),
-                weekly_used_percent=(
-                    float(row["weekly_used_percent"])
-                    if row["weekly_used_percent"] is not None
-                    else None
-                ),
-                weekly_window_minutes=(
-                    int(row["weekly_window_minutes"])
-                    if row["weekly_window_minutes"] is not None
-                    else None
-                ),
-                weekly_resets_at=(
-                    int(row["weekly_resets_at"])
-                    if row["weekly_resets_at"] is not None
-                    else None
-                ),
-                raw_json=str(row["raw_json"]),
-                source=str(row["source"]) if row["source"] is not None else "codex",
-                source_event_id=(
-                    str(row["source_event_id"])
-                    if row["source_event_id"] is not None
-                    else ""
-                ),
-            )
-        )
-    return events
+        source = str(row["source"]) if row["source"] else "codex"
+        totals[source] = totals.get(source, 0) + int(row["total"] or 0)
+    return totals
+
+
+def load_latest_weekly_advisory(
+    connection: sqlite3.Connection,
+    since: datetime,
+) -> TokenEvent | None:
+    """Return the most recent event carrying a weekly advisory, or None.
+
+    Task-0013 activation-fix follow-up (Fix B): the dashboard shows the latest
+    Codex weekly advisory. When the chart window is short (Fix B loads only the
+    charted span), the latest advisory can fall outside that span, so fetch it
+    with a cheap indexed lookback instead of scanning the full window in memory.
+    """
+    row = connection.execute(
+        """
+        SELECT *
+        FROM token_events
+        WHERE event_timestamp >= ? AND weekly_used_percent IS NOT NULL
+        ORDER BY event_timestamp DESC
+        LIMIT 1
+        """,
+        (since.isoformat(),),
+    ).fetchone()
+    if row is None:
+        return None
+    return _row_to_token_event(row)
+
+
+def _row_to_token_event(row: sqlite3.Row) -> TokenEvent:
+    return TokenEvent(
+        session_path=str(row["session_path"]),
+        line_offset=int(row["line_offset"]),
+        event_timestamp=datetime.fromisoformat(str(row["event_timestamp"])),
+        total_tokens=int(row["total_tokens"]),
+        input_tokens=int(row["input_tokens"]),
+        cached_input_tokens=int(row["cached_input_tokens"]),
+        output_tokens=int(row["output_tokens"]),
+        reasoning_output_tokens=int(row["reasoning_output_tokens"]),
+        cumulative_total_tokens=int(row["cumulative_total_tokens"]),
+        weekly_used_percent=(
+            float(row["weekly_used_percent"])
+            if row["weekly_used_percent"] is not None
+            else None
+        ),
+        weekly_window_minutes=(
+            int(row["weekly_window_minutes"])
+            if row["weekly_window_minutes"] is not None
+            else None
+        ),
+        weekly_resets_at=(
+            int(row["weekly_resets_at"])
+            if row["weekly_resets_at"] is not None
+            else None
+        ),
+        raw_json=str(row["raw_json"]),
+        source=str(row["source"]) if row["source"] is not None else "codex",
+        source_event_id=(
+            str(row["source_event_id"])
+            if row["source_event_id"] is not None
+            else ""
+        ),
+    )
 
 
 def count_session_context_markers(connection: sqlite3.Connection, session_path: str) -> int:

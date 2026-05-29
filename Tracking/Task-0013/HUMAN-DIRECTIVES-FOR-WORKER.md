@@ -170,3 +170,90 @@ now."**
 - This authorization is limited to publishing + restarting this task's release and
   capturing proof. It does not authorize touching unrelated lanes, data, or
   changing the human's settings.
+
+## 2026-05-29 — Activation latency follow-up investigation (Objective 3)
+
+### Verbatim Human Directive
+
+> The desktop ctrl alt space does seem much faster, but its still kind of clunky i
+> don't think its <50ms. Time from key hit to rendered window seems more like
+> >250ms. Can you investigate what its doing and postulate a fix? Give me a full
+> report on what its doing.
+
+Revised estimate (same session):
+
+> revise that more like 500 ms to rendered window, clunky
+
+### Worker-Safe Normalization
+
+- This is an Objective-3 follow-up. The implemented fix met its WRITTEN budget
+  (UI-thread blocking time ~5 ms), but the human reports the PERCEIVED end-to-end
+  latency from key-press to a fully rendered window is roughly >250 ms and still
+  feels clunky. The human-facing outcome ("feels instant") — not the UI-thread
+  block proxy — is what matters here. (Human revised the estimate to ~500 ms,
+  up from >250 ms.)
+- Deliverable for THIS run is an EVIDENCE-BASED INVESTIGATION REPORT (durable, e.g.
+  `Tracking/Task-0013/Testing/ACTIVATION-LATENCY-INVESTIGATION.md`). It must:
+  - Explain, in plain terms, exactly what the activation pipeline does from key
+    press to a visible, painted window (hotkey detection / poll interval ->
+    toggle_overlay -> show_overlay -> deiconify/lift/focus -> window map/visible ->
+    `_render_dashboard`: source filter + bucket build + chart draw + labels).
+  - MEASURE the end-to-end wall-clock broken down by phase (not the UI-thread block
+    alone), so the dominant contributor(s) to the >250 ms are identified with real
+    numbers. Instrument the actual activation code path and/or extend the existing
+    `activation_timing_harness.py`; do not rely on speculation.
+  - Explain why the prior ~5 ms proof did NOT capture this (it measured only the
+    synchronous UI-thread DB read, not poll latency + deiconify + actual paint).
+  - POSTULATE one or more concrete fixes targeting the dominant phase(s), with
+    tradeoffs and an expected improvement. Do NOT implement the fix in this run —
+    the human asked to investigate + postulate + report first.
+- Measure on a task-owned synthetic database sized comparably to a large real DB
+  (the live DB is large, ~270 MB-class). Honor `REGRESSION.md`/`DATA-HANDLING.md`:
+  isolated lane / task-owned fixtures only; do NOT open or use the human's live
+  `dashboard.db`, live config, `C:\Users\gregs\.codex`, or `~/.claude` data.
+- Stage/commit only Task-0013 files if you commit the report; leave unrelated
+  pre-existing changes untouched.
+
+## 2026-05-29 — Activation fix approach: show/hide only, no rebuild on toggle
+
+### Verbatim Human Directive
+
+> Can't we just show/hide the desktop app? I don't want to rehydrate window state
+> every time its toggled. The intent is just a hotkey to hide the window, not
+> "rebuild your state from scratch" - the latter sounds asinine to me.
+
+### Worker-Safe Normalization (authorized fix for the Objective-3 follow-up)
+
+This run IMPLEMENTS the fix (the investigation report is done; the human chose the
+approach). Authorized design:
+
+- The overlay is a PERSISTENT window built and rendered ONCE. The global hotkey
+  TOGGLES VISIBILITY ONLY (show/hide). Toggling must do NO re-aggregation, NO
+  bucket rebuild, NO DB read, and NO full re-render — it only reveals/hides the
+  already-rendered window. Remove the render call from the hotkey activation path.
+- Keep displayed content current via the EXISTING background ingest poll (already
+  off the hotkey path), not via work at toggle time. Freshness within one poll
+  interval (~5 s) is acceptable; an instant show is the priority over
+  perfectly-fresh-at-show.
+- Pre-render at startup so even the FIRST hotkey press is fast (no first-show
+  rebuild).
+- Do not let the "keep it fresh in the background" path become wasteful: if the
+  background poll would otherwise re-aggregate the full ~467k-event 7-day window
+  every cycle, reduce that per-event cost (e.g. aggregate only the charted window
+  plus a cheap rolling 7-day total — the report's Fix B) so background freshness
+  is cheap. This is secondary to, and in service of, the show/hide decoupling.
+- DO NOT regress the four shipped objectives. In particular, the Objective-4
+  source-filter dropdown is a deliberate USER action that may re-render (or update
+  from precomputed per-source buckets) — that is separate from the hotkey
+  show/hide and must keep working without a synchronous UI-thread DB read.
+- Prove it: extend the end-to-end harness (activation_e2e_harness.py) to measure
+  the new TOGGLE latency (show/hide of the persistent window with no re-render) and
+  record before/after. Target: toggle latency dominated only by OS window
+  map/paint + hotkey detection, no per-event work (expect ~tens of ms vs the
+  measured ~350 ms warm path). Add/keep unit coverage proving the hotkey toggle
+  path performs no aggregation/DB read/full re-render.
+- Scope = implement + unit tests + measured before/after proof + durable state.
+  Do NOT publish or restart the human's live overlay in this run; that live-lane
+  step is gated separately by the coordinator/human. Honor
+  `REGRESSION.md`/`DATA-HANDLING.md` (isolated lane / task-owned fixtures; never the
+  human's live config/DB/`.codex`/`~/.claude`). Commit ONLY Task-0013 files.

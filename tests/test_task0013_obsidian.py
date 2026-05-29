@@ -36,6 +36,7 @@ from app.codex_dashboard.storage import (
     initialize_db,
     load_events_since,
 )
+from app.codex_dashboard.ui import format_token_value
 
 
 CODEX_TOKEN_EVENT_LINE = (
@@ -532,6 +533,256 @@ class SourceFilterRenderPathTests(unittest.TestCase):
         app._render_dashboard.assert_called_once_with(snapshot, markers)
         app._load_dashboard_data.assert_not_called()
         app.refresh_data.assert_not_called()
+
+
+class ActivationFixStorageTests(unittest.TestCase):
+    """Activation-fix follow-up (Fix B): cheap background aggregation helpers.
+
+    The background poll must keep the overlay fresh without re-materializing the
+    whole 7-day window every cycle. These cover the indexed SQL helpers that make
+    that cheap: a per-source 7-day SUM (no per-event scan) and an indexed latest
+    advisory lookback.
+    """
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.db_path = Path(self.temp_dir.name) / "dashboard.db"
+        self.connection = connect(self.db_path)
+        initialize_db(self.connection)
+        self._row_seq = 0
+
+    def tearDown(self) -> None:
+        self.connection.close()
+        self.temp_dir.cleanup()
+
+    def _insert(
+        self,
+        *,
+        source: str,
+        total: int,
+        when: datetime,
+        advisory: float | None = None,
+        resets_at: int | None = None,
+    ) -> None:
+        self._row_seq += 1
+        self.connection.execute(
+            """
+            INSERT INTO token_events(
+                session_path, line_offset, event_timestamp, total_tokens,
+                input_tokens, cached_input_tokens, output_tokens,
+                reasoning_output_tokens, cumulative_total_tokens,
+                weekly_used_percent, weekly_window_minutes, weekly_resets_at,
+                raw_json, source, source_event_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                f"{source}-path",
+                self._row_seq,
+                when.isoformat(),
+                total,
+                total,
+                0,
+                0,
+                0,
+                total,
+                advisory,
+                10080 if advisory is not None else None,
+                resets_at,
+                "{}",
+                source,
+                f"{source}-{self._row_seq}",
+            ),
+        )
+        self.connection.commit()
+
+    def test_sum_by_source_excludes_events_before_since(self) -> None:
+        from app.codex_dashboard.storage import sum_total_tokens_by_source_since
+
+        now = datetime.now(UTC)
+        # Inside the 7-day window.
+        self._insert(source="codex", total=100, when=now - timedelta(days=1))
+        self._insert(source="claude", total=40, when=now - timedelta(days=2))
+        # Outside the 7-day window: must NOT be counted.
+        self._insert(source="codex", total=999, when=now - timedelta(days=10))
+        totals = sum_total_tokens_by_source_since(
+            self.connection, now - timedelta(days=7)
+        )
+        self.assertEqual(totals.get("codex"), 100)
+        self.assertEqual(totals.get("claude"), 40)
+
+    def test_sum_by_source_lets_filter_subtract_a_source_in_memory(self) -> None:
+        from app.codex_dashboard.storage import sum_total_tokens_by_source_since
+
+        now = datetime.now(UTC)
+        self._insert(source="codex", total=150, when=now - timedelta(hours=1))
+        self._insert(source="claude", total=25, when=now - timedelta(hours=2))
+        totals = sum_total_tokens_by_source_since(
+            self.connection, now - timedelta(days=7)
+        )
+        # Merged (today's default) = sum of both.
+        self.assertEqual(sum(totals.values()), 175)
+        # Codex-only = drop claude's precomputed total, no DB re-read.
+        codex_only = sum(v for s, v in totals.items() if s in {"codex"})
+        self.assertEqual(codex_only, 150)
+
+    def test_sum_by_source_uses_covering_index_range_scan(self) -> None:
+        # Fix B: the 7-day total must be a covering-index RANGE scan over just the
+        # 7-day slice, not a full-table scan. The production helper forces the
+        # (event_timestamp, source, total_tokens) covering index because the
+        # planner otherwise full-scans via the source index.
+        now = datetime.now(UTC)
+        self._insert(source="codex", total=5, when=now - timedelta(hours=1))
+        plan = self.connection.execute(
+            "EXPLAIN QUERY PLAN SELECT source, SUM(total_tokens) "
+            "FROM token_events INDEXED BY idx_token_events_ts_source_total "
+            "WHERE event_timestamp >= ? GROUP BY source",
+            ((now - timedelta(days=7)).isoformat(),),
+        ).fetchall()
+        plan_text = " ".join(str(tuple(row)) for row in plan)
+        self.assertIn("COVERING INDEX idx_token_events_ts_source_total", plan_text)
+        self.assertIn("event_timestamp>", plan_text)  # a range scan, not full scan
+
+    def test_latest_advisory_returns_most_recent_advisory_row(self) -> None:
+        from app.codex_dashboard.storage import load_latest_weekly_advisory
+
+        now = datetime.now(UTC)
+        self._insert(
+            source="codex", total=10, when=now - timedelta(hours=5), advisory=11.0
+        )
+        self._insert(
+            source="codex", total=10, when=now - timedelta(hours=1), advisory=42.0
+        )
+        # A later non-advisory event must not shadow the advisory.
+        self._insert(source="claude", total=10, when=now)
+        advisory = load_latest_weekly_advisory(
+            self.connection, now - timedelta(days=7)
+        )
+        self.assertIsNotNone(advisory)
+        self.assertEqual(advisory.weekly_used_percent, 42.0)
+
+    def test_latest_advisory_none_when_no_advisory_in_window(self) -> None:
+        from app.codex_dashboard.storage import load_latest_weekly_advisory
+
+        now = datetime.now(UTC)
+        self._insert(source="claude", total=10, when=now - timedelta(hours=1))
+        advisory = load_latest_weekly_advisory(
+            self.connection, now - timedelta(days=7)
+        )
+        self.assertIsNone(advisory)
+
+
+class ActivationFixRenderPathTests(unittest.TestCase):
+    """Activation-fix follow-up: the render path uses precomputed 7-day totals.
+
+    These prove the show/hide decoupling at the data layer without a real Tk
+    window: the displayed 7-day total comes from the cheap per-source totals (no
+    per-event 7-day scan in _render_dashboard), and the source filter excludes a
+    source's precomputed total in memory.
+    """
+
+    def test_load_dashboard_data_loads_only_chart_window(self) -> None:
+        # Fix B: the per-event load is bounded to the charted span, not 7 days,
+        # so bucketing does not loop the whole window on a large DB.
+        from types import SimpleNamespace
+        from unittest import mock
+
+        from app.codex_dashboard.ui import DashboardApp
+
+        captured = {}
+
+        def fake_load_events_since(_connection, since):
+            captured["events_since"] = since
+            return []
+
+        def fake_sum(_connection, since):
+            captured["sum_since"] = since
+            return {"codex": 7}
+
+        app = SimpleNamespace(
+            config=SimpleNamespace(db_path=":memory:"),
+            display_timezone=UTC,
+            selected_interval="15m",  # 15m x 20 buckets = 5h chart window
+            selected_chart_mode="velocity",
+        )
+        with mock.patch("app.codex_dashboard.ui.connect"), mock.patch(
+            "app.codex_dashboard.ui.initialize_db"
+        ), mock.patch(
+            "app.codex_dashboard.ui.load_events_since",
+            side_effect=fake_load_events_since,
+        ), mock.patch(
+            "app.codex_dashboard.ui.sum_total_tokens_by_source_since",
+            side_effect=fake_sum,
+        ), mock.patch(
+            "app.codex_dashboard.ui.load_latest_weekly_advisory",
+            return_value=None,
+        ):
+            events, markers, totals, advisory = DashboardApp._load_dashboard_data(app)
+
+        self.assertEqual(totals, {"codex": 7})
+        self.assertIsNone(advisory)
+        # The per-event load window (chart) is much shorter than the 7-day SUM
+        # window: the chart-window cutoff is LATER (more recent) than the 7-day
+        # cutoff.
+        self.assertGreater(captured["events_since"], captured["sum_since"])
+        # Specifically, the chart window is the default 5 hours.
+        window = captured["events_since"] - captured["sum_since"]
+        self.assertAlmostEqual(
+            window.total_seconds(),
+            (timedelta(days=7) - timedelta(hours=5)).total_seconds(),
+            delta=5,
+        )
+
+    def test_render_total_7d_from_precomputed_per_source_totals(self) -> None:
+        from types import SimpleNamespace
+        from unittest import mock
+
+        from app.codex_dashboard.ui import DashboardApp
+
+        configured = {}
+
+        def make_label(key):
+            return SimpleNamespace(
+                configure=lambda **kw: configured.__setitem__(key, kw.get("text"))
+            )
+
+        app = SimpleNamespace(
+            display_timezone=UTC,
+            selected_interval="15m",
+            selected_metric_mode="total",
+            selected_chart_mode="velocity",
+            selected_sources={"codex", "claude"},
+            latest_events=[],
+            latest_session_context_markers={},
+            latest_repo_legend=[],
+            latest_repo_totals=[],
+            latest_source_totals_7d={},
+            latest_weekly_advisory=None,
+            config=SimpleNamespace(weekly_budget_tokens=4_000_000_000),
+            local_total_value=make_label("total"),
+            local_total_detail=make_label("total_detail"),
+            projected_value=make_label("proj"),
+            projected_detail=make_label("proj_detail"),
+            headroom_value=make_label("head"),
+            headroom_detail=make_label("head_detail"),
+            advisory_label=make_label("advisory"),
+            chart_header_title=make_label("title"),
+            chart_header_context=make_label("context"),
+            _refresh_status_surfaces=mock.Mock(),
+            _timezone_label=mock.Mock(return_value="UTC"),
+            draw_chart=mock.Mock(),
+        )
+
+        # Merged: both sources counted.
+        DashboardApp._render_dashboard(
+            app, [], {}, {"codex": 100, "claude": 40}, None
+        )
+        self.assertEqual(configured["total"], format_token_value(140))
+
+        # Source filter excludes claude: 7d total drops by claude's precomputed
+        # total, with NO database read (we pass nothing; it sums in memory).
+        app.selected_sources = {"codex"}
+        DashboardApp._render_dashboard(app, [], {})
+        self.assertEqual(configured["total"], format_token_value(100))
 
 
 if __name__ == "__main__":

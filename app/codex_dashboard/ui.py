@@ -41,7 +41,14 @@ from .jobs_backend import (
 )
 from .paths import default_config_path, default_investigations_path
 from .scanner import ingest_once
-from .storage import connect, initialize_db, load_events_since, load_session_context_markers
+from .storage import (
+    connect,
+    initialize_db,
+    load_events_since,
+    load_latest_weekly_advisory,
+    load_session_context_markers,
+    sum_total_tokens_by_source_since,
+)
 from .tasks_backend import (
     configured_tasks_backend_url,
     dispatch_task,
@@ -328,6 +335,13 @@ class DashboardApp:
         self.latest_session_context_markers: dict[str, list[object]] = {}
         self.latest_repo_legend: list[tuple[str, str]] = []
         self.latest_repo_totals: list[dict[str, int]] = []
+        # Task-0013 activation-fix follow-up (Fix B): per-source rolling 7-day
+        # totals and the latest advisory are computed cheaply by the background
+        # poll (indexed SQL SUM + lookback), not by re-scanning the in-memory
+        # window. Kept here so a source-filter toggle can recompute the displayed
+        # 7-day total in memory (sum the selected sources) with no DB read.
+        self.latest_source_totals_7d: dict[str, int] = {}
+        self.latest_weekly_advisory = None
         # Task-0013 Objective 3: guards a single off-thread cold-start load.
         self._activation_load_in_flight = False
         self.jobs_backend_url = configured_jobs_backend_url()
@@ -381,7 +395,12 @@ class DashboardApp:
 
         self.root.after(50, self._poll_hotkey)
         self.root.after(100, self._poll_ingest_results)
-        self.root.after(100, self.refresh_data)
+        # Task-0013 activation-fix follow-up: pre-render the persistent overlay at
+        # startup so the FIRST hotkey toggle is already fast (no first-show
+        # rebuild). Run the initial load OFF the UI thread so startup itself does
+        # not block on the (potentially large) DB read; the snapshot lands via the
+        # ingest queue and renders the withdrawn overlay before the user toggles.
+        self.root.after(100, self._start_activation_load)
         self.root.after(250, self.schedule_ingest)
         if self.smoke_artifact_dir is not None:
             self.root.after(350, self._trigger_smoke_hotkey)
@@ -1646,12 +1665,12 @@ class DashboardApp:
                     self.status_label.configure(text=f"Ingest error: {payload}")
                     self._refresh_status_surfaces(False)
                 elif event_type == "dashboard_data":
-                    # Task-0013 Objective 3: cold-start activation load finished
-                    # off-thread; render the real data now (not "instant but
-                    # blank").
+                    # Task-0013 activation-fix follow-up: the off-thread startup
+                    # pre-render (or cold-start safety net) finished; render the
+                    # persistent (withdrawn) overlay now so the first hotkey
+                    # toggle is fast and never has to rebuild on show.
                     self._activation_load_in_flight = False
-                    events, session_context_markers = payload
-                    self._render_dashboard(events, session_context_markers)
+                    self._render_dashboard(*payload)
                 elif event_type == "dashboard_data_error":
                     self._activation_load_in_flight = False
                     self.last_ingest_error = str(payload)
@@ -1662,12 +1681,13 @@ class DashboardApp:
         self.root.after(100, self._poll_ingest_results)
 
     def _start_activation_load(self) -> None:
-        """Load dashboard data off the UI thread for a cold-start activation.
+        """Pre-render the persistent overlay by loading its data off the UI thread.
 
-        Task-0013 Objective 3: when the overlay is shown before the first
-        background refresh has populated a snapshot, do the blocking SQLite read
-        on a worker thread and render when it returns, instead of either blocking
-        the UI thread or showing an empty overlay.
+        Task-0013 activation-fix follow-up: this is the STARTUP pre-render (and a
+        cold-start safety net). It runs the DB read on a worker thread and posts
+        the snapshot to the ingest queue so the (withdrawn) overlay is rendered
+        before the user toggles it. The hotkey show/hide path itself never calls
+        this; it only reveals the already-rendered window.
         """
         if self._activation_load_in_flight:
             return
@@ -1675,8 +1695,8 @@ class DashboardApp:
 
         def worker() -> None:
             try:
-                events, markers = self._load_dashboard_data()
-                self.ingest_queue.put(("dashboard_data", (events, markers)))
+                snapshot = self._load_dashboard_data()
+                self.ingest_queue.put(("dashboard_data", snapshot))
             except Exception as exc:  # pragma: no cover - GUI error surfacing
                 self.ingest_queue.put(("dashboard_data_error", str(exc)))
 
@@ -1715,20 +1735,38 @@ class DashboardApp:
     def _load_dashboard_data(self):
         """Read the dashboard window data from SQLite.
 
-        Task-0013 Objective 3: this is the only blocking database work in the
-        refresh path. It performs no Tk calls, so it is safe to run on a worker
-        thread (off the UI thread) at activation time. Returns the events and
-        session-context markers for the current chart mode.
+        Task-0013 activation-fix follow-up (Fix B): this is the only blocking
+        database work in the refresh path. It runs on the background poll's worker
+        thread, performs no Tk calls, and is deliberately cheap:
+
+        - It loads ONLY the charted window's events (interval x bucket_count),
+          not the full 7-day window, so bucketing loops a few thousand events
+          instead of the ~467k a 7-day window holds on a large DB.
+        - It computes the rolling 7-day total with an indexed SQL SUM grouped by
+          source (no per-event materialization), so the displayed 7-day total
+          stays correct and the source filter can include/exclude a source from
+          it purely in memory.
+        - It fetches the latest weekly advisory with a cheap indexed lookback so
+          it is not missed when the chart window is shorter than 7 days.
+
+        Returns (events, session_context_markers, source_totals_7d,
+        latest_weekly_advisory).
         """
         connection = connect(Path(self.config.db_path))
         initialize_db(connection)
         now = datetime.now(self.display_timezone)
         bucket_count = chart_bucket_count(self.selected_interval)
-        history_since = now.astimezone(UTC) - usage_history_lookback(
-            self.selected_interval,
-            bucket_count,
+        # Only the charted span needs per-event rows. The 7-day total no longer
+        # requires loading the 7-day window here: it is computed by the indexed
+        # aggregate query below, so this load is bounded to the chart window.
+        chart_window = timedelta(
+            seconds=INTERVAL_SECONDS[self.selected_interval] * bucket_count
         )
-        events = load_events_since(connection, history_since)
+        chart_since = now.astimezone(UTC) - chart_window
+        summary_since = now.astimezone(UTC) - USAGE_SUMMARY_WINDOW
+        events = load_events_since(connection, chart_since)
+        source_totals_7d = sum_total_tokens_by_source_since(connection, summary_since)
+        latest_weekly_advisory = load_latest_weekly_advisory(connection, summary_since)
         session_context_markers = (
             load_session_context_markers(
                 connection,
@@ -1738,26 +1776,43 @@ class DashboardApp:
             else {}
         )
         connection.close()
-        return events, session_context_markers
+        return events, session_context_markers, source_totals_7d, latest_weekly_advisory
 
     def refresh_data(self) -> None:
-        events, session_context_markers = self._load_dashboard_data()
-        self._render_dashboard(events, session_context_markers)
+        snapshot = self._load_dashboard_data()
+        self._render_dashboard(*snapshot)
 
-    def _render_dashboard(self, events, session_context_markers) -> None:
+    def _render_dashboard(
+        self,
+        events,
+        session_context_markers,
+        source_totals_7d=None,
+        latest_weekly_advisory=None,
+    ) -> None:
         """Render the dashboard window from an in-memory snapshot.
 
-        Task-0013 Objective 3: pure Tk rendering, no blocking database read, so
-        it can run on the UI thread immediately from a pre-loaded snapshot at
-        activation time.
+        Pure Tk rendering, no blocking database read, so it runs on the UI thread.
+        This is invoked by the background poll (with a freshly loaded snapshot) and
+        by a source-filter toggle (Objective 4, reusing the stored snapshot). It is
+        NOT on the hotkey show/hide path: the persistent overlay keeps the most
+        recent render, and the hotkey only reveals/hides it.
+
+        Task-0013 activation-fix follow-up (Fix B): `source_totals_7d` is the
+        per-source rolling 7-day total computed cheaply by `_load_dashboard_data`;
+        the displayed 7-day total is the sum over the SELECTED sources, so the
+        source filter adjusts it in memory with no DB read. When omitted (e.g. an
+        older test call), the stored per-source totals are reused.
         """
         now = datetime.now(self.display_timezone)
         bucket_count = chart_bucket_count(self.selected_interval)
-        summary_since = now.astimezone(UTC) - USAGE_SUMMARY_WINDOW
         # Keep the full snapshot so a source-filter toggle can re-render without a
         # database read (Task-0013 Objective 4 preserves Objective 3).
         self.latest_events = events
         self.latest_session_context_markers = session_context_markers
+        if source_totals_7d is not None:
+            self.latest_source_totals_7d = source_totals_7d
+        if latest_weekly_advisory is not None:
+            self.latest_weekly_advisory = latest_weekly_advisory
         self.latest_repo_legend = []
         self.latest_repo_totals = []
 
@@ -1785,12 +1840,25 @@ class DashboardApp:
                 metric_mode=self.selected_metric_mode,
             )
         interval_seconds = INTERVAL_SECONDS[self.selected_interval]
-        total_7d = sum(
-            event.total_tokens for event in events if event.event_timestamp >= summary_since
+        # Task-0013 activation-fix follow-up (Fix B): the 7-day total is the sum
+        # over the selected sources of the cheap per-source rolling totals; the
+        # source filter excludes a source by dropping its precomputed total. No
+        # per-event 7-day scan happens here. None selection means all sources.
+        selected = (
+            self.selected_sources
+            if self.selected_sources is not None
+            else set(self.latest_source_totals_7d)
         )
-        latest_advisory = next(
-            (event for event in reversed(events) if event.weekly_used_percent is not None),
-            None,
+        total_7d = sum(
+            tokens
+            for source, tokens in self.latest_source_totals_7d.items()
+            if (source or "codex") in selected
+        )
+        # The weekly advisory is a Codex rate-limit artifact, so it only applies
+        # while Codex is in the selected sources (matches the prior filter, which
+        # recomputed the advisory from the source-filtered events).
+        latest_advisory = (
+            self.latest_weekly_advisory if "codex" in selected else None
         )
         if maybe_upgrade_weekly_budget(
             self.config,
@@ -2376,22 +2444,24 @@ class DashboardApp:
             self.show_overlay()
 
     def show_overlay(self) -> None:
-        # Task-0013 Objective 3: activation must not block the Tk UI thread on a
-        # synchronous SQLite read. Show the overlay immediately, then render from
-        # the most recent snapshot kept current by the background ingest poll. On
-        # cold start (no snapshot yet), kick off an off-thread load and render
-        # when it returns rather than showing an empty overlay.
+        # Task-0013 Objective 3 (activation-fix follow-up): the global hotkey
+        # TOGGLES VISIBILITY ONLY of a persistent, already-rendered overlay. The
+        # window is built once and kept current by the background ingest poll
+        # (`refresh_data`), so showing it performs NO re-aggregation, NO bucket
+        # rebuild, NO DB read, and NO full re-render. It only reveals the window
+        # the OS already has laid out, so the toggle costs only the window
+        # map/paint + the hotkey detection, not per-event work.
+        #
+        # If the very first hotkey press happens before the startup pre-render
+        # snapshot has landed, the overlay shows its pre-built empty state and the
+        # next background poll fills it in (freshness within one poll interval is
+        # acceptable; an instant show is the priority). The startup pre-render is
+        # dispatched off-thread in __init__ so the first toggle is still fast and
+        # this path never has to rebuild state on show.
         self.overlay.deiconify()
         self.overlay_visible = True
         self.overlay.lift()
         self.overlay.focus_force()
-        if self.latest_events:
-            self._render_dashboard(
-                self.latest_events,
-                self.latest_session_context_markers,
-            )
-        else:
-            self._start_activation_load()
 
     def hide_overlay(self) -> None:
         self.chart_context_region = None
@@ -2422,6 +2492,13 @@ class DashboardApp:
         if not self.overlay_visible:
             self.smoke_overlay_fallback = True
             self.show_overlay()
+        # The hotkey show/hide path deliberately does NOT render (the persistent
+        # overlay is kept current by the background poll). For a DETERMINISTIC
+        # capture, force a render here so the artifact always shows real data
+        # regardless of whether the off-thread startup pre-render has landed yet.
+        # This is capture-only and does not affect the production hotkey path.
+        if self.active_tab == "usage":
+            self.refresh_data()
         self.overlay.update_idletasks()
         self.overlay.update()
         write_overlay_capture(self.overlay, artifact_dir / "overlay.png")

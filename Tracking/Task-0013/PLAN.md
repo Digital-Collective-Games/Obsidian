@@ -142,6 +142,50 @@ toggle re-renders from snapshot without a DB read; lane demo
 control captured in `Testing/smoke-usage/overlay.png`. Repo-root `REGRESSION.md`
 gains `REG-005 Usage Source Filter (Codex/Claude)`.
 
+## PASS-0002 — Objective-3 activation fix (show/hide only, no rebuild on toggle)
+
+Reopened by the human directive "2026-05-29 — Activation fix approach: show/hide
+only, no rebuild on toggle" (see `HUMAN-DIRECTIVES-FOR-WORKER.md`). The shipped
+Objective-3 fix met its written UI-thread-block budget but the PERCEIVED
+key-press→painted latency stayed ~350 ms (warm) because `_render_dashboard`
+re-aggregated the full 7-day window on EVERY activation. The investigation report
+([Testing/ACTIVATION-LATENCY-INVESTIGATION.md](./Testing/ACTIVATION-LATENCY-INVESTIGATION.md))
+identified the fix; this pass implements it.
+
+Authorized design (implemented):
+
+- **Hotkey toggles visibility only.** `ui.py:show_overlay()` now only
+  `deiconify/lift/focus` — render removed from the hotkey path. The overlay is a
+  persistent window kept current by the background poll; a toggle does no
+  re-aggregation, no bucket rebuild, no DB read, no full re-render.
+- **Pre-render at startup, off-thread.** `__init__` runs the initial load via
+  `_start_activation_load` (worker thread → ingest queue → render the withdrawn
+  overlay), so the first toggle is fast and startup does not block on the DB read.
+- **Fix B — cheap background freshness.** `_load_dashboard_data` loads only the
+  charted window's events, computes the rolling 7-day total with an indexed SQL
+  `SUM ... GROUP BY source` (`storage.sum_total_tokens_by_source_since`, forced
+  onto a new covering index `idx_token_events_ts_source_total`), and fetches the
+  latest advisory via an indexed lookback (`storage.load_latest_weekly_advisory`).
+  `_render_dashboard` derives the displayed 7-day total by summing the SELECTED
+  sources' precomputed per-source totals.
+- **Objective 4 preserved.** The source filter still re-renders from the in-memory
+  snapshot (`_toggle_source` → `_render_dashboard`) with no synchronous DB read,
+  and the per-source precomputed totals let it adjust the 7-day total in memory.
+
+Proof:
+- Unit (timing-independent): show/hide-only toggle does no aggregation/DB/render
+  (`tests/test_desktop_support.py`); Fix-B storage + render-path coverage and the
+  preserved source filter (`tests/test_task0013_obsidian.py`). Full suite 140 OK.
+- Measured before/after on a 423.8 MB / 1.4M-row task-owned synthetic DB via the
+  extended `Testing/activation_e2e_harness.py`: BEFORE show→painted ~243 ms (render
+  ~156 ms) vs AFTER ~88 ms (show_call ~12 ms + OS paint ~77 ms, NO render); Fix-B
+  background poll ~64 ms (was ~1.4 s full-window). See
+  [Testing/ACTIVATION-FIX-PROOF.md](./Testing/ACTIVATION-FIX-PROOF.md) and
+  [Testing/E2E-TIMING-RESULT.json](./Testing/E2E-TIMING-RESULT.json).
+
+Out of scope this pass: publishing/restarting the human's live overlay (gated
+separately by the coordinator/human).
+
 ## Data Handling / Lanes (binding)
 
 - Repo-root `REGRESSION.md` and `DATA-HANDLING.md` bind. All validation, regression,

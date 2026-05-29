@@ -1,18 +1,23 @@
-"""Task-0013 Objective 3 FOLLOW-UP: end-to-end activation latency harness.
+"""Task-0013 Objective 3 activation fix: end-to-end TOGGLE latency harness.
 
-The prior `activation_timing_harness.py` measured only the Tk UI-thread blocking
-time of the synchronous DB read (~5 ms after the fix). The human reports the
-PERCEIVED time from key press to a fully rendered, painted window is ~500 ms and
-still feels clunky. That perceived latency is NOT the UI-thread DB block: it is
-
-    poll latency  +  deiconify/lift/focus  +  window map  +  _render_dashboard
-                  +  the OS actually compositing/painting the window.
+The investigation (ACTIVATION-LATENCY-INVESTIGATION.md) found the perceived
+clunkiness was dominated by `_render_dashboard` re-aggregating the full 7-day
+window (~230 ms) on EVERY activation, plus window first-paint (~76 ms) and the
+hotkey poll lag (~25 ms) — a ~350 ms warm path. The authorized fix makes the
+hotkey TOGGLE VISIBILITY ONLY of a persistent, already-rendered overlay: no
+re-aggregation, no bucket rebuild, no DB read, no render on the toggle path.
 
 This harness drives the REAL Tk DashboardApp in-process against a task-owned
-SYNTHETIC SQLite database sized comparably to the human's large live DB, and
-times each phase of the activation pipeline with perf_counter markers around the
-real production methods (show_overlay -> deiconify/lift/focus -> _render_dashboard
--> a forced update()/update_idletasks() that makes the window actually paint).
+SYNTHETIC SQLite DB sized comparably to the human's large live DB, and times,
+per iteration:
+
+  BEFORE  — the old render-on-show warm path (deiconify + _render_dashboard over
+            the full 7-day window + paint).
+  AFTER   — the REAL production show_overlay()/hide_overlay() on the persistent
+            window (deiconify + lift + focus + paint, NO render).
+  POLL    — the real Fix-B _load_dashboard_data() (chart window + indexed
+            per-source 7-day SUM) + one render, to show background freshness is
+            cheap.
 
 It does NOT open or read the human's live dashboard.db, live config,
 C:\\Users\\gregs\\.codex, or ~/.claude. It builds and measures its own DB.
@@ -134,98 +139,158 @@ def _write_config(runtime: Path, db_path: Path) -> Path:
     return config_path
 
 
-def measure(db_path: Path, config_path: Path, repeats: int) -> dict:
-    """Drive the real Tk DashboardApp activation pipeline and time each phase.
+def _agg(values: list[float]) -> dict:
+    vals = sorted(values)
+    n = len(vals)
+    return {
+        "min": round(vals[0], 3),
+        "median": round(vals[n // 2], 3),
+        "max": round(vals[-1], 3),
+        "mean": round(sum(vals) / n, 3),
+    }
 
-    We instrument the production methods directly:
-      - DB read (off-UI-thread cost): _load_dashboard_data()
-      - deiconify + lift + focus_force (window state change request)
-      - first paint after deiconify (update_idletasks + update)
-      - _render_dashboard (source filter + build_buckets + draw_chart + labels)
-      - render paint (update_idletasks + update to flush the redraw)
+
+def measure(db_path: Path, config_path: Path, repeats: int) -> dict:
+    """Drive the real Tk DashboardApp and time BEFORE vs AFTER the activation fix.
+
+    The activation fix makes the global hotkey TOGGLE VISIBILITY ONLY of a
+    persistent, already-rendered overlay. To produce an honest before/after on the
+    same machine/DB, each iteration measures all three of:
+
+      BEFORE (old warm path): show_overlay used to deiconify + render the dashboard
+        (filter_events_by_source + build_buckets over the full 7-day window) on the
+        UI thread on every activation. We reproduce that here as
+        deiconify + first paint + _render_dashboard(full 7-day snapshot) + paint.
+
+      AFTER (new toggle path): the REAL production show_overlay() / hide_overlay()
+        on the persistent window — deiconify + lift + focus + paint, NO render.
+        This is what the hotkey now costs.
+
+      BACKGROUND POLL (Fix B): the real _load_dashboard_data() (now bounded to the
+        chart window + an indexed per-source 7-day SUM) plus one _render_dashboard.
+        This runs off the hotkey path on a timer; we measure it to show keeping the
+        overlay fresh in the background is cheap (no full-window per-event scan).
 
     All Tk work runs on this (main) thread, exactly like the real UI thread.
     """
     # Import here so a missing display fails loudly with context.
     from app.codex_dashboard.ui import DashboardApp
+    from app.codex_dashboard.storage import connect, initialize_db, load_events_since
 
     app = DashboardApp(config_path)
     # Let Tk finish building the (withdrawn) overlay so geometry/widgets exist.
     app.root.update_idletasks()
 
+    # Build the FULL 7-day snapshot once, the way the OLD code loaded it on every
+    # activation, so the BEFORE path renders the same heavy ~467k-event window the
+    # human was experiencing. (The new code never loads this on the hotkey path.)
+    now = datetime.now(app.display_timezone)
+    summary_since = now.astimezone(UTC) - timedelta(days=7)
+    connection = connect(db_path)
+    initialize_db(connection)
+    full_7d_events = load_events_since(connection, summary_since)
+    connection.close()
+    full_markers: dict = {}
+
+    # Prime the persistent overlay's snapshot via the REAL Fix-B load+render once,
+    # so the AFTER toggle path reveals an already-rendered window (the production
+    # startup pre-render does this off-thread).
+    snapshot = app._load_dashboard_data()
+    app._render_dashboard(*snapshot)
+    app.overlay.update_idletasks()
+
     def now_ms() -> float:
         return time.perf_counter() * 1000.0
 
-    samples: list[dict] = []
+    before_samples: list[dict] = []
+    after_samples: list[dict] = []
+    poll_samples: list[dict] = []
+
     for _ in range(repeats + 1):  # one warmup + `repeats` measured
-        # Ensure hidden between iterations (matches "press hotkey to show").
         if app.overlay_visible:
             app.hide_overlay()
             app.overlay.update_idletasks()
 
-        t0 = now_ms()
-        # Phase A: the DB read the cold-start path runs OFF the UI thread today.
-        # We still time it because perceived latency on a cold activation waits
-        # for it before any data is visible.
-        events, markers = app._load_dashboard_data()
-        t_db = now_ms()
-
-        # Phase B: deiconify + lift + focus_force (what show_overlay does first).
+        # ---- BEFORE: old warm path (render the full 7-day window on show) ----
+        b0 = now_ms()
         app.overlay.deiconify()
         app.overlay_visible = True
         app.overlay.lift()
         app.overlay.focus_force()
-        t_deiconify = now_ms()
-
-        # Phase C: force the OS to actually map+paint the just-shown window.
+        b_deiconify = now_ms()
         app.overlay.update_idletasks()
         app.overlay.update()
-        t_first_paint = now_ms()
-
-        # Phase D: the render the activation path runs (filter+buckets+chart).
-        app._render_dashboard(events, markers)
-        t_render = now_ms()
-
-        # Phase E: flush the redraw so the painted chart is actually on screen.
+        b_first_paint = now_ms()
+        # The expensive per-event render the OLD show_overlay ran every time.
+        app._render_dashboard(full_7d_events, full_markers)
+        b_render = now_ms()
         app.overlay.update_idletasks()
         app.overlay.update()
-        t_render_paint = now_ms()
-
-        samples.append(
+        b_paint = now_ms()
+        before_samples.append(
             {
-                "db_read_ms": t_db - t0,
-                "deiconify_lift_focus_ms": t_deiconify - t_db,
-                "first_paint_ms": t_first_paint - t_deiconify,
-                "render_dashboard_ms": t_render - t_first_paint,
-                "render_paint_ms": t_render_paint - t_render,
-                "show_to_painted_ms": t_render_paint - t_db,
-                "end_to_end_ms": t_render_paint - t0,
+                "deiconify_lift_focus_ms": b_deiconify - b0,
+                "first_paint_ms": b_first_paint - b_deiconify,
+                "render_dashboard_ms": b_render - b_first_paint,
+                "render_paint_ms": b_paint - b_render,
+                "show_to_painted_ms": b_paint - b0,
             }
         )
 
-    measured = samples[1:]  # drop warmup
+        # Hide before the AFTER measurement so AFTER is a real show from hidden.
+        app.hide_overlay()
+        app.overlay.update_idletasks()
+        app.overlay.update()
+
+        # ---- AFTER: the REAL production toggle path (show/hide only) ----
+        a0 = now_ms()
+        app.show_overlay()  # production method: deiconify + lift + focus, NO render
+        a_show = now_ms()
+        app.overlay.update_idletasks()
+        app.overlay.update()  # OS maps + paints the already-rendered window
+        a_paint = now_ms()
+        app.hide_overlay()  # production hide
+        a_hide = now_ms()
+        app.overlay.update_idletasks()
+        app.overlay.update()
+        a_hide_paint = now_ms()
+        after_samples.append(
+            {
+                "show_call_ms": a_show - a0,
+                "show_paint_ms": a_paint - a_show,
+                "show_to_painted_ms": a_paint - a0,
+                "hide_call_ms": a_hide - a_paint,
+                "hide_to_painted_ms": a_hide_paint - a_paint,
+                "toggle_round_trip_ms": a_hide_paint - a0,
+            }
+        )
+
+        # ---- BACKGROUND POLL (Fix B): cheap load + one render, off hotkey path ----
+        p0 = now_ms()
+        snap = app._load_dashboard_data()
+        p_load = now_ms()
+        app._render_dashboard(*snap)
+        p_render = now_ms()
+        poll_samples.append(
+            {
+                "load_dashboard_data_ms": p_load - p0,
+                "render_dashboard_ms": p_render - p_load,
+                "poll_total_ms": p_render - p0,
+            }
+        )
+
     app.quit()
 
-    def agg(key: str) -> dict:
-        vals = sorted(s[key] for s in measured)
-        n = len(vals)
-        return {
-            "min": round(vals[0], 3),
-            "median": round(vals[n // 2], 3),
-            "max": round(vals[-1], 3),
-            "mean": round(sum(vals) / n, 3),
-        }
+    def aggregate(samples: list[dict]) -> dict:
+        measured = samples[1:]  # drop warmup
+        keys = measured[0].keys()
+        return {k: _agg([s[k] for s in measured]) for k in keys}
 
-    phases = [
-        "db_read_ms",
-        "deiconify_lift_focus_ms",
-        "first_paint_ms",
-        "render_dashboard_ms",
-        "render_paint_ms",
-        "show_to_painted_ms",
-        "end_to_end_ms",
-    ]
-    return {key: agg(key) for key in phases}
+    return {
+        "before_old_render_on_show": aggregate(before_samples),
+        "after_toggle_show_hide_only": aggregate(after_samples),
+        "background_poll_fixb": aggregate(poll_samples),
+    }
 
 
 def main() -> int:
@@ -259,12 +324,20 @@ def main() -> int:
     config_path = _write_config(runtime, args.db)
 
     print("Driving real Tk activation pipeline (a window will flash) ...")
-    phase_stats = measure(args.db, config_path, args.repeats)
+    stats = measure(args.db, config_path, args.repeats)
 
+    before = stats["before_old_render_on_show"]
+    after = stats["after_toggle_show_hide_only"]
     poll_interval_ms = 50.0  # ui.py: self.root.after(50, self._poll_hotkey)
+    poll_avg = poll_interval_ms / 2
+
+    before_show = before["show_to_painted_ms"]["median"]
+    after_show = after["show_to_painted_ms"]["median"]
     result = {
         "task": "Task-0013",
-        "objective": "Objective 3 follow-up — end-to-end activation latency",
+        "objective": (
+            "Objective 3 activation fix — show/hide only, no rebuild on toggle"
+        ),
         "measured_at": datetime.now(UTC).isoformat(),
         "harness": "activation_e2e_harness.py",
         "synthetic_db": {
@@ -280,23 +353,44 @@ def main() -> int:
         },
         "method": (
             "Drove the real Tk DashboardApp in-process against the synthetic DB. "
-            "Timed each production phase with perf_counter and forced real paints "
-            "with update_idletasks()+update(). All Tk work ran on the main "
-            "(UI-equivalent) thread."
+            "BEFORE reproduces the old render-on-show warm path (deiconify + "
+            "_render_dashboard over the full 7-day window + paint). AFTER calls "
+            "the REAL production show_overlay()/hide_overlay() on the persistent "
+            "window (deiconify + lift + focus + paint, NO render). BACKGROUND POLL "
+            "times the real Fix-B _load_dashboard_data() (chart window + indexed "
+            "per-source 7-day SUM) plus one render. All Tk work ran on the main "
+            "(UI-equivalent) thread; real paints forced with update_idletasks()+"
+            "update()."
         ),
         "poll_interval_ms": poll_interval_ms,
         "poll_latency_ms_note": (
             f"_poll_hotkey runs every {poll_interval_ms:g} ms (root.after). The "
             "WM_HOTKEY is enqueued immediately by the Win32 thread but the "
             f"callback only fires on the next poll tick: 0..{poll_interval_ms:g} "
-            f"ms added latency, ~{poll_interval_ms / 2:g} ms on average, that the "
-            "in-process harness cannot include because it calls the methods "
-            "directly."
+            f"ms added latency, ~{poll_avg:g} ms on average, added to BOTH before "
+            "and after (the in-process harness calls methods directly so it does "
+            "not include this; add it to both for perceived latency)."
         ),
-        "phases_ms": phase_stats,
+        "summary": {
+            "before_show_to_painted_median_ms": before_show,
+            "after_show_to_painted_median_ms": after_show,
+            "before_perceived_median_ms": round(before_show + poll_avg, 3),
+            "after_perceived_median_ms": round(after_show + poll_avg, 3),
+            "speedup_x": (
+                round(before_show / after_show, 2) if after_show > 0 else None
+            ),
+            "after_render_on_toggle": False,
+            "interpretation": (
+                "AFTER toggle show latency is dominated only by the OS window "
+                "map/paint (no per-event work), versus the BEFORE warm path that "
+                "re-aggregated the full 7-day window on every activation."
+            ),
+        },
+        "phases_ms": stats,
     }
     args.out.write_text(json.dumps(result, indent=2), encoding="utf-8")
-    print(json.dumps(phase_stats, indent=2))
+    print(json.dumps(result["summary"], indent=2))
+    print(json.dumps(stats, indent=2))
     print(f"Wrote {args.out}")
     return 0
 

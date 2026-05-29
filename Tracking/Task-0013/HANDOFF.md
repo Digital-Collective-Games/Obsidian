@@ -1,12 +1,55 @@
 # Task-0013 Handoff
 
-## Current Baseline (2026-05-29)
+## Current Baseline (2026-05-29, updated — activation fix PASS-0002)
 
 Task-0013 ("Rebrand to Obsidian, merge Claude Code tokens, fast hotkey
-activation, source filter") is implemented, committed/pushed, and now PUBLISHED +
-RESTARTED on the human's pinned dashboard release. All four objectives are
-complete; the unit suite and the task-level regression run pass; the
-human-authorized publish + restart deploy step is done. The task is **complete**.
+activation, source filter") shipped all four objectives. After deploy the human
+reported the hotkey still felt clunky (~350-500 ms perceived). The investigation
+([Testing/ACTIVATION-LATENCY-INVESTIGATION.md](./Testing/ACTIVATION-LATENCY-INVESTIGATION.md))
+found the cause and the human authorized the fix (show/hide only, no rebuild on
+toggle). **PASS-0002 implemented that fix in the repo source, with unit proof and
+a measured before/after.** The committed source no longer renders on the hotkey
+path. The remaining step — publishing a new pinned dashboard release and
+restarting the human's overlay so the fix goes live — is GATED SEPARATELY by the
+coordinator/human and was intentionally NOT done in this run.
+
+## Activation fix (PASS-0002, 2026-05-29 — IMPLEMENTED + PROVEN, live publish gated)
+
+What changed (Task-0013 source only):
+- `app/codex_dashboard/ui.py`: `show_overlay()` toggles VISIBILITY ONLY
+  (deiconify/lift/focus); the render was removed from the hotkey path. Startup
+  pre-render moved off the UI thread (`__init__` → `_start_activation_load`). The
+  background poll keeps the persistent overlay current.
+- Fix B (cheap background freshness): `_load_dashboard_data()` loads only the
+  charted window + an indexed per-source 7-day `SUM` + an indexed advisory
+  lookback; `_render_dashboard()` derives the 7-day total from precomputed
+  per-source totals so the Objective-4 source filter still adjusts it in memory
+  with no DB read.
+- `app/codex_dashboard/storage.py`: `sum_total_tokens_by_source_since`,
+  `load_latest_weekly_advisory`, a covering index
+  `idx_token_events_ts_source_total`, and a partial advisory index.
+
+Proof:
+- Unit suite: `python -m unittest discover -s tests -p "test_*.py" -v` → 140 OK.
+  Toggle-does-no-aggregation/DB/render and Fix-B coverage in
+  `tests/test_desktop_support.py` + `tests/test_task0013_obsidian.py`.
+- Measured before/after on a 423.8 MB / 1.4M-row task-owned synthetic DB
+  ([Testing/E2E-TIMING-RESULT.json](./Testing/E2E-TIMING-RESULT.json),
+  [Testing/ACTIVATION-FIX-PROOF.md](./Testing/ACTIVATION-FIX-PROOF.md)):
+  BEFORE show→painted ~243 ms (render ~156 ms) vs AFTER ~88 ms (deiconify/focus
+  ~12 ms + OS paint ~77 ms, NO render). Fix-B background poll ~64 ms (was ~1.4 s).
+
+Remaining for full closure (gated): publish a new pinned dashboard release from the
+committed tree and restart the human's overlay so the fix is what the human sees,
+then capture release-pinned human-surface proof. This is the same live-lane gate as
+the prior publish step and is owned by the coordinator/human.
+
+## Prior baseline (Objectives 1-4 shipped + first deploy, 2026-05-29)
+
+The four objectives were implemented, committed/pushed, and PUBLISHED + RESTARTED
+on the human's pinned dashboard release (see the deploy note below). That deploy
+predates the PASS-0002 activation fix above; the live overlay still runs the older
+render-on-show activation until a new release is published.
 
 ## Publish + Restart deploy (2026-05-29 — DONE)
 
