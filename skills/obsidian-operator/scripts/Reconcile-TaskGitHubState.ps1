@@ -186,6 +186,24 @@ function Normalize-BodyForCompare {
     return $normalized.Trim()
 }
 
+function Normalize-TitleForCompare {
+    # Normalize a title identically on both sides before comparing so a faithful
+    # round-trip (including titles that legitimately contain double-quotes,
+    # colons, or ampersands) is never reported as a false text_conflict. Mirrors
+    # Normalize-TitleForCompare in Sync-TaskToGitHubIssue.ps1: collapse CR/LF and
+    # runs of whitespace to a single space and trim. Does NOT strip content
+    # characters such as quotes/colons/ampersands.
+    param([string]$Title)
+
+    if ($null -eq $Title) {
+        return ""
+    }
+
+    $normalized = $Title -replace "`r`n", "`n"
+    $normalized = $normalized -replace "\s+", " "
+    return $normalized.Trim()
+}
+
 function Get-BodySyncMetadata {
     param([string]$Body)
 
@@ -936,7 +954,7 @@ foreach ($task in @($localTasks)) {
     $canonicalLocalBody = Normalize-BodyForCompare -Body $renderedBody
     $canonicalRemoteBody = Normalize-BodyForCompare -Body ([string]$remoteIssue.body)
     $bodyMatches = ($canonicalLocalBody -eq $canonicalRemoteBody)
-    $titleMatches = ([string]$render.title -eq [string]$remoteIssue.title)
+    $titleMatches = ((Normalize-TitleForCompare -Title ([string]$render.title)) -eq (Normalize-TitleForCompare -Title ([string]$remoteIssue.title)))
     $remoteHashMatchesLocal = ($remoteSync.local_task_sha256 -and $remoteSync.local_task_sha256 -eq $localHash)
 
     $textState = "in_sync"

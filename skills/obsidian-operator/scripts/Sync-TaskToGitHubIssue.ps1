@@ -172,6 +172,61 @@ function Normalize-BodyForCompare {
     return $normalized.Trim()
 }
 
+function Normalize-TitleForCompare {
+    # GitHub stores the title verbatim, but minor whitespace/line-ending drift
+    # (and the historical Windows PowerShell 5.1 native-argument quote stripping
+    # documented below) used to make a literal `-eq` readback compare fail for a
+    # legitimate title (e.g. one containing a double-quote). Normalize both the
+    # expected local title and the live GitHub readback identically before
+    # comparing so a faithful round-trip never reports a false readback failure
+    # or false text_conflict. This collapses CR/LF and runs of whitespace to a
+    # single space and trims the ends. It does NOT strip quotes/colons/ampersands
+    # -- those are content and must round-trip intact.
+    param([string]$Title)
+
+    if ($null -eq $Title) {
+        return ""
+    }
+
+    $normalized = $Title -replace "`r`n", "`n"
+    $normalized = $normalized -replace "\s+", " "
+    return $normalized.Trim()
+}
+
+function Set-GitHubIssueTitleAndBody {
+    # Robust send-side write. Windows PowerShell 5.1 mangles native-command
+    # arguments that contain double-quotes (it strips embedded `"` and turns a
+    # trailing `\` into `"`), so `gh issue edit --title $issueTitle` silently
+    # corrupted any title with a double-quote before it ever reached GitHub. We
+    # instead PATCH the issue through `gh api` with a JSON body delivered on
+    # stdin (`--input -`), exactly like the create path in
+    # Bootstrap-TaskGitHubIssues.ps1. JSON on stdin is never subject to native
+    # argument quoting, so the literal title round-trips intact.
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ProviderRepo,
+
+        [Parameter(Mandatory = $true)]
+        [int]$IssueNumber,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Title,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Body
+    )
+
+    $payload = [pscustomobject]@{
+        title = $Title
+        body = $Body
+    } | ConvertTo-Json -Depth 6
+
+    $payload | gh api -X PATCH "/repos/$ProviderRepo/issues/$IssueNumber" --input - | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to update title/body on $ProviderRepo#$IssueNumber via gh api PATCH."
+    }
+}
+
 function Sync-GitHubIssueFields {
     param(
         [Parameter(Mandatory = $true)]
@@ -367,12 +422,24 @@ if (-not $MetadataPath) {
 $metadataFullPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($MetadataPath)
 
 if ($DryRun) {
+    # Expose the exact send-side title payload (JSON, the way it is delivered to
+    # `gh api --input -`) and the normalized-compare form so the title
+    # encode/round-trip/compare logic can be verified deterministically without a
+    # live GitHub write. `send_payload_title` is what the JSON parser on the
+    # GitHub side reconstructs; for a faithful round-trip it equals $issueTitle.
+    $sendPayloadJson = [pscustomobject]@{ title = $issueTitle } | ConvertTo-Json -Depth 4
+    $sendPayloadTitle = ($sendPayloadJson | ConvertFrom-Json).title
+
     [pscustomobject]@{
         status = "dry_run"
         task_id = $taskId
         issue_number = $issueNumber
         provider_repo = $providerRepo
         title = $issueTitle
+        title_normalized = (Normalize-TitleForCompare -Title $issueTitle)
+        send_payload_title = $sendPayloadTitle
+        send_payload_round_trips = ($sendPayloadTitle -eq $issueTitle)
+        send_payload_compares_equal = ((Normalize-TitleForCompare -Title $sendPayloadTitle) -eq (Normalize-TitleForCompare -Title $issueTitle))
         issue_fields = [ordered]@{
             Queue = $QueueValue
             Priority = $PriorityValue
@@ -419,14 +486,14 @@ if ($existingMarker.Success) {
 }
 
 $bodyMatches = ((Normalize-BodyForCompare -Body ([string]$existing.body)) -eq (Normalize-BodyForCompare -Body $body))
-$titleMatches = ([string]$existing.title -eq $issueTitle)
+$titleMatches = ((Normalize-TitleForCompare -Title ([string]$existing.title)) -eq (Normalize-TitleForCompare -Title $issueTitle))
 if ((-not $bodyMatches -or -not $titleMatches) -and -not $ForceRemoteOverwrite) {
     throw "Live GitHub issue #$issueNumber title/body differs from the rendered local task. Run reconcile and merge/review the diff, or use -ForceRemoteOverwrite after deciding the local render should replace the remote issue text."
 }
 
 $labelsToRemove = Get-RejectedLabelNames -LabelNames (Get-LabelNames -Labels $existing.labels)
 
-gh issue edit $issueNumber --repo $providerRepo --title $issueTitle --body-file $outputBodyFullPath | Out-Null
+Set-GitHubIssueTitleAndBody -ProviderRepo $providerRepo -IssueNumber $issueNumber -Title $issueTitle -Body $body
 
 foreach ($labelName in $labelsToRemove) {
     gh issue edit $issueNumber --repo $providerRepo --remove-label $labelName | Out-Null
@@ -439,7 +506,7 @@ if ([int]$view.number -ne $issueNumber) {
     throw "Readback issue number '$($view.number)' does not match '$issueNumber'."
 }
 
-if ($view.title -ne $issueTitle) {
+if ((Normalize-TitleForCompare -Title ([string]$view.title)) -ne (Normalize-TitleForCompare -Title $issueTitle)) {
     throw "Readback title '$($view.title)' does not match '$issueTitle'."
 }
 
@@ -466,7 +533,7 @@ if ([int]$view.number -ne $issueNumber) {
     throw "Final readback issue number '$($view.number)' does not match '$issueNumber'."
 }
 
-if ($view.title -ne $issueTitle) {
+if ((Normalize-TitleForCompare -Title ([string]$view.title)) -ne (Normalize-TitleForCompare -Title $issueTitle)) {
     throw "Final readback title '$($view.title)' does not match '$issueTitle'."
 }
 
