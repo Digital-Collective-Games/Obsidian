@@ -2,20 +2,28 @@
   "schema_version": 1,
   "task_id": "Task-0013",
   "status": "in_progress",
-  "phase": "implementation",
+  "phase": "closure",
   "plan_approved": true,
   "current_pass": "PASS-0002",
   "last_completed_pass": "PASS-0002",
-  "current_gate": "handoff",
+  "current_gate": "human_acceptance",
   "latest_audit_verdict": "unknown",
   "validation": {
     "build": "not_applicable",
     "unit_tests": "passing",
-    "regression": "pending"
+    "regression": "passing"
+  },
+  "live_release": {
+    "deployed": true,
+    "release_id": "20260529T161636Z-247f2973b2a4",
+    "git_commit": "247f2973b2a47cbef232bcc41524825f329b4b30",
+    "running_pid": 64592,
+    "uses_live_config": true,
+    "data_preserved": true
   },
   "blockers": [],
   "next_expected_artifacts": [
-    "Tracking/Task-0013/Testing/ReleaseProof/"
+    "Tracking/Task-0013/Testing/ReleaseProof/RELEASE-DEPLOY-PROOF.md"
   ],
-  "updated_at": "2026-05-29T16:05:00-04:00"
+  "updated_at": "2026-05-29T16:25:00-04:00"
 }

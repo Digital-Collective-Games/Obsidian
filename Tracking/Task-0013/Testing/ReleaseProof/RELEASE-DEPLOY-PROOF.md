@@ -1,8 +1,13 @@
-# Task-0013 — Publish + Restart Deploy Proof (2026-05-29)
+# Task-0013 — Publish + Restart Deploy Proof: show/hide fix (2026-05-29)
 
 Evidence for the human-authorized live-lane step in
 [../../HUMAN-DIRECTIVES-FOR-WORKER.md](../../HUMAN-DIRECTIVES-FOR-WORKER.md)
-("2026-05-29 — Publish + restart authorization": *"Publish + restart now."*).
+("2026-05-29 — Publish authorization for the show/hide fix release (commit
+247f297)": *"Publish + restart now."*).
+
+This deploy supersedes the earlier `e99ac895` deploy: it publishes and restarts
+onto commit **`247f2973`** (PASS-0002, "hotkey toggles visibility only"), so the
+human's running overlay now runs the show/hide activation fix.
 
 Canonical dashboard frontend release-isolation flow per repo
 [../../../../TESTING.md](../../../../TESTING.md) `SMOKE-003`,
@@ -13,81 +18,89 @@ Canonical dashboard frontend release-isolation flow per repo
 ## 1. Release-script unit coverage (SMOKE-003 step 1)
 
 `python -m unittest tests.test_dashboard_release_scripts tests.test_desktop_support -v`
--> **44 tests OK** (3 dashboard-release-script tests + 41 desktop-support tests;
-no skips/failures). Re-run of `tests.test_dashboard_release_scripts` alone: 3 OK.
+-> **44 tests OK** (no skips/failures). Includes the show/hide coverage
+(`test_show_overlay_only_reveals_persistent_window_no_rebuild`,
+`test_show_overlay_cold_snapshot_still_only_reveals_no_load`,
+`test_start_activation_load_runs_load_off_thread`) plus the dashboard
+release-script isolation tests and the pinned-launcher startup-command test.
 
 ## 2. Published a new pinned release FROM THE COMMITTED GIT TREE
 
 `scripts\Publish-DashboardRelease.ps1` (default `source_mode=git_commit`).
+`-PlanOnly` first confirmed `source_mode=git_commit` (no `-FromWorkingTree`).
 
-- `release_id`: **20260529T143554Z-e99ac895ee61**
-- `git_commit`: **e99ac895ee619239638549e0e42c6443cc133722** (committed Task-0013 HEAD on `master`/upstream)
+- `release_id`: **20260529T161636Z-247f2973b2a4**
+- `git_commit`: **247f2973b2a47cbef232bcc41524825f329b4b30** (committed Task-0013
+  HEAD on `master`; subject "task-0013 PASS-0002: hotkey toggles visibility only")
 - `source_mode`: **git_commit**, `source_dirty`: **false**
-- `repository_dirty`: true — the unrelated untracked files (`token_time.py`, the
-  token-usage CSVs, Task-0009/0012 edits) are recorded in `source_status` for
-  transparency but were **NOT shipped**: the release `files[]` manifest contains
-  only the 21 committed `app/` tree files (verified — no `token_time.py`).
+- `repository_dirty`: true — the unrelated untracked/working-tree files
+  (`token_time.py`, the token-usage CSVs, Task-0009/0012 edits, the stray junk
+  file) are recorded in `source_status` for transparency but were **NOT shipped**:
+  the release `files[]` manifest contains only the **21** committed `app/` tree
+  files, and a programmatic check confirmed **no `token_time` file** is present in
+  the release (`contains_token_time=false`).
 - Full manifest: [published-release-manifest.json](./published-release-manifest.json).
 
 The publish copies `git archive HEAD app`, so a dirty working tree cannot leak
-into the release. `-PlanOnly` first confirmed `source_mode=git_commit`.
+into the release.
 
 ## 3. Restarted the human's overlay onto the pinned release (data preserved)
 
-- Before: one overlay (PID 36756) pinned to the OLD release
-  `20260427T162803Z-3c0fabb2f1d5` (pre-Task-0013 commit `3c0fabb2`).
-- Stopped ONLY that old-release overlay (matched on the old release id), then ran
-  `scripts\Start-DashboardRelease.ps1` (validates the manifest hashes, launches
-  the runtime-root launcher, then runs `Test-DashboardRelease.ps1`).
-- After: one overlay (PID 67656) pinned to the NEW release.
+- Before: one overlay (PID 67656) pinned to the prior release
+  `20260529T143554Z-e99ac895ee61` (commit `e99ac895`, pre-show/hide fix).
+- Stopped ONLY that prior-release overlay (matched on the prior release id), then
+  ran `scripts\Start-DashboardRelease.ps1` (validates the manifest hashes,
+  launches the runtime-root launcher, then runs `Test-DashboardRelease.ps1`).
+- After: one overlay (PID **64592**) pinned to the NEW release.
 
 ### Data / config / startup preservation (Decision A — kept the data root)
 
 [live-data-preservation.json](./live-data-preservation.json):
 
-- `config.json` — byte-identical (sha256 `D1BF7990…`, mtime 2026-04-21 unchanged).
-  **Untouched.**
+- `config.json` — byte-identical (sha256 `D1BF7990…`, 251 bytes, mtime
+  2026-04-21 unchanged). **Untouched.** The restarted overlay uses this LIVE
+  config: its command line has **no `--config-path` override**
+  (`running_cmdline_has_config_path_override=false`).
 - Startup `CodexDashboard.cmd` — content-identical (sha256 `BA8F5401…` matches the
-  pre-publish baseline); mtime updated only because `Install-DashboardStartup`
-  rewrote the same bytes. Still points at the runtime-root pinned launcher.
-- `dashboard.db` — same file at `%LOCALAPPDATA%\CodexDashboard\dashboard.db`, now
-  held open by the restarted overlay (the human's own running instance using it).
-  **Not migrated, reset, deleted, or overwritten.** The pinned release includes
-  the additive + idempotent `source`/`source_event_id` migration (per the
-  Coordinator Verification), which is non-destructive and preserves existing rows.
+  pre-publish baseline). Still points at the runtime-root pinned launcher.
+- `dashboard.db` — **same file** at `%LOCALAPPDATA%\CodexDashboard\dashboard.db`,
+  same creation time `2026-04-03T00:33:38Z` (not recreated/reset). With the old
+  overlay stopped the DB was readable: sha256 `C4ADB6DC…`, ~272.96 MB. It is now
+  reopened and being written by the human's restarted live overlay (byte count
+  grows as the live instance ingests into its own DB). **Not migrated, reset,
+  deleted, or overwritten.**
 
 ## 4. Isolation verification (SMOKE-003 step 4)
 
 `scripts\Test-DashboardRelease.ps1` -> [test-dashboard-release.json](./test-dashboard-release.json):
 
-- `current_release.release_id` = `20260529T143554Z-e99ac895ee61`,
-  `git_commit` = `e99ac895…`, `source_mode` = `git_commit`, `source_dirty` = false.
+- `current_release.release_id` = `20260529T161636Z-247f2973b2a4`,
+  `git_commit` = `247f2973…`, `source_mode` = `git_commit`, `source_dirty` = false.
 - `current_release_error` = **null** (all 21 copied source hashes validate).
 - `startup_uses_pinned_launcher` = **true** (startup invokes the runtime-root
   launcher, not `C:\Agent\CodexDashboard`).
 - `running_process_count` = **1**; the running `pythonw.exe` command line includes
-  `--release-id 20260529T143554Z-e99ac895ee61 --release-root
-  …\dashboard-releases\20260529T143554Z-e99ac895ee61`.
-
-Re-checked after all capture activity: still 1 process, still pinned, error null.
+  `--release-id 20260529T161636Z-247f2973b2a4 --release-root
+  …\dashboard-releases\20260529T161636Z-247f2973b2a4` and no isolated-config
+  override, so it serves the human's LIVE config.
 
 ## 5. Human-surface proof from the restarted, release-pinned overlay
 
-All captures load the dashboard package FROM THE PINNED RELEASE ROOT
-(`release_overlay_capture.py`, `loaded_from_release_root: true`) against the
-task-owned isolated config + SQLite DB under `../Runtime/` (synthetic Codex +
+All captures load the dashboard package FROM THE NEW PINNED RELEASE ROOT
+(`release_overlay_capture.py`, `loaded_from_release_root: true`,
+`loaded_ui_module_path` under the `20260529T161636Z-247f2973b2a4` release) against
+the task-owned isolated config + SQLite DB under `../Runtime/` (synthetic Codex +
 Claude fixtures). **No live data was read** (`reads_live_data: false`); the live
 `dashboard.db`, `config.json`, `C:\Users\gregs\.codex`, and `~/.claude` were not
 touched, so the human's live spend is not exposed.
 
-- [smoke-all/overlay.png](./smoke-all/overlay.png) — **BEFORE**: the **OBSIDIAN**
-  brand, **7D TOTAL TOKENS 138.5M** (merged Codex+Claude), control reads
-  **Source: All**. Summary `7d_total=138.5M`, `hotkey_triggered=True`.
-- [smoke-claude-off/overlay.png](./smoke-claude-off/overlay.png) — **AFTER**
+- [smoke-all/overlay.png](./smoke-all/overlay.png) — the **OBSIDIAN** brand,
+  **7D TOTAL TOKENS 138.5M** (merged Codex+Claude), control reads **Source: All**.
+  Summary `7d_total=138.5M`, `hotkey_triggered=True`, `active_tab=usage`.
+- [smoke-claude-off/overlay.png](./smoke-claude-off/overlay.png) — after
   unchecking Claude via the released `_toggle_source`: control reads
-  **Source: Codex**, **7D TOTAL TOKENS 137.7M** (Claude's 0.839M removed),
-  projected 339.4M -> 336M. Summary `7d_total=137.7M`. Distinct image hash from
-  the BEFORE shot.
+  **Source: Codex**, **7D TOTAL TOKENS 137.7M** (Claude's 0.839M removed).
+  Summary `7d_total=137.7M`.
 - [release-overlay-expanded.png](./release-overlay-expanded.png) — the released
   source-filter dropdown **expanded**, showing the **Codex** and **Claude**
   checkbuttons.
@@ -95,6 +108,12 @@ touched, so the human's live spend is not exposed.
   occlusion-proof numeric record: merged 138,539,000 = Codex 137,700,000 +
   Claude 839,000 (`merged_equals_codex_plus_claude: true`, `claude_present: true`);
   displayed before/after All/138.5M -> Codex/137.7M (`before_after_changed: true`).
+
+Per the human directive for this run, the toggle latency itself is **already
+proven by the committed e2e harness** (`activation_e2e_harness.py` /
+[../E2E-TIMING-RESULT.json](../E2E-TIMING-RESULT.json) /
+[../ACTIVATION-FIX-PROOF.md](../ACTIVATION-FIX-PROOF.md)) and was NOT re-measured
+live in this run.
 
 ### GUI-capture limitation (recorded honestly, not a product failure)
 

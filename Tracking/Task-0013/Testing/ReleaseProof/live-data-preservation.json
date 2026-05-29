@@ -1,20 +1,36 @@
-[
-  {
+{
+  "schema_version": 1,
+  "captured_at": "2026-05-29T16:17:48.1715872Z",
+  "new_release_id": "20260529T161636Z-247f2973b2a4",
+  "new_release_commit": "247f2973b2a47cbef232bcc41524825f329b4b30",
+  "old_release_id": "20260529T143554Z-e99ac895ee61",
+  "old_overlay_pid": 67656,
+  "new_overlay_pid": 64592,
+  "running_uses_live_config": true,
+  "running_cmdline_has_config_path_override": false,
+  "config": {
     "path": "C:\\Users\\gregs\\AppData\\Local\\CodexDashboard\\config.json",
+    "baseline_sha256": "D1BF79907A7665CA05DA2F36178AF37BC02E8DAC879BBE2192EE9A668F1E8A30",
+    "now_sha256": "D1BF79907A7665CA05DA2F36178AF37BC02E8DAC879BBE2192EE9A668F1E8A30",
     "bytes": 251,
-    "last_write_utc": "2026-04-21T03:22:13.8810740Z",
-    "sha256": "D1BF79907A7665CA05DA2F36178AF37BC02E8DAC879BBE2192EE9A668F1E8A30"
+    "mtime_utc": "2026-04-21T03:22:13.8810740Z",
+    "unchanged": true
   },
-  {
+  "startup": {
     "path": "C:\\Users\\gregs\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\CodexDashboard.cmd",
-    "bytes": 228,
-    "last_write_utc": "2026-05-29T14:35:55.2870760Z",
-    "sha256": "BA8F5401103F5053026BCCD953DDBA5D4268A5EB1DF61D4E7AC01B12C5141AE2"
+    "baseline_sha256": "BA8F5401103F5053026BCCD953DDBA5D4268A5EB1DF61D4E7AC01B12C5141AE2",
+    "now_sha256": "BA8F5401103F5053026BCCD953DDBA5D4268A5EB1DF61D4E7AC01B12C5141AE2",
+    "points_at_pinned_launcher": true,
+    "unchanged": true
   },
-  {
+  "dashboard_db": {
     "path": "C:\\Users\\gregs\\AppData\\Local\\CodexDashboard\\dashboard.db",
-    "bytes": 271646720,
-    "last_write_utc": "2026-05-29T14:53:53.2697195Z",
-    "sha256": "LOCKED_BY_RUNNING_OVERLAY"
+    "creation_utc": "2026-04-03T00:33:38.0730334Z",
+    "bytes_pre_publish": 272957440,
+    "bytes_while_stopped": 272965632,
+    "sha256_while_stopped": "C4ADB6DCDCA8D9EEA3A131CB2FD28942322DDDEDA37CB58BCF53E0A68BCBDA50",
+    "bytes_now": 288256000,
+    "same_file_not_reset": true,
+    "note": "Same file at same path (creation 2026-04-03 unchanged). Not migrated/reset/overwritten. Byte growth is the human live overlay ingesting into its own DB, plus WAL checkpoint on old-overlay shutdown."
   }
-]
+}

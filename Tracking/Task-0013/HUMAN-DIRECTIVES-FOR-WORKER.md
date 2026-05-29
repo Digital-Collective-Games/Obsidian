@@ -257,3 +257,18 @@ approach). Authorized design:
   step is gated separately by the coordinator/human. Honor
   `REGRESSION.md`/`DATA-HANDLING.md` (isolated lane / task-owned fixtures; never the
   human's live config/DB/`.codex`/`~/.claude`). Commit ONLY Task-0013 files.
+
+## 2026-05-29 — Publish authorization for the show/hide fix release (commit 247f297)
+
+The human was asked whether to publish + restart for the verified show/hide fix
+(commit `247f297`) and chose **"Publish + restart now."** The publish/restart
+rules from the earlier "Publish + restart authorization" section apply unchanged:
+publish from the COMMITTED tree (now `247f297`), restart the human's overlay onto
+the new pinned release while PRESERVING the existing `%LOCALAPPDATA%\CodexDashboard`
+`dashboard.db` / `config.json` / startup entry, verify release isolation + that the
+running process is the pinned release on the live config, and capture human-surface
+proof. Also (housekeeping, in-scope): delete the stray untracked junk file with the
+mangled path under the repo root (e.g. `C:AgentCodexDashboard...verify_ui.py`), and
+commit any still-uncommitted Task-0013 proof artifact (e.g.
+`Testing/SOURCE-FILTER-RESULT.json`). Do not touch unrelated lanes/data or the
+unrelated pre-existing working-tree changes.
