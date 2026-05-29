@@ -2,7 +2,7 @@
 
 ## Title
 
-Rebrand the desktop overlay to "Obsidian", count Claude Code tokens alongside Codex, and make hotkey activation feel instant.
+Rebrand the desktop overlay to Obsidian, count Claude Code tokens alongside Codex, and make hotkey activation feel instant.
 
 ## Writeup Type
 
