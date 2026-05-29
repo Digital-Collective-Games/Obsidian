@@ -212,6 +212,14 @@ Closeout progress (2026-05-28, this session):
   PowerShell 5.1 caused a false `text_conflict`. Status: fixed and verified by a
   clean reconcile. The UTF-8 console-encoding guard must stay in the scripts.
 
+## Closure Gate
+
+Task-0012 is at the human closure-acceptance gate. The closure review package
+is [Testing/Closure/REVIEW-PACKAGE.md](./Testing/Closure/REVIEW-PACKAGE.md). It
+links the clean reconcile proof, the BUG-0001 fix, the doc realignment, and the
+exact closure approval question. The task is not marked `complete` until the
+human accepts closure.
+
 ## Proposed TASK.md Changes
 
 Do not apply these automatically from this handoff. They are annotations for the
