@@ -70,7 +70,7 @@ function Invoke-GhJson {
         return ($text | ConvertFrom-Json)
     }
 
-    if ($AllowNotFound -and ($text -match "HTTP 404" -or $text -match "not found" -or $text -match "Not Found")) {
+    if ($AllowNotFound -and ($text -match "HTTP 404" -or $text -match "not found" -or $text -match "Not Found" -or $text -match "Could not resolve to an issue or pull request")) {
         return $null
     }
 
