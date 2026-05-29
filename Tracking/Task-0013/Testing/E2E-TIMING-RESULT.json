@@ -1,0 +1,60 @@
+{
+  "task": "Task-0013",
+  "objective": "Objective 3 follow-up \u2014 end-to-end activation latency",
+  "measured_at": "2026-05-29T15:30:52.415917+00:00",
+  "harness": "activation_e2e_harness.py",
+  "synthetic_db": {
+    "path": "Tracking\\Task-0013\\Testing\\Runtime\\e2e-timing.db",
+    "event_count": 1400000,
+    "db_bytes": 294158336,
+    "wal_bytes": 0,
+    "note": "Task-owned synthetic DB seeded across 21 days, 50/50 codex/claude, sized to the human's large-live-DB class. Live dashboard.db was NOT opened or sized."
+  },
+  "method": "Drove the real Tk DashboardApp in-process against the synthetic DB. Timed each production phase with perf_counter and forced real paints with update_idletasks()+update(). All Tk work ran on the main (UI-equivalent) thread.",
+  "poll_interval_ms": 50.0,
+  "poll_latency_ms_note": "_poll_hotkey runs every 50 ms (root.after). The WM_HOTKEY is enqueued immediately by the Win32 thread but the callback only fires on the next poll tick: 0..50 ms added latency, ~25 ms on average, that the in-process harness cannot include because it calls the methods directly.",
+  "phases_ms": {
+    "db_read_ms": {
+      "min": 993.334,
+      "median": 1202.001,
+      "max": 1390.835,
+      "mean": 1197.424
+    },
+    "deiconify_lift_focus_ms": {
+      "min": 9.638,
+      "median": 11.449,
+      "max": 13.09,
+      "mean": 11.606
+    },
+    "first_paint_ms": {
+      "min": 67.151,
+      "median": 77.246,
+      "max": 92.337,
+      "mean": 75.988
+    },
+    "render_dashboard_ms": {
+      "min": 197.622,
+      "median": 229.545,
+      "max": 256.647,
+      "mean": 228.232
+    },
+    "render_paint_ms": {
+      "min": 2.479,
+      "median": 3.02,
+      "max": 4.947,
+      "mean": 3.215
+    },
+    "show_to_painted_ms": {
+      "min": 290.467,
+      "median": 326.043,
+      "max": 339.845,
+      "mean": 319.04
+    },
+    "end_to_end_ms": {
+      "min": 1283.801,
+      "median": 1502.586,
+      "max": 1730.68,
+      "mean": 1516.464
+    }
+  }
+}
