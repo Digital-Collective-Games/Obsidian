@@ -1,0 +1,13 @@
+{
+  "task_id": "DQ-004",
+  "title": "Add a 'pow' operation to calc.py",
+  "state": "ready",
+  "priority": 4,
+  "modification": {
+    "kind": "add_operation",
+    "op_name": "pow",
+    "op_symbol": "**",
+    "description": "Add a 'pow' operation that raises a to the power b, registered in OPERATIONS, with a new test covering it."
+  },
+  "acceptance": "calc.py supports `pow`, OPERATIONS contains 'pow', existing tests still pass, and a new test covers pow."
+}

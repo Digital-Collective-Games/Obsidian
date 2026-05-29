@@ -1,0 +1,12 @@
+{
+  "task_id": "DQ-002",
+  "title": "Bump calc.py VERSION to 0.2.0",
+  "state": "ready",
+  "priority": 2,
+  "modification": {
+    "kind": "set_version",
+    "new_version": "0.2.0",
+    "description": "Update the VERSION constant in calc.py from its current value to 0.2.0."
+  },
+  "acceptance": "calc.py VERSION == '0.2.0' and existing tests still pass."
+}

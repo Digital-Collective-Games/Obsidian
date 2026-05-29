@@ -212,13 +212,38 @@ Closeout progress (2026-05-28, this session):
   PowerShell 5.1 caused a false `text_conflict`. Status: fixed and verified by a
   clean reconcile. The UTF-8 console-encoding guard must stay in the scripts.
 
-## Closure Gate
+## Rescope (2026-05-28) — Drain-Queue Consumer Is The Deliverable
 
-Task-0012 is at the human closure-acceptance gate. The closure review package
-is [Testing/Closure/REVIEW-PACKAGE.md](./Testing/Closure/REVIEW-PACKAGE.md). It
-links the clean reconcile proof, the BUG-0001 fix, the doc realignment, and the
-exact closure approval question. The task is not marked `complete` until the
-human accepts closure.
+The human did NOT accept the publication-slice closure. Task-0012 was explicitly
+rescoped (see
+[HUMAN-DIRECTIVES-FOR-WORKER.md](./HUMAN-DIRECTIVES-FOR-WORKER.md) "Explicit
+Rescope" and "Demonstration Directive"). The publication slice (issues
+`#1`..`#12`, clean reconcile, BUG-0001 fix) is preserved as the foundation; the
+required deliverable is a working `drain my queue pls` consumer, demonstrated
+end-to-end.
+
+That demonstration is done as a working spike:
+[Testing/DrainQueueDemo/DRAIN-QUEUE-DEMO.md](./Testing/DrainQueueDemo/DRAIN-QUEUE-DEMO.md).
+A consumer pulls a local queue, allocates a git worktree per task, dispatches a
+subagent to make a minor modification to a small program in `C:\Agent\YourTestRepo`,
+respects a concurrency limit of 2, captures the result, and releases each
+worktree. 4 tasks drained, 4 succeeded, real commits on per-task branches, all
+worktrees released. `TASK-STATE.json` is `phase: implementation`, `current_pass:
+PASS-0005`.
+
+Caveats (in the proof package): the dispatched subagent is a deterministic local
+executor standing in for a real Codex subagent (nested-dispatch tooling not
+exposed this run); the demo queue is local JSON (production queue is the proven
+GitHub provider); concurrency is PowerShell-job based without durable recovery;
+no merge/PR step.
+
+## Prior Publication Closure Gate (superseded, preserved as history)
+
+The earlier publication slice reached a human closure-acceptance gate, packaged
+at [Testing/Closure/REVIEW-PACKAGE.md](./Testing/Closure/REVIEW-PACKAGE.md)
+(clean reconcile proof, BUG-0001 fix, doc realignment, approval question). The
+human did not accept that as task closure and rescoped to the drain-queue
+deliverable above. Keep the package as history; it is not the current gate.
 
 ## Proposed TASK.md Changes
 

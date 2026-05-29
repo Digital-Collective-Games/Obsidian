@@ -22,6 +22,16 @@ Progress as of 2026-05-28:
   5.1 was found at closeout and fixed; see [BUG-0001.md](./BUG-0001.md).
 - `PASS-0004` TaskCreate GitHub provider follow-on: recorded as required
   follow-on work; not implemented in this task.
+- `PASS-0005` drain-queue consumer demonstration: done as a working spike. The
+  human explicitly rescoped Task-0012 on 2026-05-28 (see
+  [HUMAN-DIRECTIVES-FOR-WORKER.md](./HUMAN-DIRECTIVES-FOR-WORKER.md) "Explicit
+  Rescope" and "Demonstration Directive"): the publication slice is the
+  foundation, not the finish line; the required deliverable is a working
+  `drain my queue pls` consumer proven end-to-end. Built and ran a consumer that
+  pulls a local queue, allocates a git worktree per task, dispatches a subagent
+  to make a minor program modification, respects a concurrency limit, captures
+  the result, and releases the worktree, against `C:\Agent\YourTestRepo`. Proof:
+  [Testing/DrainQueueDemo/DRAIN-QUEUE-DEMO.md](./Testing/DrainQueueDemo/DRAIN-QUEUE-DEMO.md).
 
 ## Human Outcome
 
@@ -200,6 +210,48 @@ Exit bar:
 - closeout names the registry as the durable provider binding and the
   TaskCreate provider subdocument as required follow-on process work
 
+### PASS-0005: Drain-Queue Consumer Demonstration
+
+Status: done as a working spike (2026-05-28), under the human's explicit rescope.
+
+Objective:
+
+- prove `drain my queue pls` end-to-end with real worktrees and real program
+  modifications, not a design-only or dry-run deliverable
+
+Expected artifacts:
+
+- demo target repo `C:\Agent\YourTestRepo` (small `calc.py` program + tests)
+- [Testing/DrainQueueDemo/queue.json](./Testing/DrainQueueDemo/queue.json)
+- [Testing/DrainQueueDemo/Drain-Queue.ps1](./Testing/DrainQueueDemo/Drain-Queue.ps1)
+  (consumer)
+- [Testing/DrainQueueDemo/Invoke-Subagent.ps1](./Testing/DrainQueueDemo/Invoke-Subagent.ps1)
+  (dispatched subagent runner)
+- [Testing/DrainQueueDemo/apply_modification.py](./Testing/DrainQueueDemo/apply_modification.py)
+  (real edit logic)
+- [Testing/DrainQueueDemo/worktree-allocations-demo.json](./Testing/DrainQueueDemo/worktree-allocations-demo.json)
+  (allocation registry following `WORKTREES.md` schema)
+- [Testing/DrainQueueDemo/DRAIN-RUN-SUMMARY.json](./Testing/DrainQueueDemo/DRAIN-RUN-SUMMARY.json),
+  [Testing/DrainQueueDemo/DRAIN-RUN.log](./Testing/DrainQueueDemo/DRAIN-RUN.log),
+  per-task results/diffs under
+  [Testing/DrainQueueDemo/results/](./Testing/DrainQueueDemo/results/)
+- [Testing/DrainQueueDemo/DRAIN-QUEUE-DEMO.md](./Testing/DrainQueueDemo/DRAIN-QUEUE-DEMO.md)
+  (proof package, including the subagent-model and local-queue caveats)
+
+Verification:
+
+- 4 queued tasks drained; 4 succeeded; each produced a real commit on a per-task
+  branch in `C:\Agent\YourTestRepo` with minimal, faithful diffs and passing
+  tests
+- worktree allocation/release lifecycle recorded; `git worktree list` after the
+  run shows only `main` (all demo worktrees released)
+- concurrency limit of 2 honored against 4 tasks (verified in the run log)
+
+Exit bar:
+
+- the consumer genuinely runs and modifies the program; this is a working spike,
+  explicitly labeled as not production-ready (see caveats in the proof package)
+
 ## Data Handling
 
 Backup impact expected:
@@ -228,6 +280,11 @@ a must-backup-delta tracked manifest. No new runtime data store is introduced.
 - desktop UI for publication
 - bulk publishing all `TASK.md` files
 - full cross-repo issue query dashboard
-- `drain my tasks pls`
-- worktree allocation or release
 - GitHub labels or comments as canonical live execution state
+
+Note (2026-05-28 rescope): `drain my queue pls` and worktree allocation/release
+were originally out of scope, but the human explicitly rescoped Task-0012 to
+require a working drain-queue consumer demonstration. That demonstration is
+PASS-0005 above. A production-ready coordinator (GitHub-backed queue source,
+real Codex subagent dispatch, durable concurrency/recovery, merge/PR step)
+remains follow-on work beyond this spike.

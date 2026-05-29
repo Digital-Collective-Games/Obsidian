@@ -1,0 +1,11 @@
+{
+  "task_id": "DQ-003",
+  "title": "Add a --version flag to calc.py",
+  "state": "ready",
+  "priority": 3,
+  "modification": {
+    "kind": "add_version_flag",
+    "description": "Make `python calc.py --version` print the VERSION string and exit 0, handled before the 3-argument usage check."
+  },
+  "acceptance": "`python calc.py --version` prints the version and returns 0; existing usage path is unchanged for normal operations."
+}

@@ -1,0 +1,34 @@
+diff --git a/calc.py b/calc.py
+index be4dc7d..368dd1c 100644
+--- a/calc.py
++++ b/calc.py
+@@ -25,10 +25,15 @@ def mul(a, b):
+     return a * b
+ 
+ 
++
++def div(a, b):
++    return a / b
++
+ OPERATIONS = {
+     "add": add,
+     "sub": sub,
+     "mul": mul,
++    "div": div,
+ }
+ 
+ 
+diff --git a/test_calc.py b/test_calc.py
+index eedee85..8999e4b 100644
+--- a/test_calc.py
++++ b/test_calc.py
+@@ -15,5 +15,8 @@ class CalcTests(unittest.TestCase):
+         self.assertEqual(calc.mul(4, 3), 12)
+ 
+ 
++    def test_div(self):
++        self.assertEqual(calc.div(6, 2), 3)
++
+ if __name__ == "__main__":
+     unittest.main()
+

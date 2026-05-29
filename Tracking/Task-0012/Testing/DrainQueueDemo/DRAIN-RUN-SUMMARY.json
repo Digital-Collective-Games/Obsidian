@@ -1,0 +1,47 @@
+{
+  "generated_at": "2026-05-28T23:46:19.9463592-04:00",
+  "target_repo": "C:\\Agent\\YourTestRepo",
+  "baseline_head": "9af2adf1422562a68f55117297727126267be52e",
+  "max_concurrency": 2,
+  "queue_path": "./queue.json",
+  "drained_count": 4,
+  "succeeded_count": 4,
+  "tasks": [
+    {
+      "task_id": "DQ-001",
+      "title": "Add a divide operation to calc.py",
+      "status": "succeeded",
+      "commit_sha": "e6b86566175529de86bbc0990a3674b3cbe0edf8",
+      "branch": "drain/DQ-001",
+      "slot_id": "yourtestrepo-drainslot1",
+      "tests_passed": true
+    },
+    {
+      "task_id": "DQ-002",
+      "title": "Bump calc.py VERSION to 0.2.0",
+      "status": "succeeded",
+      "commit_sha": "4aa87e3e4ded635446a70b084f6aaaa314143933",
+      "branch": "drain/DQ-002",
+      "slot_id": "yourtestrepo-drainslot2",
+      "tests_passed": true
+    },
+    {
+      "task_id": "DQ-003",
+      "title": "Add a --version flag to calc.py",
+      "status": "succeeded",
+      "commit_sha": "8ff911b8e06e2f89c1c00ea564dc2069f46dafa0",
+      "branch": "drain/DQ-003",
+      "slot_id": "yourtestrepo-drainslot3",
+      "tests_passed": true
+    },
+    {
+      "task_id": "DQ-004",
+      "title": "Add a 'pow' operation to calc.py",
+      "status": "succeeded",
+      "commit_sha": "cb59fd998d9d3a97486ca5c9ebfec46347e9c742",
+      "branch": "drain/DQ-004",
+      "slot_id": "yourtestrepo-drainslot4",
+      "tests_passed": true
+    }
+  ]
+}

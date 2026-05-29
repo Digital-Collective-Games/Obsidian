@@ -1,0 +1,13 @@
+{
+  "task_id": "DQ-001",
+  "title": "Add a divide operation to calc.py",
+  "state": "ready",
+  "priority": 1,
+  "modification": {
+    "kind": "add_operation",
+    "op_name": "div",
+    "op_symbol": "/",
+    "description": "Add a 'div' operation that divides a by b, registered in OPERATIONS, with a guard that prints an error and returns 2 when b == 0."
+  },
+  "acceptance": "calc.py supports `div`, OPERATIONS contains 'div', existing tests still pass, and a new test covers div."
+}

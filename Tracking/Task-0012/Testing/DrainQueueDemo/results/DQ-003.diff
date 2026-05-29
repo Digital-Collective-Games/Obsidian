@@ -1,0 +1,15 @@
+diff --git a/calc.py b/calc.py
+index be4dc7d..8381808 100644
+--- a/calc.py
++++ b/calc.py
+@@ -33,6 +33,9 @@ OPERATIONS = {
+ 
+ 
+ def main(argv):
++    if len(argv) == 1 and argv[0] == "--version":
++        print(VERSION)
++        return 0
+     if len(argv) != 3:
+         print("usage: python calc.py <operation> <a> <b>")
+         return 2
+

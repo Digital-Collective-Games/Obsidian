@@ -1,0 +1,14 @@
+diff --git a/calc.py b/calc.py
+index be4dc7d..0748aae 100644
+--- a/calc.py
++++ b/calc.py
+@@ -10,7 +10,7 @@ Operations:
+ """
+ import sys
+ 
+-VERSION = "0.1.0"
++VERSION = "0.2.0"
+ 
+ 
+ def add(a, b):
+

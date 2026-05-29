@@ -1,0 +1,34 @@
+diff --git a/calc.py b/calc.py
+index be4dc7d..64bb126 100644
+--- a/calc.py
++++ b/calc.py
+@@ -25,10 +25,15 @@ def mul(a, b):
+     return a * b
+ 
+ 
++
++def pow(a, b):
++    return a ** b
++
+ OPERATIONS = {
+     "add": add,
+     "sub": sub,
+     "mul": mul,
++    "pow": pow,
+ }
+ 
+ 
+diff --git a/test_calc.py b/test_calc.py
+index eedee85..b2aea21 100644
+--- a/test_calc.py
++++ b/test_calc.py
+@@ -15,5 +15,8 @@ class CalcTests(unittest.TestCase):
+         self.assertEqual(calc.mul(4, 3), 12)
+ 
+ 
++    def test_pow(self):
++        self.assertEqual(calc.pow(2, 3), 8)
++
+ if __name__ == "__main__":
+     unittest.main()
+

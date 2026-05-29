@@ -1,0 +1,21 @@
+[23:46:17.485] Loaded queue: 4 item(s), 4 ready.
+[23:46:17.489] Target repo: C:\Agent\YourTestRepo
+[23:46:17.489] Concurrency limit: 2
+[23:46:17.526] Target baseline: branch=main head=9af2adf1422562a68f55117297727126267be52e
+[23:46:17.761] ALLOCATE  DQ-001 -> slot=yourtestrepo-drainslot1 path=C:\Agent\YourTestRepo_drainslot1 branch=drain/DQ-001
+[23:46:17.945] DISPATCH  DQ-001 -> subagent job #1
+[23:46:18.007] ALLOCATE  DQ-002 -> slot=yourtestrepo-drainslot2 path=C:\Agent\YourTestRepo_drainslot2 branch=drain/DQ-002
+[23:46:18.148] DISPATCH  DQ-002 -> subagent job #3
+[23:46:18.709] RESULT    DQ-001 -> status=succeeded commit=e6b86566175529de86bbc0990a3674b3cbe0edf8 (job=Completed)
+[23:46:18.771] RELEASE   DQ-001 -> removed worktree C:\Agent\YourTestRepo_drainslot1
+[23:46:18.836] ALLOCATE  DQ-003 -> slot=yourtestrepo-drainslot3 path=C:\Agent\YourTestRepo_drainslot3 branch=drain/DQ-003
+[23:46:18.953] DISPATCH  DQ-003 -> subagent job #5
+[23:46:18.960] RESULT    DQ-002 -> status=succeeded commit=4aa87e3e4ded635446a70b084f6aaaa314143933 (job=Completed)
+[23:46:19.021] RELEASE   DQ-002 -> removed worktree C:\Agent\YourTestRepo_drainslot2
+[23:46:19.082] ALLOCATE  DQ-004 -> slot=yourtestrepo-drainslot4 path=C:\Agent\YourTestRepo_drainslot4 branch=drain/DQ-004
+[23:46:19.200] DISPATCH  DQ-004 -> subagent job #7
+[23:46:19.654] RESULT    DQ-003 -> status=succeeded commit=8ff911b8e06e2f89c1c00ea564dc2069f46dafa0 (job=Completed)
+[23:46:19.714] RELEASE   DQ-003 -> removed worktree C:\Agent\YourTestRepo_drainslot3
+[23:46:19.885] RESULT    DQ-004 -> status=succeeded commit=cb59fd998d9d3a97486ca5c9ebfec46347e9c742 (job=Completed)
+[23:46:19.940] RELEASE   DQ-004 -> removed worktree C:\Agent\YourTestRepo_drainslot4
+[23:46:19.946] DONE drained 4 task(s): 4 succeeded.

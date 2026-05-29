@@ -1,0 +1,13 @@
+{
+  "task_id": "DQ-004",
+  "title": "Add a 'pow' operation to calc.py",
+  "worktree_path": "C:\\Agent\\YourTestRepo_drainslot4",
+  "status": "succeeded",
+  "apply_summary": "added operation 'pow' (**) and a covering test",
+  "tests_passed": true,
+  "commit_sha": "cb59fd998d9d3a97486ca5c9ebfec46347e9c742",
+  "diff_stat": "cb59fd9 DQ-004: Add a 'pow' operation to calc.py\r\n calc.py      | 5 +++++\r\n test_calc.py | 3 +++\r\n 2 files changed, 8 insertions(+)",
+  "error": null,
+  "started_at": "2026-05-28T23:46:19.5848837-04:00",
+  "finished_at": "2026-05-28T23:46:19.8172454-04:00"
+}

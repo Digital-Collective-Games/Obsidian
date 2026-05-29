@@ -2,11 +2,11 @@
   "schema_version": 1,
   "task_id": "Task-0012",
   "status": "in_progress",
-  "phase": "closure",
+  "phase": "implementation",
   "plan_approved": true,
-  "current_pass": "PASS-0004",
+  "current_pass": "PASS-0005",
   "last_completed_pass": "PASS-0004",
-  "current_gate": "closure",
+  "current_gate": "implementation",
   "latest_audit_verdict": "unknown",
   "validation": {
     "build": "not_applicable",
@@ -15,8 +15,10 @@
   },
   "blockers": [],
   "next_expected_artifacts": [
-    "Human closure acceptance of the GitHub-backed task-state pilot plus human-approved repo-local bootstrap",
-    "TaskCreate GitHub provider-interface follow-on task (out of scope here; recorded as required follow-on in TASK.md and PLAN.md PASS-0004)"
+    "Tracking/Task-0012/Testing/DrainQueueDemo/DRAIN-RUN-SUMMARY.md",
+    "Tracking/Task-0012/Testing/DrainQueueDemo/queue.json",
+    "Tracking/Task-0012/Testing/DrainQueueDemo/worktree-allocations-demo.json",
+    "Tracking/Task-0012/Testing/DrainQueueDemo/results/"
   ],
-  "updated_at": "2026-05-28T23:30:00.0000000-04:00"
+  "updated_at": "2026-05-28T23:41:53.0000000-04:00"
 }
