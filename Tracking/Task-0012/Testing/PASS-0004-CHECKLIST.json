@@ -10,8 +10,8 @@
   "audit_verdict": "unknown",
   "audit_result_ref": null,
   "handoff_updated": true,
-  "commit_created": false,
-  "pushed_upstream": false,
+  "commit_created": true,
+  "pushed_upstream": true,
   "notify_sent": false,
   "blockers": [],
   "next_required_actions": [
