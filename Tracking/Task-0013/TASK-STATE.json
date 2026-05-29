@@ -13,20 +13,7 @@
     "unit_tests": "passing",
     "regression": "passing"
   },
-  "human_acceptance": {
-    "satisfied": true,
-    "accepted_on": "2026-05-29",
-    "note": "Human tested the live show/hide overlay and accepted the result; hotkey now feels good. Human-acceptance gate satisfied."
-  },
-  "live_release": {
-    "deployed": true,
-    "release_id": "20260529T161636Z-247f2973b2a4",
-    "git_commit": "247f2973b2a47cbef232bcc41524825f329b4b30",
-    "running_pid": 64592,
-    "uses_live_config": true,
-    "data_preserved": true
-  },
   "blockers": [],
   "next_expected_artifacts": [],
-  "updated_at": "2026-05-29T17:05:00-04:00"
+  "updated_at": "2026-05-29T17:40:00-04:00"
 }
