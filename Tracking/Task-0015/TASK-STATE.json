@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "task_id": "Task-0015",
+  "status": "in_progress",
+  "phase": "research",
+  "plan_approved": false,
+  "current_pass": null,
+  "last_completed_pass": null,
+  "current_gate": "research",
+  "latest_audit_verdict": "unknown",
+  "validation": {
+    "build": "not_run",
+    "unit_tests": "not_run",
+    "regression": "not_run"
+  },
+  "blockers": [],
+  "next_expected_artifacts": [
+    "RESEARCH.md",
+    "Research/LIVENESS-SIGNAL.md",
+    "PLAN.md"
+  ],
+  "updated_at": "2026-05-29T18:05:00-04:00"
+}
