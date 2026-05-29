@@ -290,3 +290,27 @@ unrelated pre-existing working-tree changes.
 - This is bookkeeping closure ONLY — make NO product code changes. Commit ONLY
   Task-0013 state/handoff files; leave the unrelated pre-existing working-tree
   changes untouched.
+
+## 2026-05-29 — GitHub sync fix authorized (Task-0013 issue + recurrence prevention)
+
+### Verbatim Human Directive
+
+> Agree completely with the recommendations, proceed.
+
+### Worker-Safe Normalization
+
+Context: Task-0013 was never synced to GitHub (it is the only task with no
+`TASK-META.json`; issue #13 does not exist; #13 is free — zero PRs in the repo).
+See `Tracking/Task-0013/Testing/GITHUB-SYNC-FAILURE.md` for the diagnosis.
+
+The human authorized BOTH recommended fixes:
+- Instance fix (outward-facing GitHub writes now AUTHORIZED): via the
+  `obsidian-operator` skill, create GitHub issue #13 from `Tracking/Task-0013`,
+  write `TASK-META.json`, and — because local status is `complete` — close issue
+  #13 as completed; then reconcile to 13/13/0. Number 13 must equal the task
+  number; if the bootstrap safety stop fires (number ≠ 13), STOP and escalate.
+- Recurrence prevention (shared `.codex` process edit AUTHORIZED): make
+  "GitHub issue exists and `TASK-META.json` binds the same-number issue" a hard
+  gate in the shared TaskCreate process (and at task closure), and optionally add
+  a scheduled reconcile backstop. The coordinator owns/authorizes the `.codex`
+  edit and its commit/push.
