@@ -15,9 +15,12 @@ from urllib.parse import unquote, urlparse
 
 from .aggregation import (
     INTERVAL_SECONDS,
+    KNOWN_SOURCES,
     METRIC_MODES,
+    SOURCE_LABELS,
     build_buckets,
     build_project_stacks,
+    filter_events_by_source,
     is_over_redline,
     project_weekly_burn,
 )
@@ -304,6 +307,10 @@ class DashboardApp:
         self.selected_interval = "15m"
         self.selected_chart_mode = "velocity"
         self.selected_metric_mode = "total"
+        # Task-0013 Objective 4: source filter selection. Default = all known
+        # sources checked (today's merged Codex+Claude behavior). Held as a set
+        # of source keys; the filter operates on the in-memory snapshot only.
+        self.selected_sources: set[str] = set(KNOWN_SOURCES)
         self.ingest_queue: queue.Queue[tuple[str, object]] = queue.Queue()
         self.ingest_in_flight = False
         self.last_ingest_error: str | None = None
@@ -321,6 +328,8 @@ class DashboardApp:
         self.latest_session_context_markers: dict[str, list[object]] = {}
         self.latest_repo_legend: list[tuple[str, str]] = []
         self.latest_repo_totals: list[dict[str, int]] = []
+        # Task-0013 Objective 3: guards a single off-thread cold-start load.
+        self._activation_load_in_flight = False
         self.jobs_backend_url = configured_jobs_backend_url()
         self.jobs_snapshot: dict[str, object] = {
             "generated_at": None,
@@ -347,7 +356,7 @@ class DashboardApp:
 
         self.root = tk.Tk()
         self.root.withdraw()
-        self.root.title("CODEX DASHBOARD")
+        self.root.title("OBSIDIAN")
         self.root.protocol("WM_DELETE_WINDOW", self.quit)
 
         self.overlay = tk.Toplevel(self.root)
@@ -564,7 +573,7 @@ class DashboardApp:
         header.columnconfigure(0, weight=1)
         brand_row = ttk.Frame(header, style="Header.TFrame")
         brand_row.grid(row=0, column=0, sticky="w")
-        ttk.Label(brand_row, text="CODEX_DASHBOARD", style="Brand.TLabel").pack(side="left")
+        ttk.Label(brand_row, text="OBSIDIAN", style="Brand.TLabel").pack(side="left")
         self.tab_buttons: dict[str, tk.Label] = {}
         self.tab_underlines: dict[str, tk.Frame] = {}
         nav_row = ttk.Frame(brand_row, style="Header.TFrame")
@@ -658,6 +667,8 @@ class DashboardApp:
             )
             button.pack(side="left", padx=(0, 6))
             self.metric_mode_buttons[metric_mode] = button
+
+        self._build_source_filter_control()
 
         self.status_label = ttk.Label(
             body,
@@ -1634,9 +1645,42 @@ class DashboardApp:
                     self.last_ingest_error = str(payload)
                     self.status_label.configure(text=f"Ingest error: {payload}")
                     self._refresh_status_surfaces(False)
+                elif event_type == "dashboard_data":
+                    # Task-0013 Objective 3: cold-start activation load finished
+                    # off-thread; render the real data now (not "instant but
+                    # blank").
+                    self._activation_load_in_flight = False
+                    events, session_context_markers = payload
+                    self._render_dashboard(events, session_context_markers)
+                elif event_type == "dashboard_data_error":
+                    self._activation_load_in_flight = False
+                    self.last_ingest_error = str(payload)
+                    self.status_label.configure(text=f"Load error: {payload}")
+                    self._refresh_status_surfaces(False)
         except queue.Empty:
             pass
         self.root.after(100, self._poll_ingest_results)
+
+    def _start_activation_load(self) -> None:
+        """Load dashboard data off the UI thread for a cold-start activation.
+
+        Task-0013 Objective 3: when the overlay is shown before the first
+        background refresh has populated a snapshot, do the blocking SQLite read
+        on a worker thread and render when it returns, instead of either blocking
+        the UI thread or showing an empty overlay.
+        """
+        if self._activation_load_in_flight:
+            return
+        self._activation_load_in_flight = True
+
+        def worker() -> None:
+            try:
+                events, markers = self._load_dashboard_data()
+                self.ingest_queue.put(("dashboard_data", (events, markers)))
+            except Exception as exc:  # pragma: no cover - GUI error surfacing
+                self.ingest_queue.put(("dashboard_data_error", str(exc)))
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def schedule_ingest(self) -> None:
         if self._quitting:
@@ -1668,7 +1712,14 @@ class DashboardApp:
         thread = threading.Thread(target=worker, daemon=True)
         thread.start()
 
-    def refresh_data(self) -> None:
+    def _load_dashboard_data(self):
+        """Read the dashboard window data from SQLite.
+
+        Task-0013 Objective 3: this is the only blocking database work in the
+        refresh path. It performs no Tk calls, so it is safe to run on a worker
+        thread (off the UI thread) at activation time. Returns the events and
+        session-context markers for the current chart mode.
+        """
         connection = connect(Path(self.config.db_path))
         initialize_db(connection)
         now = datetime.now(self.display_timezone)
@@ -1677,7 +1728,6 @@ class DashboardApp:
             self.selected_interval,
             bucket_count,
         )
-        summary_since = now.astimezone(UTC) - USAGE_SUMMARY_WINDOW
         events = load_events_since(connection, history_since)
         session_context_markers = (
             load_session_context_markers(
@@ -1688,10 +1738,33 @@ class DashboardApp:
             else {}
         )
         connection.close()
+        return events, session_context_markers
+
+    def refresh_data(self) -> None:
+        events, session_context_markers = self._load_dashboard_data()
+        self._render_dashboard(events, session_context_markers)
+
+    def _render_dashboard(self, events, session_context_markers) -> None:
+        """Render the dashboard window from an in-memory snapshot.
+
+        Task-0013 Objective 3: pure Tk rendering, no blocking database read, so
+        it can run on the UI thread immediately from a pre-loaded snapshot at
+        activation time.
+        """
+        now = datetime.now(self.display_timezone)
+        bucket_count = chart_bucket_count(self.selected_interval)
+        summary_since = now.astimezone(UTC) - USAGE_SUMMARY_WINDOW
+        # Keep the full snapshot so a source-filter toggle can re-render without a
+        # database read (Task-0013 Objective 4 preserves Objective 3).
         self.latest_events = events
         self.latest_session_context_markers = session_context_markers
         self.latest_repo_legend = []
         self.latest_repo_totals = []
+
+        # Task-0013 Objective 4: restrict the displayed aggregation to the
+        # selected sources. This filters the already-loaded snapshot in memory;
+        # it does not read SQLite, so it is safe on the UI thread.
+        events = filter_events_by_source(events, self.selected_sources)
 
         raw_buckets = build_buckets(
             events,
@@ -2037,6 +2110,76 @@ class DashboardApp:
         self._refresh_metric_mode_buttons()
         self.refresh_data()
 
+    def _build_source_filter_control(self) -> None:
+        """Build the Task-0013 Objective 4 source filter dropdown.
+
+        A Menubutton with one checkbutton per known source (Codex, Claude),
+        styled to match the overlay toolbar. Toggling a checkbox includes or
+        excludes that source from the displayed aggregation by re-rendering the
+        already-loaded snapshot (no synchronous database read).
+        """
+        source_shell = ttk.Frame(
+            self.usage_header_controls, style="Shell.TFrame", padding=(8, 6)
+        )
+        source_shell.pack(side="left", padx=(8, 0))
+        self.source_filter_button = ttk.Menubutton(
+            source_shell,
+            style="ToolbarQuiet.TButton",
+            direction="below",
+        )
+        self.source_filter_button.pack(side="left")
+        menu = tk.Menu(
+            self.source_filter_button,
+            tearoff=0,
+            bg="#121820",
+            fg="#dfe2eb",
+            activebackground="#16d9f5",
+            activeforeground="#10141a",
+            relief="flat",
+        )
+        self.source_filter_vars: dict[str, tk.BooleanVar] = {}
+        for source in KNOWN_SOURCES:
+            var = tk.BooleanVar(value=source in self.selected_sources)
+            self.source_filter_vars[source] = var
+            menu.add_checkbutton(
+                label=SOURCE_LABELS.get(source, source.title()),
+                variable=var,
+                command=lambda src=source: self._toggle_source(src),
+            )
+        self.source_filter_button["menu"] = menu
+        self._refresh_source_filter_label()
+
+    def _toggle_source(self, source: str) -> None:
+        """Include/exclude one source and re-render from the in-memory snapshot.
+
+        Task-0013 Objective 4: this never reads SQLite. It mutates the selection
+        and re-renders the already-loaded snapshot, so it cannot reintroduce a
+        synchronous UI-thread database read (Objective 3 stays intact).
+        """
+        var = self.source_filter_vars.get(source)
+        if var is not None and var.get():
+            self.selected_sources.add(source)
+        else:
+            self.selected_sources.discard(source)
+        self._refresh_source_filter_label()
+        self._render_dashboard(
+            self.latest_events,
+            self.latest_session_context_markers,
+        )
+
+    def _refresh_source_filter_label(self) -> None:
+        selected = [s for s in KNOWN_SOURCES if s in self.selected_sources]
+        if len(selected) == len(KNOWN_SOURCES):
+            text = "Source: All"
+        elif not selected:
+            text = "Source: None"
+        else:
+            text = "Source: " + ", ".join(
+                SOURCE_LABELS.get(s, s.title()) for s in selected
+            )
+        if getattr(self, "source_filter_button", None) is not None:
+            self.source_filter_button.configure(text=text)
+
     def _refresh_interval_buttons(self) -> None:
         for key, button in self.interval_buttons.items():
             button.configure(
@@ -2233,11 +2376,22 @@ class DashboardApp:
             self.show_overlay()
 
     def show_overlay(self) -> None:
-        self.refresh_data()
+        # Task-0013 Objective 3: activation must not block the Tk UI thread on a
+        # synchronous SQLite read. Show the overlay immediately, then render from
+        # the most recent snapshot kept current by the background ingest poll. On
+        # cold start (no snapshot yet), kick off an off-thread load and render
+        # when it returns rather than showing an empty overlay.
         self.overlay.deiconify()
         self.overlay_visible = True
         self.overlay.lift()
         self.overlay.focus_force()
+        if self.latest_events:
+            self._render_dashboard(
+                self.latest_events,
+                self.latest_session_context_markers,
+            )
+        else:
+            self._start_activation_load()
 
     def hide_overlay(self) -> None:
         self.chart_context_region = None

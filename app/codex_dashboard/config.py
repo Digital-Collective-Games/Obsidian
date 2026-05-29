@@ -4,7 +4,12 @@ import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from .paths import default_codex_root, default_config_path, default_db_path
+from .paths import (
+    default_claude_root,
+    default_codex_root,
+    default_config_path,
+    default_db_path,
+)
 
 DEFAULT_WEEKLY_BUDGET_TOKENS = 4_000_000_000
 LEGACY_WEEKLY_BUDGET_TOKENS = 8_000_000
@@ -19,12 +24,16 @@ class DashboardConfig:
     weekly_budget_tokens: int = DEFAULT_WEEKLY_BUDGET_TOKENS
     startup_enabled: bool = False
     hotkey: str = "Ctrl+Alt+Space"
+    # Task-0013 Objective 2: second ingest source. Empty string means "no Claude
+    # source" and ingest skips it cleanly.
+    claude_root: str = ""
 
     @classmethod
     def defaults(cls) -> "DashboardConfig":
         return cls(
             codex_root=str(default_codex_root()),
             db_path=str(default_db_path()),
+            claude_root=str(default_claude_root()),
         )
 
 
@@ -73,6 +82,7 @@ def load_config(path: Path | None = None) -> DashboardConfig:
         ),
         startup_enabled=bool(payload.get("startup_enabled", defaults.startup_enabled)),
         hotkey=str(payload.get("hotkey", defaults.hotkey)),
+        claude_root=str(payload.get("claude_root", defaults.claude_root)),
     )
 
 

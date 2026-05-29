@@ -41,6 +41,8 @@ def initialize_db(connection: sqlite3.Connection) -> None:
             weekly_window_minutes INTEGER,
             weekly_resets_at INTEGER,
             raw_json TEXT NOT NULL,
+            source TEXT NOT NULL DEFAULT 'codex',
+            source_event_id TEXT NOT NULL DEFAULT '',
             UNIQUE(session_path, line_offset)
         );
 
@@ -56,7 +58,50 @@ def initialize_db(connection: sqlite3.Connection) -> None:
         );
         """
     )
+    _migrate_token_events_source_columns(connection)
+    # Task-0013 Objective 3: index the activation-time window query
+    # (load_events_since: WHERE event_timestamp >= ? ORDER BY event_timestamp ASC)
+    # so it stops being a full-table scan that grows with DB size. Idempotent.
+    connection.executescript(
+        """
+        CREATE INDEX IF NOT EXISTS idx_token_events_event_timestamp
+            ON token_events(event_timestamp);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_token_events_source_event
+            ON token_events(source, source_event_id);
+        """
+    )
     connection.commit()
+
+
+def _migrate_token_events_source_columns(connection: sqlite3.Connection) -> None:
+    """Additively migrate pre-Task-0013 token_events rows.
+
+    Older databases created the table without the `source` / `source_event_id`
+    columns. Add them when missing and backfill legacy Codex rows so the
+    per-source idempotency key (UNIQUE(source, source_event_id)) is satisfiable
+    without orphaning or rewriting existing data.
+    """
+    existing_columns = {
+        str(row["name"])
+        for row in connection.execute("PRAGMA table_info(token_events)").fetchall()
+    }
+    if "source" not in existing_columns:
+        connection.execute(
+            "ALTER TABLE token_events ADD COLUMN source TEXT NOT NULL DEFAULT 'codex'"
+        )
+    if "source_event_id" not in existing_columns:
+        connection.execute(
+            "ALTER TABLE token_events ADD COLUMN source_event_id TEXT NOT NULL DEFAULT ''"
+        )
+        # Backfill the legacy Codex identity so the unique index below is
+        # consistent for rows ingested before this column existed.
+        connection.execute(
+            """
+            UPDATE token_events
+            SET source_event_id = session_path || ':' || line_offset
+            WHERE source_event_id = ''
+            """
+        )
 
 
 def load_cursor(connection: sqlite3.Connection, path: str) -> tuple[int, int]:
@@ -89,6 +134,7 @@ def save_cursor(
 
 
 def insert_event(connection: sqlite3.Connection, event: TokenEvent) -> bool:
+    source_event_id = event.source_event_id or f"{event.session_path}:{event.line_offset}"
     cursor = connection.execute(
         """
         INSERT OR IGNORE INTO token_events(
@@ -104,8 +150,10 @@ def insert_event(connection: sqlite3.Connection, event: TokenEvent) -> bool:
             weekly_used_percent,
             weekly_window_minutes,
             weekly_resets_at,
-            raw_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            raw_json,
+            source,
+            source_event_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             event.session_path,
@@ -121,9 +169,87 @@ def insert_event(connection: sqlite3.Connection, event: TokenEvent) -> bool:
             event.weekly_window_minutes,
             event.weekly_resets_at,
             event.raw_json,
+            event.source,
+            source_event_id,
         ),
     )
     return cursor.rowcount > 0
+
+
+def upsert_claude_event(connection: sqlite3.Connection, event: TokenEvent) -> bool:
+    """Insert-or-update a Claude event keyed by (source, source_event_id).
+
+    Unlike Codex append-only events, a Claude request can still be streaming when
+    a poll runs, so a later re-parse of the same transcript may carry the request's
+    final (larger) cumulative usage for the same requestId. Replacing on the
+    per-source key lets the latest parse win instead of being ignored, while
+    keeping exactly one row per request (no double-count). Returns True when a new
+    request row was created (not merely updated).
+    """
+    source_event_id = event.source_event_id or f"{event.session_path}:{event.line_offset}"
+    existing = connection.execute(
+        "SELECT id FROM token_events WHERE source = ? AND source_event_id = ?",
+        (event.source, source_event_id),
+    ).fetchone()
+    if existing is None:
+        connection.execute(
+            """
+            INSERT INTO token_events(
+                session_path, line_offset, event_timestamp, total_tokens,
+                input_tokens, cached_input_tokens, output_tokens,
+                reasoning_output_tokens, cumulative_total_tokens,
+                weekly_used_percent, weekly_window_minutes, weekly_resets_at,
+                raw_json, source, source_event_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                event.session_path,
+                event.line_offset,
+                event.event_timestamp.isoformat(),
+                event.total_tokens,
+                event.input_tokens,
+                event.cached_input_tokens,
+                event.output_tokens,
+                event.reasoning_output_tokens,
+                event.cumulative_total_tokens,
+                event.weekly_used_percent,
+                event.weekly_window_minutes,
+                event.weekly_resets_at,
+                event.raw_json,
+                event.source,
+                source_event_id,
+            ),
+        )
+        return True
+    connection.execute(
+        """
+        UPDATE token_events SET
+            session_path = ?, line_offset = ?, event_timestamp = ?,
+            total_tokens = ?, input_tokens = ?, cached_input_tokens = ?,
+            output_tokens = ?, reasoning_output_tokens = ?,
+            cumulative_total_tokens = ?, weekly_used_percent = ?,
+            weekly_window_minutes = ?, weekly_resets_at = ?, raw_json = ?
+        WHERE source = ? AND source_event_id = ?
+        """,
+        (
+            event.session_path,
+            event.line_offset,
+            event.event_timestamp.isoformat(),
+            event.total_tokens,
+            event.input_tokens,
+            event.cached_input_tokens,
+            event.output_tokens,
+            event.reasoning_output_tokens,
+            event.cumulative_total_tokens,
+            event.weekly_used_percent,
+            event.weekly_window_minutes,
+            event.weekly_resets_at,
+            event.raw_json,
+            event.source,
+            source_event_id,
+        ),
+    )
+    return False
 
 
 def insert_session_context_marker(
@@ -195,6 +321,12 @@ def load_events_since(
                     else None
                 ),
                 raw_json=str(row["raw_json"]),
+                source=str(row["source"]) if row["source"] is not None else "codex",
+                source_event_id=(
+                    str(row["source_event_id"])
+                    if row["source_event_id"] is not None
+                    else ""
+                ),
             )
         )
     return events

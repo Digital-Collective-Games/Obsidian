@@ -291,7 +291,7 @@ class DesktopSupportTests(unittest.TestCase):
             app,
             {
                 "job_id": "codex-dashboard-startup",
-                "label": "CodexDashboard overlay at sign-in",
+                "label": "Obsidian overlay at sign-in",
                 "kind": "orchestration_backend",
                 "desired_state": "enabled",
                 "desired_label": "Enabled",
@@ -514,12 +514,23 @@ class DesktopSupportTests(unittest.TestCase):
         app.hide_overlay.assert_called_once_with()
         app.show_overlay.assert_not_called()
 
-    def test_show_and_hide_overlay_update_visible_flag(self) -> None:
+    def test_show_overlay_renders_from_snapshot_without_blocking_load(self) -> None:
+        # Task-0013 Objective 3: activation must not run a synchronous DB read on
+        # the UI thread. When a snapshot is already loaded, show_overlay renders
+        # from it (no _load_dashboard_data / refresh_data call) and shows the
+        # overlay immediately.
         overlay = mock.Mock()
+        markers = {"a": []}
         app = SimpleNamespace(
             overlay=overlay,
             overlay_visible=False,
+            latest_events=["snapshot-event"],
+            latest_session_context_markers=markers,
+            _activation_load_in_flight=False,
+            _load_dashboard_data=mock.Mock(),
             refresh_data=mock.Mock(),
+            _render_dashboard=mock.Mock(),
+            _start_activation_load=mock.Mock(),
             chart_context_region="selected",
             _hide_chart_tooltip=mock.Mock(),
         )
@@ -527,7 +538,11 @@ class DesktopSupportTests(unittest.TestCase):
         DashboardApp.show_overlay(app)
 
         self.assertTrue(app.overlay_visible)
-        app.refresh_data.assert_called_once_with()
+        # No blocking DB read on the UI thread, and no synchronous refresh_data.
+        app._load_dashboard_data.assert_not_called()
+        app.refresh_data.assert_not_called()
+        app._start_activation_load.assert_not_called()
+        app._render_dashboard.assert_called_once_with(["snapshot-event"], markers)
         overlay.deiconify.assert_called_once_with()
         overlay.lift.assert_called_once_with()
         overlay.focus_force.assert_called_once_with()
@@ -538,6 +553,63 @@ class DesktopSupportTests(unittest.TestCase):
         self.assertIsNone(app.chart_context_region)
         app._hide_chart_tooltip.assert_called_once_with()
         overlay.withdraw.assert_called_once_with()
+
+    def test_show_overlay_cold_start_dispatches_offthread_load(self) -> None:
+        # Task-0013 Objective 3: on cold start (empty snapshot) the overlay shows
+        # immediately and dispatches an off-thread load instead of blocking the UI
+        # thread or rendering an empty overlay.
+        overlay = mock.Mock()
+        app = SimpleNamespace(
+            overlay=overlay,
+            overlay_visible=False,
+            latest_events=[],
+            latest_session_context_markers={},
+            _activation_load_in_flight=False,
+            _load_dashboard_data=mock.Mock(),
+            refresh_data=mock.Mock(),
+            _render_dashboard=mock.Mock(),
+            _start_activation_load=mock.Mock(),
+        )
+
+        DashboardApp.show_overlay(app)
+
+        self.assertTrue(app.overlay_visible)
+        overlay.deiconify.assert_called_once_with()
+        app._load_dashboard_data.assert_not_called()
+        app.refresh_data.assert_not_called()
+        app._render_dashboard.assert_not_called()
+        app._start_activation_load.assert_called_once_with()
+
+    def test_start_activation_load_runs_load_off_thread(self) -> None:
+        # Task-0013 Objective 3: the cold-start loader runs _load_dashboard_data
+        # on a worker thread and posts the result to the ingest queue for the UI
+        # thread to render.
+        import queue as queue_module
+
+        result_queue: queue_module.Queue = queue_module.Queue()
+        app = SimpleNamespace(
+            _activation_load_in_flight=False,
+            _load_dashboard_data=mock.Mock(return_value=(["e"], {"a": []})),
+            ingest_queue=result_queue,
+        )
+
+        captured = {}
+
+        class _ImmediateThread:
+            def __init__(self, target, daemon=None):
+                captured["target"] = target
+
+            def start(self):
+                captured["target"]()
+
+        with mock.patch("app.codex_dashboard.ui.threading.Thread", _ImmediateThread):
+            DashboardApp._start_activation_load(app)
+
+        self.assertTrue(app._activation_load_in_flight)
+        app._load_dashboard_data.assert_called_once_with()
+        event_type, payload = result_queue.get_nowait()
+        self.assertEqual(event_type, "dashboard_data")
+        self.assertEqual(payload, (["e"], {"a": []}))
 
     def test_schedule_ingest_requeues_even_when_previous_scan_is_still_running(self) -> None:
         root = mock.Mock()

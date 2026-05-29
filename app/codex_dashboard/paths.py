@@ -11,6 +11,12 @@ def default_codex_root() -> Path:
     return Path.home() / ".codex"
 
 
+def default_claude_root() -> Path:
+    # Task-0013 Objective 2: Claude Code stores per-message token usage under
+    # ~/.claude/projects/<encoded-cwd>/*.jsonl.
+    return Path.home() / ".claude"
+
+
 def orchestration_root(codex_root: Path | None = None) -> Path:
     return (codex_root or default_codex_root()) / "Orchestration"
 
@@ -40,6 +46,13 @@ def job_spec_schema_path(codex_root: Path | None = None) -> Path:
 
 
 def app_data_root() -> Path:
+    # Task-0013 rebrand Decision A: the product name is "Obsidian" but this
+    # %LOCALAPPDATA%\CodexDashboard data root (and the matching OS identifiers:
+    # startup script name, launcher name, scheduled-task name, Go runs root,
+    # CODEX-REPO-MANIFEST.json "id") intentionally stay "CodexDashboard" for
+    # data continuity. Renaming this path without a flawless migration would
+    # orphan the human's existing dashboard.db / config.json / startup entry.
+    # See DATA-HANDLING.md and Tracking/Task-0013/PLAN.md.
     return Path.home() / "AppData" / "Local" / "CodexDashboard"
 
 

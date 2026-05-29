@@ -1,6 +1,8 @@
-# CodexDashboard
+# Obsidian
 
-Windows-first token velocity dashboard for local Codex session telemetry.
+Windows-first token velocity dashboard for local Codex and Claude Code session
+telemetry. (The repository folder and Python package remain `CodexDashboard` /
+`codex_dashboard` for tooling stability; the product name is "Obsidian".)
 
 ## Current Stack
 

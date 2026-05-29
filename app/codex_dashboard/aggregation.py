@@ -17,8 +17,36 @@ METRIC_MODES = {
     "total": "Total",
     "norm": "Norm",
 }
+# Task-0013 Objective 4: the ingest sources the overlay can filter by. Order is
+# the display order in the source filter control. "codex" is the legacy default
+# for rows written before the source column existed.
+KNOWN_SOURCES = ("codex", "claude")
+SOURCE_LABELS = {
+    "codex": "Codex",
+    "claude": "Claude",
+}
 NORMALIZED_CACHED_INPUT_WEIGHT = 0.1
 NORMALIZED_OUTPUT_WEIGHT = 6.0
+
+
+def filter_events_by_source(
+    events: list[TokenEvent],
+    selected_sources,
+) -> list[TokenEvent]:
+    """Return only events whose `source` is in `selected_sources`.
+
+    Task-0013 Objective 4: the source filter operates purely on the already
+    stored `source` column of the in-memory snapshot. It performs no database
+    read, so it is safe to call on the Tk UI thread when a filter checkbox
+    toggles (preserving Objective 3's non-blocking activation). When
+    `selected_sources` is None, all events pass through (today's merged
+    behavior). When it is empty, nothing passes (a clear zero state, not a
+    crash).
+    """
+    if selected_sources is None:
+        return list(events)
+    allowed = set(selected_sources)
+    return [event for event in events if (event.source or "codex") in allowed]
 
 
 def _resolve_display_timezone(

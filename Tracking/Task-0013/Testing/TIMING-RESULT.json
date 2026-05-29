@@ -1,0 +1,18 @@
+{
+  "task": "Task-0013",
+  "objective": "Objective 3 \u2014 fast hotkey activation",
+  "measured_at": "2026-05-29T14:07:25.983321+00:00",
+  "synthetic_db": {
+    "path": "Tracking\\Task-0013\\Testing\\Runtime\\timing.db",
+    "event_count": 250000,
+    "db_bytes": 49205248,
+    "note": "Task-owned synthetic DB seeded across 21 days, 50/50 codex/claude, mixing pre-window and in-window rows so the full table is larger than the 7d activation window. Live dashboard.db was NOT opened or sized."
+  },
+  "metric": "Tk UI-thread blocking time during overlay activation (ms)",
+  "budget_ms": 50.0,
+  "before_unindexed_sync_read_ms": 340.981,
+  "before_indexed_sync_read_ms": 340.042,
+  "after_snapshot_render_ms": 4.7819,
+  "after_under_budget": true,
+  "interpretation": "BEFORE, show_overlay ran load_events_since synchronously on the Tk UI thread (unindexed full scan). AFTER, show_overlay renders from the in-memory snapshot with zero DB work on the UI thread; the cold-start DB read is dispatched to a worker thread. The AFTER UI-thread blocking time is the reported activation cost."
+}

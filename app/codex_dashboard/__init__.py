@@ -1,1 +1,1 @@
-APP_NAME = "CodexDashboard"
+APP_NAME = "Obsidian"

@@ -19,6 +19,11 @@ class TokenEvent:
     weekly_window_minutes: int | None
     weekly_resets_at: int | None
     raw_json: str
+    # Task-0013 Objective 2: source discriminator ("codex" | "claude") and a
+    # per-source idempotency key. source_event_id is the Claude requestId for
+    # Claude events and "<session_path>:<line_offset>" for Codex events.
+    source: str = "codex"
+    source_event_id: str = ""
 
 
 @dataclass(frozen=True, slots=True)

@@ -549,7 +549,7 @@ def build_bucket_investigation(
     title = f"{interval_key} bucket {_format_bucket_range(bucket)}"
     markdown = "\n".join(
         [
-            "# Codex Dashboard Bucket Investigation",
+            "# Obsidian Bucket Investigation",
             "",
             f"- Bucket: {_format_bucket_range(bucket)}",
             f"- Interval: {interval_key}",

@@ -208,6 +208,59 @@ Interpretation:
   replace semantic reconciliation
 - API-only, parser-only, and screenshot-only checks do not satisfy this case
 
+### REG-005 Usage Source Filter (Codex/Claude)
+
+Goal:
+
+Confirm the real desktop overlay exposes the Task-0013 source filter (Codex and
+Claude checkboxes) over the displayed token aggregation, that toggling a source
+includes/excludes its events from the totals and chart, and that applying the
+filter does not block the Tk UI thread on a synchronous database read.
+
+Steps:
+
+1. Launch the real app from repo root on an isolated lane.
+2. Point it at a task-owned fixture tree containing BOTH real-shaped Codex
+   `token_count` events and real-shaped Claude `projects/.../*.jsonl`
+   (`type:"assistant"`, `message.usage`, repeated `requestId`s). Do not use
+   `C:\Users\gregs\.codex` or `~/.claude` unless the human explicitly authorizes
+   that run.
+3. Use an isolated config (`claude_root` pointed at the fixture) and an isolated
+   SQLite database as documented in [TESTING.md](./TESTING.md).
+4. Allow at least one ingest cycle to complete so both sources land in
+   `token_events` with their `source` discriminator.
+5. Trigger the real overlay path.
+6. Open the source filter control in the running overlay and confirm it shows
+   separate Codex and Claude checkboxes, styled consistently with the overlay.
+7. With both checked, record the displayed 7d total / chart (merged value).
+8. Uncheck Claude and confirm the total/chart drop to the Codex-only value
+   without the overlay hitching or spawning extra windows.
+9. Uncheck Codex (Claude only) and confirm the total/chart show the Claude-only
+   value.
+10. Uncheck both and confirm a clear empty/zero state with no crash.
+11. Re-check both and confirm the merged value returns.
+12. Capture an artifact from the running app surface showing the filter control
+    and the before/after of toggling a source.
+13. Exit cleanly.
+
+Expected result:
+
+- the overlay shows a visible source filter with Codex and Claude checkboxes
+- toggling a source updates totals, projections, and chart immediately
+- the displayed value for a selected subset equals the sum of only the selected
+  source(s)
+- unchecking both shows an empty/zero state and does not crash
+- applying the filter does not trigger a synchronous SQLite read on the Tk UI
+  thread (it filters the already-loaded in-memory snapshot and re-renders)
+- no extra console or app windows are spawned by the interaction
+
+Interpretation:
+
+- this is the canonical regression for the Task-0013 Objective 4 source filter
+- unit coverage of the source-filtered aggregation lives in
+  `tests/test_task0013_obsidian.py`; that unit proof supports but does not
+  replace this app-surface case
+
 ## Supporting Smoke
 
 ### SMOKE-001 Ingest Core

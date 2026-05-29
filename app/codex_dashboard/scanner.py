@@ -14,6 +14,7 @@ from .storage import (
     insert_session_context_marker,
     load_cursor,
     save_cursor,
+    upsert_claude_event,
 )
 
 
@@ -22,6 +23,15 @@ def session_jsonl_files(codex_root: Path) -> list[Path]:
     if not sessions_root.exists():
         return []
     return sorted(sessions_root.rglob("*.jsonl"))
+
+
+def claude_jsonl_files(claude_root: Path) -> list[Path]:
+    # Task-0013 Objective 2: Claude Code per-message token usage lives in
+    # ~/.claude/projects/<encoded-cwd>/*.jsonl, not under a sessions/ tree.
+    projects_root = claude_root / "projects"
+    if not projects_root.exists():
+        return []
+    return sorted(projects_root.rglob("*.jsonl"))
 
 
 def _parse_timestamp(raw_value: str) -> datetime:
@@ -77,7 +87,97 @@ def parse_token_event(
             int(secondary["resets_at"]) if "resets_at" in secondary else None
         ),
         raw_json=raw_line.decode("utf-8").rstrip("\n"),
+        source="codex",
+        source_event_id=f"{session_path}:{line_offset}",
     )
+
+
+def _claude_total_tokens(usage: dict) -> int:
+    # Task-0013 Objective 2 canonical Claude total formula:
+    # cache_creation_input_tokens is real, billed input cost, so it counts as
+    # input. There is no single total_tokens field and no reasoning output.
+    return (
+        int(usage.get("input_tokens", 0) or 0)
+        + int(usage.get("cache_creation_input_tokens", 0) or 0)
+        + int(usage.get("cache_read_input_tokens", 0) or 0)
+        + int(usage.get("output_tokens", 0) or 0)
+    )
+
+
+def parse_claude_token_events(file_path: Path) -> list[TokenEvent]:
+    """Parse one Claude transcript into de-duplicated per-request TokenEvents.
+
+    Claude streams multiple `type:"assistant"` lines per request whose `usage`
+    blocks overlap (confirmed: one transcript had 219 assistant lines across 56
+    distinct requestIds). Naive per-line summation over-counts severely. This
+    records exactly one usage record per `requestId`, using the usage from the
+    LAST assistant event seen for that requestId (the final cumulative block),
+    keyed for idempotency by `source_event_id = requestId`.
+    """
+    session_path = str(file_path)
+    # requestId -> (line_offset, timestamp, usage) for the latest assistant line.
+    latest_by_request: dict[str, tuple[int, str, dict]] = {}
+    order: list[str] = []
+    line_offset = 0
+    with file_path.open("rb") as handle:
+        for raw_line in handle:
+            current_offset = line_offset
+            line_offset += len(raw_line)
+            stripped = raw_line.strip()
+            if not stripped:
+                continue
+            try:
+                payload = json.loads(stripped.decode("utf-8"))
+            except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
+                continue
+            if not isinstance(payload, dict) or payload.get("type") != "assistant":
+                continue
+            request_id = payload.get("requestId")
+            if not request_id:
+                continue
+            message = payload.get("message") or {}
+            if not isinstance(message, dict):
+                continue
+            usage = message.get("usage") or {}
+            if not isinstance(usage, dict) or not usage:
+                continue
+            timestamp = payload.get("timestamp")
+            if not timestamp:
+                continue
+            request_id = str(request_id)
+            if request_id not in latest_by_request:
+                order.append(request_id)
+            # Keep the LAST assistant event for each requestId.
+            latest_by_request[request_id] = (current_offset, str(timestamp), usage)
+
+    events: list[TokenEvent] = []
+    for request_id in order:
+        offset, timestamp, usage = latest_by_request[request_id]
+        input_tokens = int(usage.get("input_tokens", 0) or 0)
+        cache_creation = int(usage.get("cache_creation_input_tokens", 0) or 0)
+        cache_read = int(usage.get("cache_read_input_tokens", 0) or 0)
+        output_tokens = int(usage.get("output_tokens", 0) or 0)
+        total_tokens = input_tokens + cache_creation + cache_read + output_tokens
+        events.append(
+            TokenEvent(
+                session_path=session_path,
+                line_offset=offset,
+                event_timestamp=_parse_timestamp(timestamp),
+                total_tokens=total_tokens,
+                input_tokens=input_tokens + cache_creation,
+                cached_input_tokens=cache_read,
+                output_tokens=output_tokens,
+                reasoning_output_tokens=0,
+                cumulative_total_tokens=total_tokens,
+                weekly_used_percent=None,
+                weekly_window_minutes=None,
+                weekly_resets_at=None,
+                raw_json=json.dumps({"requestId": request_id, "usage": usage}),
+                source="claude",
+                source_event_id=request_id,
+            )
+        )
+    return events
 
 
 def parse_session_context_marker(
@@ -186,6 +286,37 @@ def ingest_once(connection, config: DashboardConfig) -> IngestRunSummary:
         if cursor_offset != last_offset or stat.st_size != last_size:
             files_updated += 1
         save_cursor(connection, session_path, cursor_offset, stat.st_size)
+
+    # Task-0013 Objective 2: ingest Claude Code transcripts into the same
+    # token_events pool, de-duplicated per requestId. Claude files are parsed
+    # whole (not by byte tail) on size change because a request's final usage
+    # block can arrive in a later append; the upsert keyed on
+    # (source='claude', source_event_id=requestId) keeps exactly one row per
+    # request and lets a later re-parse update an in-progress request's total.
+    claude_root = (config.claude_root or "").strip()
+    if claude_root:
+        for file_path in claude_jsonl_files(Path(claude_root)):
+            files_scanned += 1
+            session_path = str(file_path)
+            stat = file_path.stat()
+            last_offset, last_size = load_cursor(connection, session_path)
+            if stat.st_size == last_size:
+                continue
+            try:
+                claude_events = parse_claude_token_events(file_path)
+            except OSError:
+                continue
+            file_changed = False
+            for event in claude_events:
+                if upsert_claude_event(connection, event):
+                    events_ingested += 1
+                file_changed = True
+            if file_changed:
+                files_updated += 1
+            # Cursor offset is unused for Claude (we always re-parse whole files
+            # on size change); store size as the change sentinel.
+            save_cursor(connection, session_path, stat.st_size, stat.st_size)
+
     connection.commit()
     return IngestRunSummary(
         files_scanned=files_scanned,

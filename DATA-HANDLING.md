@@ -7,6 +7,27 @@ That shared process defines lane classes, backup classes, task backup-impact
 obligations, and restore expectations. This repo-local file owns only the
 CodexDashboard-specific inventory, lane names, paths, and exceptions.
 
+## Product Name vs. Data Identifiers (Task-0013 Decision A)
+
+The desktop product is named **Obsidian** (Task-0013 rebrand). The
+`%LOCALAPPDATA%\CodexDashboard` data root and the matching OS identifiers
+intentionally **keep the literal name `CodexDashboard`** for data continuity:
+
+- data root: `%LOCALAPPDATA%\CodexDashboard` (holds `dashboard.db`, `config.json`)
+- Startup script: `CodexDashboard.cmd`; launcher: `Start-CodexDashboard.ps1`
+- scheduled task: `CodexDashboard-Orchestration-ServiceLane`
+- Go orchestration runs root literal: `...\CodexDashboard\orchestration-runs`
+- repo manifest id: `CodexDashboard` (`CODEX-REPO-MANIFEST.json`)
+
+This is Decision A from `Tracking/Task-0013/PLAN.md`: rename display strings only,
+do not rename these identifiers. Renaming the data root or OS identifiers without
+a flawless one-time migration would orphan the human's existing `dashboard.db`,
+`config.json`, and enabled startup entry. The product can read "Obsidian" while
+the data path stays "CodexDashboard"; the two are decoupled on purpose. If a full
+rename is ever adopted (Decision B), it must ship a tested, idempotent startup
+migration that moves the existing data and re-points the startup/scheduled-task
+artifacts, and is a no-op on a fresh install.
+
 ## Human Lane
 
 The human lane is the data and services the human actually uses. It is

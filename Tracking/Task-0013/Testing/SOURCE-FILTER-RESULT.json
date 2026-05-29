@@ -1,0 +1,32 @@
+{
+  "task": "Task-0013",
+  "objective": "Objective 4 \u2014 source filter (Codex/Claude)",
+  "measured_at": "2026-05-29T14:09:01.159552+00:00",
+  "snapshot_db": "C:\\Agent\\CodexDashboard\\Tracking\\Task-0013\\Testing\\Runtime\\dashboard-regression.db",
+  "snapshot_loaded_once": true,
+  "note": "Each selection below is computed by filtering the SAME in-memory snapshot (filter_events_by_source) then aggregating. No per-toggle database read occurs, mirroring the overlay's _toggle_source path.",
+  "selections": {
+    "All (codex+claude)": {
+      "event_count": 100,
+      "7d_total_tokens": 138539000,
+      "bucket_total_tokens": 6070050
+    },
+    "Codex only": {
+      "event_count": 60,
+      "7d_total_tokens": 137700000,
+      "bucket_total_tokens": 6030000
+    },
+    "Claude only": {
+      "event_count": 40,
+      "7d_total_tokens": 839000,
+      "bucket_total_tokens": 40050
+    },
+    "None (unchecked all)": {
+      "event_count": 0,
+      "7d_total_tokens": 0,
+      "bucket_total_tokens": 0
+    }
+  },
+  "merged_equals_sum_of_parts": true,
+  "none_is_zero": true
+}

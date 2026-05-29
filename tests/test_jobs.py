@@ -110,7 +110,7 @@ class JobsTests(unittest.TestCase):
     def test_reconcile_job_reports_missing_startup_launcher(self) -> None:
         job = {
             "job_id": "codex-dashboard-startup",
-            "label": "CodexDashboard overlay at sign-in",
+            "label": "Obsidian overlay at sign-in",
             "kind": JOB_KIND_STARTUP_LAUNCHER,
             "desired_state": DESIRED_STATE_ENABLED,
             "definition": {
@@ -126,7 +126,7 @@ class JobsTests(unittest.TestCase):
     def test_reconcile_job_reports_drifted_startup_launcher(self) -> None:
         job = {
             "job_id": "codex-dashboard-startup",
-            "label": "CodexDashboard overlay at sign-in",
+            "label": "Obsidian overlay at sign-in",
             "kind": JOB_KIND_STARTUP_LAUNCHER,
             "desired_state": DESIRED_STATE_ENABLED,
             "definition": {
@@ -175,7 +175,7 @@ class JobsTests(unittest.TestCase):
     def test_reconcile_job_includes_managed_definition(self) -> None:
         job = {
             "job_id": "codex-dashboard-startup",
-            "label": "CodexDashboard overlay at sign-in",
+            "label": "Obsidian overlay at sign-in",
             "kind": JOB_KIND_STARTUP_LAUNCHER,
             "desired_state": DESIRED_STATE_ENABLED,
             "definition": {
@@ -200,7 +200,7 @@ class JobsTests(unittest.TestCase):
         startup_script = self.root / "Startup" / "CodexDashboard.cmd"
         job = {
             "job_id": "codex-dashboard-startup",
-            "label": "CodexDashboard overlay at sign-in",
+            "label": "Obsidian overlay at sign-in",
             "kind": JOB_KIND_STARTUP_LAUNCHER,
             "desired_state": DESIRED_STATE_ENABLED,
             "definition": {
@@ -251,7 +251,7 @@ class JobsTests(unittest.TestCase):
             "jobs": [
                 {
                     "job_id": "codex-dashboard-startup",
-                    "label": "CodexDashboard overlay at sign-in",
+                    "label": "Obsidian overlay at sign-in",
                     "kind": JOB_KIND_STARTUP_LAUNCHER,
                     "desired_state": DESIRED_STATE_ENABLED,
                     "definition": {

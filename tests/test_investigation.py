@@ -205,7 +205,7 @@ class InvestigationTests(unittest.TestCase):
 
             self.assertTrue(file_path.exists())
             self.assertTrue(file_path.name.endswith("-brief.md"))
-            self.assertIn("Codex Dashboard Bucket Investigation", file_path.read_text(encoding="utf-8"))
+            self.assertIn("Obsidian Bucket Investigation", file_path.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

@@ -170,7 +170,7 @@ def save_jobs_registry(
 def dashboard_startup_job() -> dict[str, Any]:
     return {
         "job_id": "codex-dashboard-startup",
-        "label": "CodexDashboard overlay at sign-in",
+        "label": "Obsidian overlay at sign-in",
         "kind": JOB_KIND_STARTUP_LAUNCHER,
         "desired_state": DESIRED_STATE_ENABLED,
         "definition": {

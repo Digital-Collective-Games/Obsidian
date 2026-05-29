@@ -13,7 +13,7 @@ from .ui import DashboardApp, ROLLING_PROJECTION_BUCKETS, rolling_average_tokens
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="CodexDashboard ingest utility")
+    parser = argparse.ArgumentParser(description="Obsidian ingest utility")
     parser.add_argument("--config-path", type=Path, default=None)
     parser.add_argument("--scan-once", action="store_true")
     parser.add_argument("--print-summary", action="store_true")
