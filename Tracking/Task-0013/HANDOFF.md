@@ -3,9 +3,28 @@
 ## Current Baseline (2026-05-29)
 
 Task-0013 ("Rebrand to Obsidian, merge Claude Code tokens, fast hotkey
-activation, source filter") is implemented and proven on an isolated lane. All
-four objectives are complete; the unit suite and the task-level regression run
-pass. The task is at the closure gate.
+activation, source filter") is implemented, committed/pushed, and now PUBLISHED +
+RESTARTED on the human's pinned dashboard release. All four objectives are
+complete; the unit suite and the task-level regression run pass; the
+human-authorized publish + restart deploy step is done. The task is **complete**.
+
+## Publish + Restart deploy (2026-05-29 — DONE)
+
+The human authorized "Publish + restart now." This is complete:
+- Published pinned release **20260529T143554Z-e99ac895ee61** from the committed
+  Git tree (`source_mode=git_commit`, `source_dirty=false`, commit `e99ac895`);
+  the dirty working tree did NOT ship.
+- Restarted the human's overlay onto it (old PID 36756 -> new PID 67656); the
+  running process points at the pinned release id + release root and
+  `Test-DashboardRelease.ps1` reports `current_release_error=null`,
+  `startup_uses_pinned_launcher=true`, `running_process_count=1`.
+- Decision A data preserved: `config.json` byte-identical, startup `.cmd`
+  content-identical and still points at the runtime launcher, `dashboard.db` is
+  the same file at the same path (additive idempotent migration; not reset).
+- Human-surface proof captured from the pinned release code: OBSIDIAN brand,
+  merged 138.5M total, expanded Codex/Claude source filter, and a before/after
+  toggle (All 138.5M -> Codex-only 137.7M).
+- Full evidence: [Testing/ReleaseProof/RELEASE-DEPLOY-PROOF.md](./Testing/ReleaseProof/RELEASE-DEPLOY-PROOF.md).
 
 ### Drift reconciled at start
 
@@ -69,16 +88,27 @@ Durable artifacts:
 - Data safety: Decision A keeps the live `%LOCALAPPDATA%\CodexDashboard` data
   root and OS identifiers unchanged — no migration, nothing orphaned.
 
-## Pinned-release caveat (not yet done; human-gated)
+## Pinned-release step (RESOLVED 2026-05-29)
 
-`TASK.md` notes the overlay the human actually runs is a PINNED RELEASE, not the
-repo checkout. Source edits + passing tests do NOT change the running overlay
-until a new release is published (`scripts\Publish-DashboardRelease.ps1`) and the
-overlay restarted. Publishing to the human's live release lane and restarting the
-human's running overlay touches the human lane, so it is left for explicit human
-authorization rather than taken autonomously. The code, tests, and isolated-lane
-proof are complete; the live publish/restart is the remaining human-lane step to
-make the human SEE these changes on their pinned instance.
+`TASK.md` noted the overlay the human runs is a PINNED RELEASE, not the repo
+checkout, so source edits + passing tests did not change the running overlay until
+a release was published and the overlay restarted. The human authorized
+"Publish + restart now," and this worker executed it (see "Publish + Restart
+deploy" above and [Testing/ReleaseProof/RELEASE-DEPLOY-PROOF.md](./Testing/ReleaseProof/RELEASE-DEPLOY-PROOF.md)).
+The human's running overlay is now pinned to release
+`20260529T143554Z-e99ac895ee61` (commit `e99ac895`), so the Obsidian rebrand,
+merged Codex+Claude totals, fast activation, and source filter are now what the
+human sees. No remaining human-lane step.
+
+### Known limitation (tooling, not product)
+
+The expanded-source-filter screenshot composites the released popup over the
+agent's editor (the overrideredirect topmost overlay cannot be forced
+un-occluded for a screen-region grab from a background process in this contended
+desktop). The released checkbox control is fully legible, and the OBSIDIAN body +
+before/after totals are proven by the `smoke-*/overlay.png` captures and the
+deterministic `release-capture-summary.json`. Recorded in
+[Testing/ReleaseProof/RELEASE-DEPLOY-PROOF.md](./Testing/ReleaseProof/RELEASE-DEPLOY-PROOF.md).
 
 ## Git
 

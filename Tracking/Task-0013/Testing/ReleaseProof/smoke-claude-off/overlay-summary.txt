@@ -1,0 +1,13 @@
+active_tab=usage
+Waiting for first ingest...
+hotkey_triggered=True
+overlay_fallback=True
+interval=15m
+metric_mode=total
+weekly_budget=4000000000
+7d_total=137.7M
+projected=336M
+headroom=+5.5M
+budget_line=6M
+status=Operational
+Codex advisory window: 30.0% used | reset in 3.0d

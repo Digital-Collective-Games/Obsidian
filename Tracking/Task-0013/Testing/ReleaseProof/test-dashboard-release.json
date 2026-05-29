@@ -1,0 +1,27 @@
+{
+    "current_release_manifest_path":  "C:\\Users\\gregs\\AppData\\Local\\CodexDashboard\\dashboard-current-release.json",
+    "current_release_error":  null,
+    "current_release":  {
+                            "release_id":  "20260529T143554Z-e99ac895ee61",
+                            "git_commit":  "e99ac895ee619239638549e0e42c6443cc133722",
+                            "source_mode":  "git_commit",
+                            "source_dirty":  false,
+                            "repository_dirty":  true,
+                            "release_root":  "C:\\Users\\gregs\\AppData\\Local\\CodexDashboard\\dashboard-releases\\20260529T143554Z-e99ac895ee61",
+                            "pythonw_path":  "C:\\Program Files\\Python313\\\\pythonw.exe",
+                            "file_count":  21
+                        },
+    "launcher_script_path":  "C:\\Users\\gregs\\AppData\\Local\\CodexDashboard\\dashboard-launcher\\Start-CodexDashboard.ps1",
+    "launcher_exists":  true,
+    "startup_path":  "C:\\Users\\gregs\\AppData\\Roaming\\Microsoft\\\\Windows\\\\Start Menu\\\\Programs\\\\Startup\\\\CodexDashboard.cmd",
+    "startup_uses_pinned_launcher":  true,
+    "running_process_count":  1,
+    "running_processes":  [
+                              {
+                                  "ProcessId":  67656,
+                                  "Name":  "pythonw.exe",
+                                  "ExecutablePath":  "C:\\Program Files\\Python313\\pythonw.exe",
+                                  "CommandLine":  "\"C:\\Program Files\\Python313\\pythonw.exe\" -m app.codex_dashboard --release-id 20260529T143554Z-e99ac895ee61 --release-root C:\\Users\\gregs\\AppData\\Local\\CodexDashboard\\dashboard-releases\\20260529T143554Z-e99ac895ee61 "
+                              }
+                          ]
+}

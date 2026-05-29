@@ -136,3 +136,37 @@ Interpretation for the TaskCreate coordinator:
 - New human-facing functionality: update repo-root `REGRESSION.md` with a named
   case (or extend an existing case) that covers the filter interaction, per the
   repo regression rule.
+
+## 2026-05-29 — Publish + restart authorization (live-lane, explicit)
+
+### Human Directive (coordinator gate, 2026-05-29)
+
+The human was asked whether to publish a new dashboard release and restart their
+pinned overlay so the Task-0013 changes go live, and chose **"Publish + restart
+now."**
+
+### Worker-Safe Normalization
+
+- This EXPLICITLY authorizes, for this specific run, the otherwise-forbidden
+  live-lane action: publish a new pinned dashboard **frontend** release and
+  restart the human's running overlay so the committed Task-0013 changes become
+  what the human sees.
+- Publish from the **committed Git tree** (the Task-0013 work is committed on
+  `master`/`upstream`), following the repo's canonical dashboard release-isolation
+  flow — see repo `TESTING.md` (SMOKE-003), `DATA-HANDLING.md`, and
+  `scripts\Publish-DashboardRelease.ps1` / `scripts\Start-DashboardRelease.ps1` /
+  `scripts\Test-DashboardRelease.ps1`. Do not publish a dirty working tree (the
+  tree contains unrelated untracked files that must not ship).
+- Decision A kept the `%LOCALAPPDATA%\CodexDashboard` data root, so the human's
+  existing `dashboard.db`, `config.json`, and startup entry MUST carry over
+  unchanged. Do NOT migrate, reset, delete, or overwrite the human's data or
+  config; the restart must preserve them.
+- After restart, verify the running overlay process is the pinned release (release
+  id + release root), per the release-isolation checks.
+- Capture human-surface proof from the restarted, release-pinned overlay under
+  `Tracking/Task-0013/Testing/`: the OBSIDIAN brand, merged Codex+Claude totals,
+  and the source-filter control **expanded** showing the Codex and Claude
+  checkboxes plus a visible before/after of toggling a source.
+- This authorization is limited to publishing + restarting this task's release and
+  capturing proof. It does not authorize touching unrelated lanes, data, or
+  changing the human's settings.

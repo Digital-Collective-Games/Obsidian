@@ -1,0 +1,20 @@
+[
+  {
+    "path": "C:\\Users\\gregs\\AppData\\Local\\CodexDashboard\\config.json",
+    "bytes": 251,
+    "last_write_utc": "2026-04-21T03:22:13.8810740Z",
+    "sha256": "D1BF79907A7665CA05DA2F36178AF37BC02E8DAC879BBE2192EE9A668F1E8A30"
+  },
+  {
+    "path": "C:\\Users\\gregs\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\CodexDashboard.cmd",
+    "bytes": 228,
+    "last_write_utc": "2026-05-29T14:35:55.2870760Z",
+    "sha256": "BA8F5401103F5053026BCCD953DDBA5D4268A5EB1DF61D4E7AC01B12C5141AE2"
+  },
+  {
+    "path": "C:\\Users\\gregs\\AppData\\Local\\CodexDashboard\\dashboard.db",
+    "bytes": 271646720,
+    "last_write_utc": "2026-05-29T14:53:53.2697195Z",
+    "sha256": "LOCKED_BY_RUNNING_OVERLAY"
+  }
+]

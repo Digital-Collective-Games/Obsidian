@@ -1,0 +1,154 @@
+﻿{
+    "schema_version":  1,
+    "component":  "dashboard_frontend",
+    "release_id":  "20260529T143554Z-e99ac895ee61",
+    "release_root":  "C:\\Users\\gregs\\AppData\\Local\\CodexDashboard\\dashboard-releases\\20260529T143554Z-e99ac895ee61",
+    "created_at":  "2026-05-29T14:35:54.7637515Z",
+    "source_repo_root":  "C:\\Agent\\CodexDashboard",
+    "git_commit":  "e99ac895ee619239638549e0e42c6443cc133722",
+    "source_mode":  "git_commit",
+    "source_dirty":  false,
+    "repository_dirty":  true,
+    "source_status":  [
+                          " D Tracking/Task-0009/Mockup/stitch_task_tab/DESIGN.md",
+                          " D Tracking/Task-0009/Mockup/stitch_task_tab/code.html",
+                          " D Tracking/Task-0009/Mockup/stitch_task_tab/screen.png",
+                          " M Tracking/Task-0012/HUMAN-DIRECTIVES-FOR-WORKER.md",
+                          " M Tracking/Task-0012/Testing/TaskGitHubReconcile/RECONCILE-DIFFERENCES.md",
+                          " M Tracking/Task-0012/Testing/TaskGitHubReconcile/RECONCILE-RESULT.json",
+                          " M Tracking/Task-0012/Testing/TaskGitHubReconcile/Task-0001-LOCAL-RENDERED-BODY.md",
+                          " M Tracking/Task-0012/Testing/TaskGitHubReconcile/Task-0002-LOCAL-RENDERED-BODY.md",
+                          " M Tracking/Task-0012/Testing/TaskGitHubReconcile/Task-0003-LOCAL-RENDERED-BODY.md",
+                          " M Tracking/Task-0012/Testing/TaskGitHubReconcile/Task-0004-LOCAL-RENDERED-BODY.md",
+                          " M Tracking/Task-0012/Testing/TaskGitHubReconcile/Task-0005-LOCAL-RENDERED-BODY.md",
+                          " M Tracking/Task-0012/Testing/TaskGitHubReconcile/Task-0006-LOCAL-RENDERED-BODY.md",
+                          " M Tracking/Task-0012/Testing/TaskGitHubReconcile/Task-0007-LOCAL-RENDERED-BODY.md",
+                          " M Tracking/Task-0012/Testing/TaskGitHubReconcile/Task-0008-LOCAL-RENDERED-BODY.md",
+                          " M Tracking/Task-0012/Testing/TaskGitHubReconcile/Task-0009-LOCAL-RENDERED-BODY.md",
+                          " M Tracking/Task-0012/Testing/TaskGitHubReconcile/Task-0010-LOCAL-RENDERED-BODY.md",
+                          " M Tracking/Task-0012/Testing/TaskGitHubReconcile/Task-0011-LOCAL-RENDERED-BODY.md",
+                          " M Tracking/Task-0012/Testing/TaskGitHubReconcile/Task-0012-LOCAL-RENDERED-BODY.md",
+                          " M Tracking/Task-0013/HUMAN-DIRECTIVES-FOR-WORKER.md",
+                          " M Tracking/Task-0013/Testing/SOURCE-FILTER-RESULT.json",
+                          "?? Tracking/.~lock.token-usage-by-task-since-2026-03-26.csv#",
+                          "?? Tracking/Task-0009/Testing/Manual-TestDashboard/",
+                          "?? Tracking/Task-0012/Testing/DrainQueueDemo/REAL-SUBAGENT-RUN.md",
+                          "?? Tracking/Task-0013/COORDINATOR-VERIFICATION.md",
+                          "?? Tracking/token-usage-by-task-since-2026-03-26.csv",
+                          "?? Tracking/token-usage-by-task-since-2026-03-26.sessions.csv",
+                          "?? Tracking/token-usage-by-task-since-2026-03-26.xlsx",
+                          "?? app/codex_dashboard/token_time.py",
+                          "?? scripts/add_total_time_to_token_usage_csvs.py",
+                          "?? tests/test_token_time.py"
+                      ],
+    "pythonw_path":  "C:\\Program Files\\Python313\\\\pythonw.exe",
+    "launcher_script_path":  "C:\\Users\\gregs\\AppData\\Local\\CodexDashboard\\dashboard-launcher\\Start-CodexDashboard.ps1",
+    "startup_path":  "C:\\Users\\gregs\\AppData\\Roaming\\Microsoft\\\\Windows\\\\Start Menu\\\\Programs\\\\Startup\\\\CodexDashboard.cmd",
+    "files":  [
+                  {
+                      "path":  "app/__init__.py",
+                      "sha256":  "127fbfdd6aae5781f3317e8002b025cc8d873284c5777d3d1688638f7aa6f917",
+                      "bytes":  35
+                  },
+                  {
+                      "path":  "app/codex_dashboard/__init__.py",
+                      "sha256":  "0ce6db4ef700e5bae7bf6af238a914952152f44fa31f6dab75f854267b444c51",
+                      "bytes":  22
+                  },
+                  {
+                      "path":  "app/codex_dashboard/__main__.py",
+                      "sha256":  "e1d07fa1fd99ba0ca80f5f8c1490bc30cd8c01146fde7b73797dcfe1977be900",
+                      "bytes":  4312
+                  },
+                  {
+                      "path":  "app/codex_dashboard/aggregation.py",
+                      "sha256":  "6fa5a9814d052f2d24f79e5af77c9adbc3d2e3072e66a73316dc1d73c4691827",
+                      "bytes":  8465
+                  },
+                  {
+                      "path":  "app/codex_dashboard/assets/fonts/Inter[opsz,wght].ttf",
+                      "sha256":  "29160a80ff49ddcab2c97711247e08b1fab27a484a329ce8b813d820dc559031",
+                      "bytes":  876576
+                  },
+                  {
+                      "path":  "app/codex_dashboard/assets/fonts/SpaceGrotesk[wght].ttf",
+                      "sha256":  "acad6de1fc93436f5c0f1f4137751ef04f1aea3063e7036535970ffcfbd79f72",
+                      "bytes":  136676
+                  },
+                  {
+                      "path":  "app/codex_dashboard/attribution.py",
+                      "sha256":  "4d0d28a7269eaf9440bb7469c736def6efcca411078e01610eaadbe4cdca3416",
+                      "bytes":  1199
+                  },
+                  {
+                      "path":  "app/codex_dashboard/config.py",
+                      "sha256":  "427aa4fcb5ef3aec0914ac66cde2f437669abf0154bf5f10519123e10b5363ad",
+                      "bytes":  3196
+                  },
+                  {
+                      "path":  "app/codex_dashboard/hotkey.py",
+                      "sha256":  "80fd68a48cbace489d8d3067abb20110949fa804a3cae5da8302224a8adb4d26",
+                      "bytes":  5141
+                  },
+                  {
+                      "path":  "app/codex_dashboard/investigation.py",
+                      "sha256":  "1d08b090415395c236858014633cfed305dbd86e8cff8860a3220931a4e41ad3",
+                      "bytes":  29295
+                  },
+                  {
+                      "path":  "app/codex_dashboard/job_specs.py",
+                      "sha256":  "94e736320b71c18a0b6e6d34cb0a4d657de9cb0333bc5ff61b47fff8df5a12d0",
+                      "bytes":  3719
+                  },
+                  {
+                      "path":  "app/codex_dashboard/jobs.py",
+                      "sha256":  "b968a6f929d97e32ccac66c218bf271259de35c7a81cd2aab71a2354b458651b",
+                      "bytes":  18424
+                  },
+                  {
+                      "path":  "app/codex_dashboard/jobs_backend.py",
+                      "sha256":  "2721fc771a600defaeb7cb96ffe0c3f00ed2a3d93e82e5f2efd4c27533f27037",
+                      "bytes":  10381
+                  },
+                  {
+                      "path":  "app/codex_dashboard/models.py",
+                      "sha256":  "fd5bb46463020d27d0f509b9f89ada59b68d937b0ed692aab034de18e706428f",
+                      "bytes":  1261
+                  },
+                  {
+                      "path":  "app/codex_dashboard/paths.py",
+                      "sha256":  "6d608a58d6d3c9f7c8e1f2246c16f7be588cfcc88b4a5203c05549a6cad8a871",
+                      "bytes":  2159
+                  },
+                  {
+                      "path":  "app/codex_dashboard/scanner.py",
+                      "sha256":  "312e1a1540998478c85368a7f04f837bd975ff8bff97df24774343433de4f05e",
+                      "bytes":  13077
+                  },
+                  {
+                      "path":  "app/codex_dashboard/startup.py",
+                      "sha256":  "0a16f127b30f023b33ffb6d10b6bdeecb369984e6155aaae074d1a68a5bdb32a",
+                      "bytes":  1713
+                  },
+                  {
+                      "path":  "app/codex_dashboard/storage.py",
+                      "sha256":  "daef891a3c98d69558b8706ac1ff5413dfa9ea1ad2dfdf65df092060e0e7bf9a",
+                      "bytes":  13623
+                  },
+                  {
+                      "path":  "app/codex_dashboard/tasks_backend.py",
+                      "sha256":  "8e699157f3fe6d7c0ebcb7d91ebab0456f7351efe540085c67e3ce0a9f82e101",
+                      "bytes":  23869
+                  },
+                  {
+                      "path":  "app/codex_dashboard/tasks_tab.py",
+                      "sha256":  "ca61d7e56b915b38d602ddda2f507c91723f3c811fe1777a2bbf21ba3842cd6c",
+                      "bytes":  2012
+                  },
+                  {
+                      "path":  "app/codex_dashboard/ui.py",
+                      "sha256":  "5e62d21e3ffe8fb56000841efd5f99b03914ed5c7ebd227567317a27b3ac4276",
+                      "bytes":  103921
+                  }
+              ]
+}
