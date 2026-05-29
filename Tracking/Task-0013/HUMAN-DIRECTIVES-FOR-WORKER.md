@@ -272,3 +272,21 @@ mangled path under the repo root (e.g. `C:AgentCodexDashboard...verify_ui.py`), 
 commit any still-uncommitted Task-0013 proof artifact (e.g.
 `Testing/SOURCE-FILTER-RESULT.json`). Do not touch unrelated lanes/data or the
 unrelated pre-existing working-tree changes.
+
+## 2026-05-29 — Human acceptance + close-out
+
+### Verbatim Human Directive
+
+> Yes this does feel a lot better. I think we're good for now. You can close out
+> the task.
+
+### Worker-Safe Normalization
+
+- The human tested the LIVE overlay after the show/hide fix went live and ACCEPTED
+  the result (the hotkey now feels good). This satisfies the human-acceptance gate.
+- Close out Task-0013: set durable state to complete/accepted and finalize the
+  handoff. The four objectives plus the activation show/hide fix are implemented,
+  verified, committed/pushed, and live on the pinned release; data was preserved.
+- This is bookkeeping closure ONLY — make NO product code changes. Commit ONLY
+  Task-0013 state/handoff files; leave the unrelated pre-existing working-tree
+  changes untouched.

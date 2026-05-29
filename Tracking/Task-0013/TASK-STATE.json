@@ -1,17 +1,22 @@
 {
   "schema_version": 1,
   "task_id": "Task-0013",
-  "status": "in_progress",
+  "status": "complete",
   "phase": "closure",
   "plan_approved": true,
-  "current_pass": "PASS-0002",
+  "current_pass": null,
   "last_completed_pass": "PASS-0002",
-  "current_gate": "human_acceptance",
-  "latest_audit_verdict": "unknown",
+  "current_gate": "none",
+  "latest_audit_verdict": "ready",
   "validation": {
     "build": "not_applicable",
     "unit_tests": "passing",
     "regression": "passing"
+  },
+  "human_acceptance": {
+    "satisfied": true,
+    "accepted_on": "2026-05-29",
+    "note": "Human tested the live show/hide overlay and accepted the result; hotkey now feels good. Human-acceptance gate satisfied."
   },
   "live_release": {
     "deployed": true,
@@ -22,8 +27,6 @@
     "data_preserved": true
   },
   "blockers": [],
-  "next_expected_artifacts": [
-    "Tracking/Task-0013/Testing/ReleaseProof/RELEASE-DEPLOY-PROOF.md"
-  ],
-  "updated_at": "2026-05-29T16:25:00-04:00"
+  "next_expected_artifacts": [],
+  "updated_at": "2026-05-29T17:05:00-04:00"
 }

@@ -1,5 +1,70 @@
 # Task-0013 Handoff
 
+## CLOSED — Human accepted (2026-05-29)
+
+Task-0013 is **complete and accepted**. The human tested the live overlay after
+the show/hide activation fix went live and accepted it ("Yes this does feel a lot
+better. I think we're good for now. You can close out the task."). This satisfied
+the human-acceptance gate on **2026-05-29**, and `TASK-STATE.json` is now
+`status: complete`, `current_gate: none`.
+
+What shipped, verified, committed/pushed, and live:
+
+- **Objective 1 — Rebrand to Obsidian:** desktop app display strings read
+  "Obsidian"; `%LOCALAPPDATA%\CodexDashboard` data/config/DB identifiers
+  preserved unchanged (Decision A).
+- **Objective 2 — Merge Claude tokens:** ingestion stores per-event
+  `source` (`codex`/`claude`); displayed totals merge both sources.
+- **Objective 3 — Fast activation (show/hide fix):** the global hotkey toggles
+  visibility only on a persistent, pre-rendered window — no DB read, no
+  aggregation, no re-render on toggle; background poll keeps content current
+  (Fix B made that poll cheap).
+- **Objective 4 — Source filter (Codex/Claude):** dropdown with Codex/Claude
+  checkboxes filters the displayed totals/projections/charts in memory (no
+  synchronous UI-thread DB read).
+
+Live state: published pinned release **`20260529T161636Z-247f2973b2a4`** (commit
+`247f2973`), running on the human's overlay (PID 64592) against the LIVE config;
+`dashboard.db` / `config.json` / startup entry preserved (data not migrated,
+reset, or overwritten).
+
+Key commits: `e99ac89` (objectives 1-4) · `5194bb1` (first publish/restart) ·
+`922e248` (activation-latency investigation) · `247f297` (PASS-0002 show/hide
+fix) · `1f33d3b` (publish/restart show/hide release live).
+
+Key proof artifacts (all on disk):
+- [Testing/ACTIVATION-LATENCY-INVESTIGATION.md](./Testing/ACTIVATION-LATENCY-INVESTIGATION.md)
+  — evidence-based root cause + postulated fixes.
+- [Testing/ACTIVATION-FIX-PROOF.md](./Testing/ACTIVATION-FIX-PROOF.md) +
+  [Testing/E2E-TIMING-RESULT.json](./Testing/E2E-TIMING-RESULT.json) — measured
+  before/after toggle latency on a 423.8 MB / 1.4M-row task-owned synthetic DB.
+- [Testing/PROOF.md](./Testing/PROOF.md),
+  [Testing/REGRESSION-RUN-0001.md](./Testing/REGRESSION-RUN-0001.md),
+  [Testing/SOURCE-FILTER-RESULT.json](./Testing/SOURCE-FILTER-RESULT.json) —
+  objectives + REG-001/REG-005 app-surface evidence.
+- [Testing/ReleaseProof/RELEASE-DEPLOY-PROOF.md](./Testing/ReleaseProof/RELEASE-DEPLOY-PROOF.md)
+  — release isolation, data preservation, and human-surface capture for the live
+  release.
+
+### Validation / regression evidence (stated honestly)
+
+- **Unit suite: 140 OK** (`python -m unittest discover -s tests -p "test_*.py"`),
+  re-run at closure. Includes the hotkey-toggle-does-no-aggregation/DB/render and
+  Fix-B coverage in `tests/test_desktop_support.py` +
+  `tests/test_task0013_obsidian.py`.
+- **Objectives 1-4 regression:** `Testing/REGRESSION-RUN-0001.md` covers the
+  repo-root `REG-001` desktop-overlay app-surface lane plus the new `REG-005`
+  source-filter case (both `passed`) on a task-owned isolated lane.
+- **Activation show/hide fix:** proven by the e2e activation harness
+  (`activation_e2e_harness.py` → `E2E-TIMING-RESULT.json`,
+  `ACTIVATION-FIX-PROOF.md`), the live release smoke
+  (`Testing/ReleaseProof/`), and the human's live acceptance.
+  **Deferred/limited (honest):** no separate formal named
+  `REGRESSION-RUN-<NNNN>.md` was authored specifically for the PASS-0002 toggle
+  latency beyond the e2e harness proof, unit coverage, and live human
+  acceptance — the human accepted the live result, so a further named toggle
+  regression run was not required for closure.
+
 ## Current Baseline (2026-05-29, updated — show/hide fix DEPLOYED LIVE)
 
 Task-0013 ("Rebrand to Obsidian, merge Claude Code tokens, fast hotkey
