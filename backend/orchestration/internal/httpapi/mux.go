@@ -10,10 +10,19 @@ import (
 
 	"github.com/gregsemple2003/CodexDesktop/backend/orchestration/internal/config"
 	"github.com/gregsemple2003/CodexDesktop/backend/orchestration/internal/controlplane"
+	"github.com/gregsemple2003/CodexDesktop/backend/orchestration/internal/queue"
 	"github.com/gregsemple2003/CodexDesktop/backend/orchestration/internal/taskrun"
 )
 
-func NewMux(cfg config.Config, service *controlplane.Service, taskService *taskrun.Service) *http.ServeMux {
+// QueueDrainController starts/stops the O3 queue-drain consumer workflow (A3.4).
+// The Temporal backend satisfies it; it is an interface so the mux does not depend
+// on the backend package directly.
+type QueueDrainController interface {
+	StartQueueDrainConsumer(ctx context.Context, config queue.QueueDrainConfig) (string, error)
+	StopQueueDrainConsumer(ctx context.Context) error
+}
+
+func NewMux(cfg config.Config, service *controlplane.Service, taskService *taskrun.Service, consumer QueueDrainController) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		handleHealth(w, r, cfg, service)
@@ -38,6 +47,9 @@ func NewMux(cfg config.Config, service *controlplane.Service, taskService *taskr
 	})
 	mux.HandleFunc("/api/v1/worktrees", func(w http.ResponseWriter, r *http.Request) {
 		handleWorktreesList(w, r, taskService)
+	})
+	mux.HandleFunc("/api/v1/queue/consumer/", func(w http.ResponseWriter, r *http.Request) {
+		handleQueueConsumerRoute(w, r, cfg, consumer)
 	})
 	mux.HandleFunc("/api/v1/tasks/", func(w http.ResponseWriter, r *http.Request) {
 		handleTaskAPIRoute(w, r, taskService)
@@ -130,6 +142,61 @@ func handleWorktreesList(w http.ResponseWriter, r *http.Request, taskService *ta
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"worktrees": worktrees})
+}
+
+// handleQueueConsumerRoute starts/stops the O3 queue-drain consumer (A3.4),
+// following the POST dispatch-route pattern. POST /api/v1/queue/consumer/start
+// starts the singleton consumer workflow against the configured provider repo;
+// POST /api/v1/queue/consumer/stop signals it to exit. An optional JSON body on
+// start ({"repo":..., "poll_interval_seconds":...}) overrides the configured repo
+// / default ~2-min cadence.
+func handleQueueConsumerRoute(w http.ResponseWriter, r *http.Request, cfg config.Config, consumer QueueDrainController) {
+	if consumer == nil {
+		writeJSONError(w, http.StatusServiceUnavailable, errors.New("queue-drain consumer is not configured"))
+		return
+	}
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	action := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/v1/queue/consumer/"), "/")
+	ctx, cancel := contextWithTimeout(r, 30*time.Second)
+	defer cancel()
+
+	switch action {
+	case "start":
+		config := queue.QueueDrainConfig{Repo: cfg.QueueDrainRepo}
+		var body struct {
+			Repo                string `json:"repo"`
+			PollIntervalSeconds int    `json:"poll_interval_seconds"`
+		}
+		if r.Body != nil {
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil && err.Error() != "EOF" {
+				writeJSONError(w, http.StatusBadRequest, err)
+				return
+			}
+		}
+		if strings.TrimSpace(body.Repo) != "" {
+			config.Repo = strings.TrimSpace(body.Repo)
+		}
+		if body.PollIntervalSeconds > 0 {
+			config.PollInterval = time.Duration(body.PollIntervalSeconds) * time.Second
+		}
+		workflowID, err := consumer.StartQueueDrainConsumer(ctx, config)
+		if err != nil {
+			writeJSONError(w, http.StatusBadGateway, err)
+			return
+		}
+		writeJSON(w, http.StatusAccepted, map[string]any{"status": "started", "workflow_id": workflowID, "repo": config.Repo})
+	case "stop":
+		if err := consumer.StopQueueDrainConsumer(ctx); err != nil {
+			writeJSONError(w, http.StatusBadGateway, err)
+			return
+		}
+		writeJSON(w, http.StatusAccepted, map[string]any{"status": "stopped"})
+	default:
+		http.NotFound(w, r)
+	}
 }
 
 func handleTaskAPIRoute(w http.ResponseWriter, r *http.Request, taskService *taskrun.Service) {

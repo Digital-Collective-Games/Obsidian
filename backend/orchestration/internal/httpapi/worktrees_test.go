@@ -31,7 +31,7 @@ func TestWorktreesEndpointReturnsBindingAfterDispatch(t *testing.T) {
 		Namespace:       "default",
 		TaskQueue:       "codex-orchestration",
 		TemporalAddress: "127.0.0.1:7233",
-	}, controlplane.NewService(t.TempDir(), newFakeBackend()), taskService)
+	}, controlplane.NewService(t.TempDir(), newFakeBackend()), taskService, nil)
 
 	// Empty before any dispatch.
 	emptyResponse := httptest.NewRecorder()
@@ -112,7 +112,7 @@ func TestWorktreesEndpointListsParkedWorktree(t *testing.T) {
 		Namespace:       "default",
 		TaskQueue:       "codex-orchestration",
 		TemporalAddress: "127.0.0.1:7233",
-	}, controlplane.NewService(t.TempDir(), newFakeBackend()), taskService)
+	}, controlplane.NewService(t.TempDir(), newFakeBackend()), taskService, nil)
 
 	dispatchResponse := httptest.NewRecorder()
 	mux.ServeHTTP(dispatchResponse, httptest.NewRequest(http.MethodPost, "/api/v1/tasks/Task-0008/dispatch", nil))
@@ -160,7 +160,7 @@ func TestWorktreesEndpointRejectsNonGet(t *testing.T) {
 		Namespace:       "default",
 		TaskQueue:       "codex-orchestration",
 		TemporalAddress: "127.0.0.1:7233",
-	}, controlplane.NewService(t.TempDir(), newFakeBackend()), taskService)
+	}, controlplane.NewService(t.TempDir(), newFakeBackend()), taskService, nil)
 
 	postResponse := httptest.NewRecorder()
 	mux.ServeHTTP(postResponse, httptest.NewRequest(http.MethodPost, "/api/v1/worktrees", nil))

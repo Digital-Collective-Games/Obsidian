@@ -1,0 +1,5 @@
+=== RUN   TestLiveGitHubQueueDrainSmoke
+    livesmoke_test.go:33: live drain result: dispatched=[Task-0001] parked=[] reclaimed=[] skipped=[Task-0002]
+--- PASS: TestLiveGitHubQueueDrainSmoke (1.36s)
+PASS
+ok  	github.com/gregsemple2003/CodexDesktop/backend/orchestration/internal/queue	1.456s

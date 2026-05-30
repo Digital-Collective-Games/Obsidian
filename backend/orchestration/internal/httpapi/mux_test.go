@@ -326,7 +326,7 @@ func TestMuxExposesHealthJobsAndSync(t *testing.T) {
 		Namespace:       "default",
 		TaskQueue:       "codex-orchestration",
 		TemporalAddress: "127.0.0.1:7233",
-	}, service, taskService)
+	}, service, taskService, nil)
 
 	syncRequest := httptest.NewRequest(http.MethodPost, "/sync", nil)
 	syncResponse := httptest.NewRecorder()
@@ -499,7 +499,7 @@ func TestTasksAPIUsesCanonicalFixtureRepoForTaskSurfaceSmoke(t *testing.T) {
 		Namespace:       "default",
 		TaskQueue:       "codex-orchestration",
 		TemporalAddress: "127.0.0.1:7233",
-	}, controlplane.NewService(t.TempDir(), newFakeBackend()), taskService)
+	}, controlplane.NewService(t.TempDir(), newFakeBackend()), taskService, nil)
 
 	listResponse := httptest.NewRecorder()
 	mux.ServeHTTP(listResponse, httptest.NewRequest(http.MethodGet, "/api/v1/tasks", nil))
@@ -566,7 +566,7 @@ func TestMuxExposesRetryCleanupRoute(t *testing.T) {
 		Namespace:       "default",
 		TaskQueue:       "codex-orchestration",
 		TemporalAddress: "127.0.0.1:7233",
-	}, controlplane.NewService(t.TempDir(), newFakeBackend()), taskService)
+	}, controlplane.NewService(t.TempDir(), newFakeBackend()), taskService, nil)
 
 	dispatchResponse := httptest.NewRecorder()
 	mux.ServeHTTP(dispatchResponse, httptest.NewRequest(http.MethodPost, "/api/v1/tasks/Task-0008/dispatch", nil))
@@ -636,7 +636,7 @@ func TestMuxExposesWorkloadFailureExerciseDispatchRoute(t *testing.T) {
 		Namespace:       "default",
 		TaskQueue:       "codex-orchestration",
 		TemporalAddress: "127.0.0.1:7233",
-	}, controlplane.NewService(t.TempDir(), newFakeBackend()), taskService)
+	}, controlplane.NewService(t.TempDir(), newFakeBackend()), taskService, nil)
 
 	response := httptest.NewRecorder()
 	mux.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/v1/tasks/Task-0008/dispatch-workload-failure-exercise", nil))
@@ -667,7 +667,7 @@ func TestMuxExposesRetryWorkloadRoute(t *testing.T) {
 		Namespace:       "default",
 		TaskQueue:       "codex-orchestration",
 		TemporalAddress: "127.0.0.1:7233",
-	}, controlplane.NewService(t.TempDir(), newFakeBackend()), taskService)
+	}, controlplane.NewService(t.TempDir(), newFakeBackend()), taskService, nil)
 
 	dispatchResponse := httptest.NewRecorder()
 	mux.ServeHTTP(dispatchResponse, httptest.NewRequest(http.MethodPost, "/api/v1/tasks/Task-0008/dispatch", nil))
@@ -738,7 +738,7 @@ func TestMuxExposesInterruptReviewResolutionRoute(t *testing.T) {
 		Namespace:       "default",
 		TaskQueue:       "codex-orchestration",
 		TemporalAddress: "127.0.0.1:7233",
-	}, controlplane.NewService(t.TempDir(), newFakeBackend()), taskService)
+	}, controlplane.NewService(t.TempDir(), newFakeBackend()), taskService, nil)
 
 	dispatchResponse := httptest.NewRecorder()
 	mux.ServeHTTP(dispatchResponse, httptest.NewRequest(http.MethodPost, "/api/v1/tasks/Task-0008/dispatch", nil))

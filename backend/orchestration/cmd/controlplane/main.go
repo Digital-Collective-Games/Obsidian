@@ -30,14 +30,15 @@ func main() {
 		_ = backend.Close()
 	}()
 
-	worker, err := backend.StartWorker(cfg)
+	service := controlplane.NewService(cfg.JobsRoot, backend)
+	taskService := taskrun.NewService(cfg.WorktreeRoot, cfg.RunsRoot, backend)
+
+	worker, err := backend.StartWorker(cfg, taskService)
 	if err != nil {
 		log.Fatalf("start temporal worker: %v", err)
 	}
 	defer worker.Stop()
 
-	service := controlplane.NewService(cfg.JobsRoot, backend)
-	taskService := taskrun.NewService(cfg.WorktreeRoot, cfg.RunsRoot, backend)
 	startupCtx, startupCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	_, err = service.Reconcile(startupCtx)
 	startupCancel()
@@ -47,7 +48,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:              cfg.BindAddress,
-		Handler:           httpapi.NewMux(cfg, service, taskService),
+		Handler:           httpapi.NewMux(cfg, service, taskService, backend),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 

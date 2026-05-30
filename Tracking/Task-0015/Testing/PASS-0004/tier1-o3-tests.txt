@@ -1,0 +1,39 @@
+=== RUN   TestDrainOnceReadyIssueDispatchesWithoutManualCall
+--- PASS: TestDrainOnceReadyIssueDispatchesWithoutManualCall (0.00s)
+=== RUN   TestDrainOnceNeverOrUnsetIsNotDispatched
+--- PASS: TestDrainOnceNeverOrUnsetIsNotDispatched (0.00s)
+=== RUN   TestTaskIDForIssueMapsExactly
+--- PASS: TestTaskIDForIssueMapsExactly (0.00s)
+=== RUN   TestDrainOnceDispatchesExactTaskIDForIssueNumber
+--- PASS: TestDrainOnceDispatchesExactTaskIDForIssueNumber (0.00s)
+=== RUN   TestDrainOnceClosedReclaimsAndHumanNeededParks
+--- PASS: TestDrainOnceClosedReclaimsAndHumanNeededParks (0.00s)
+=== RUN   TestDrainOnceParkedTaskIsNotRedispatchedAndRetainsSlot
+--- PASS: TestDrainOnceParkedTaskIsNotRedispatchedAndRetainsSlot (0.00s)
+=== RUN   TestDrainOnceRespectsPerRepoSlotCap
+--- PASS: TestDrainOnceRespectsPerRepoSlotCap (0.00s)
+=== RUN   TestDrainOnceDoesNotRedispatchAlreadyRunningReadyTask
+--- PASS: TestDrainOnceDoesNotRedispatchAlreadyRunningReadyTask (0.00s)
+=== RUN   TestLiveGitHubQueueDrainSmoke
+    livesmoke_test.go:20: set QUEUE_DRAIN_SMOKE_REPO to run the live GitHub queue-drain smoke
+--- SKIP: TestLiveGitHubQueueDrainSmoke (0.00s)
+=== RUN   TestGitHubQueueProviderParsesGhReads
+--- PASS: TestGitHubQueueProviderParsesGhReads (0.00s)
+=== RUN   TestGitHubProviderDrivesConsumerLoop
+--- PASS: TestGitHubProviderDrivesConsumerLoop (0.00s)
+=== RUN   TestQueueDrainWorkflowPollsThenDispatchesAndStops
+2026/05/30 01:31:34 DEBUG handleActivityResult: *workflowservice.RespondActivityTaskCompletedRequest. ActivityID 2 ActivityType queue.drain.poll
+2026/05/30 01:31:34 INFO  queue-drain poll acted dispatched [Task-7001] parked [] reclaimed []
+2026/05/30 01:31:34 DEBUG Auto fire timer TimerID 0 TimerDuration 30s TimeSkipped 30s
+2026/05/30 01:31:34 INFO  queue-drain consumer stop signal received; exiting
+--- PASS: TestQueueDrainWorkflowPollsThenDispatchesAndStops (0.02s)
+=== RUN   TestRegisterRegistersWorkflowAndActivity
+--- PASS: TestRegisterRegistersWorkflowAndActivity (0.00s)
+PASS
+ok  	github.com/gregsemple2003/CodexDesktop/backend/orchestration/internal/queue	0.118s
+=== RUN   TestQueueConsumerStartStopEndpoint
+--- PASS: TestQueueConsumerStartStopEndpoint (0.20s)
+=== RUN   TestQueueConsumerEndpointRejectsBadMethodAndAction
+--- PASS: TestQueueConsumerEndpointRejectsBadMethodAndAction (0.21s)
+PASS
+ok  	github.com/gregsemple2003/CodexDesktop/backend/orchestration/internal/httpapi	0.505s

@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "task_id": "Task-0015",
+  "pass_id": "PASS-0004",
+  "checklist_status": "closed",
+  "implemented": true,
+  "build": "passing",
+  "unit_tests": "passing",
+  "pass_audit_written": true,
+  "audit_verdict": "ready",
+  "audit_result_ref": "Testing/PASS-0004-AUDIT.md",
+  "handoff_updated": true,
+  "commit_created": true,
+  "pushed_upstream": true,
+  "notify_sent": true,
+  "blockers": [],
+  "next_required_actions": [
+    "PASS-0005 (O5): the largest, highest-risk, net-new pass. 5a: launch the dispatched agent as a TOP-LEVEL headless codex/claude process in its owned worktree (able to spawn its OWN subagents, NOT nested) and add POST-LAUNCH session discovery to capture the agent's OWN session id + transcript path into the O6 binding (coordinator-review correction 2: the existing dispatch-time DeepContext plumbing captures the BACKEND env, not the launched agent). 5b: external invisible liveness watchdog reading the pinned signal (transcript append growth -> last_active_signal_at, refreshed on each append, NEVER anchored to dispatch), SUSPENDED while gate-parked, one poke that ACTUALLY wakes the process (coordinator-review correction 3: no existing input-delivery mechanism; A5.3 must not be satisfied by a no-op state poke), then incident + email to admin@digitalcollective.games containing observed state + transcript (MOCK the gmail send during proof). Also closes the agent-driven A4.1/A4.2/A4.7.",
+    "PASS-0006 (regression): NEEDS THE HUMAN — the no-proxy real-GitHub-UI A3.1 end-to-end via the Chrome debug tab on a single test issue in QueueDrainTestbed; add REG-007 to REGRESSION.md."
+  ],
+  "updated_at": "2026-05-30T04:40:00.0000000-04:00"
+}

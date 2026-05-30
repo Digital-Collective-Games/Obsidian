@@ -73,12 +73,26 @@
    [Testing/PASS-0003-AUDIT.md](./Testing/PASS-0003-AUDIT.md). Committed + pushed.
    DEFERRED (honest, grep-confirmed not built): A4.3/A4.4 in-loop ⇒ PASS-0004 (O3);
    A4.1/A4.2/A4.7 agent-driven ⇒ PASS-0005 (O5).
-   NEXT: **PASS-0004** (O3 GitHub queue-drain consumer: Temporal workflow + start/stop
-   endpoint + StartWorker registration; polls Queue==Ready ~2min; maps #N→Task-N;
-   dispatches via O2 slots using O4 `DecideQueueAction`). Integrated A3.1–A3.4 +
-   consumer-driven A4.3/A4.4 proven here against the throwaway `QueueDrainTestbed`.
-   - Live-proof hygiene: use fresh task ids (stale records for Task-1/2/3/10/11/12/13);
-     override `CODEX_ORCHESTRATION_JOBS_ROOT` to a temp dir.
+   NEXT: **PASS-0004**.
+6. DONE: **PASS-0004** (O3 GitHub queue-drain consumer). `internal/queue`
+   provider interface + `Consumer.DrainOnce` (reuses O2 `EvaluateSlot` + O4
+   `DecideQueueAction`; maps #N→Task-N; dispatches via the taskrun seam, no manual
+   call; skips Never; parks on Human Needed=Yes; reclaims on closed) +
+   `QueueDrainWorkflow` (~2min poll, stoppable) registered in `StartWorker` +
+   `POST /api/v1/queue/consumer/{start,stop}`. Read-only against GitHub (A4.6).
+   Independent QA re-ran tests + re-derived the live gh-read smoke with its own
+   fresh issues (#3 Ready→dispatched, #4 Never→skipped); A3.1–A3.4 / A4.3/A4.4-loop
+   / F-O3 PASS — [Testing/PASS-0004-AUDIT.md](./Testing/PASS-0004-AUDIT.md).
+   Committed + pushed. The live attempt also fixed a real issue-field-values
+   parse bug (value is a numeric option id). Honest deferral: the no-proxy
+   real-GitHub-UI end-to-end A3.1 → PASS-0006.
+   NEXT: **PASS-0005** (O5 — largest/highest-risk: top-level headless agent
+   launch + POST-LAUNCH session discovery into the O6 binding; external invisible
+   liveness watchdog on transcript-append growth, suspended while parked; one poke
+   that actually wakes the process; incident + MOCKED email. Also closes
+   agent-driven A4.1/A4.2/A4.7). Then **PASS-0006** (regression) NEEDS THE HUMAN
+   (real-UI `Queue=Ready` flip via the Chrome debug tab + REG-007).
+   - Live-proof hygiene: use fresh task ids; override `CODEX_ORCHESTRATION_JOBS_ROOT`.
 3. Before PASS-0001 proof: stand up the dedicated test repo under `C:\Agent`
    (confirm the GitHub repo name/org with the human — outward-facing) and add its
    `REPO-MANIFEST.json` entry.

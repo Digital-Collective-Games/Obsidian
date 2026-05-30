@@ -19,6 +19,7 @@ import (
 	"github.com/gregsemple2003/CodexDesktop/backend/orchestration/internal/config"
 	"github.com/gregsemple2003/CodexDesktop/backend/orchestration/internal/controlplane"
 	"github.com/gregsemple2003/CodexDesktop/backend/orchestration/internal/jobexec"
+	"github.com/gregsemple2003/CodexDesktop/backend/orchestration/internal/queue"
 	"github.com/gregsemple2003/CodexDesktop/backend/orchestration/internal/taskexec"
 	"github.com/gregsemple2003/CodexDesktop/backend/orchestration/internal/taskrun"
 )
@@ -131,10 +132,21 @@ func (b *Backend) StartJobRun(ctx context.Context, request controlplane.JobRunRe
 	}, nil
 }
 
-func (b *Backend) StartWorker(cfg config.Config) (worker.Worker, error) {
+func (b *Backend) StartWorker(cfg config.Config, taskService *taskrun.Service) (worker.Worker, error) {
 	w := worker.New(b.client, cfg.TaskQueue, worker.Options{})
 	jobexec.Register(w, cfg)
 	taskexec.Register(w)
+
+	// O3: register the queue-drain consumer workflow next to taskexec.Register
+	// (A3.4). The poll activity is wired to a live consumer (gh provider +
+	// taskrun-backed dispatcher) only when a provider repo is configured; otherwise
+	// the workflow is registered but stays dormant.
+	drainActivities, err := newQueueDrainActivities(cfg.QueueDrainRepo, taskService)
+	if err != nil {
+		return nil, err
+	}
+	queue.Register(w, drainActivities)
+
 	if err := w.Start(); err != nil {
 		return nil, fmt.Errorf("start worker: %w", err)
 	}

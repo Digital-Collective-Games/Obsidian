@@ -27,6 +27,12 @@ type Config struct {
 	EnableRunAlerts bool   // CODEX_ORCHESTRATION_ENABLE_RUN_ALERTS (default true)
 	AlertCommand    string // CODEX_ORCHESTRATION_ALERT_COMMAND  (path to a PowerShell sender script; empty = disabled)
 	AlertRecipient  string // CODEX_ORCHESTRATION_ALERT_RECIPIENT (operator email passed to the sender)
+
+	// QueueDrainRepo is the provider repo (owner/name) the O3 queue-drain consumer
+	// polls for Queue==Ready issues. Empty (the default) leaves the consumer dormant
+	// — the workflow is registered but the start endpoint dispatches against nothing
+	// — so this is safe to ship without a configured provider repo.
+	QueueDrainRepo string // CODEX_ORCHESTRATION_QUEUE_DRAIN_REPO
 }
 
 func Load() (Config, error) {
@@ -46,6 +52,7 @@ func Load() (Config, error) {
 		EnableRunAlerts: envBoolOrDefault("CODEX_ORCHESTRATION_ENABLE_RUN_ALERTS", true),
 		AlertCommand:    envOrDefault("CODEX_ORCHESTRATION_ALERT_COMMAND", ""),
 		AlertRecipient:  envOrDefault("CODEX_ORCHESTRATION_ALERT_RECIPIENT", ""),
+		QueueDrainRepo:  envOrDefault("CODEX_ORCHESTRATION_QUEUE_DRAIN_REPO", ""),
 	}
 	cfg.WorktreeRoot = envOrDefault("CODEX_ORCHESTRATION_WORKTREE_ROOT", resolveWorktreeRoot())
 	cfg.TrackingRoot = envOrDefault("CODEX_ORCHESTRATION_TRACKING_ROOT", filepath.Join(cfg.WorktreeRoot, "Tracking"))

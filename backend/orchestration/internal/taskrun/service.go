@@ -260,13 +260,32 @@ func (s *Service) SetRunGateState(taskID string, state string) (WorktreeBinding,
 		return WorktreeBinding{}, fmt.Errorf("unknown run/gate state %q", state)
 	}
 
+	activePath, activeRecord, err := s.findActiveLaneRecord(taskID)
+	if err != nil {
+		return WorktreeBinding{}, err
+	}
+
+	binding := bindingFromRecord(activeRecord)
+	binding.RunGateState = state
+	activeRecord.Binding = &binding
+	if err := writeJSONFile(activePath, activeRecord); err != nil {
+		return WorktreeBinding{}, fmt.Errorf("persist run/gate state on owned-lane record: %w", err)
+	}
+	return WorktreeBinding{RunID: activeRecord.RunID, RepoBinding: binding}, nil
+}
+
+// findActiveLaneRecord returns the bootstrap record path and decoded record for a
+// task's active owned lane (the most recently bootstrapped record whose worktree
+// still exists on disk). It returns ErrNoActiveOwnedLane when the task has no
+// active lane. Shared by SetRunGateState (O4 park) and ReclaimOwnedLane (O4 close).
+func (s *Service) findActiveLaneRecord(taskID string) (string, ownedLaneBootstrapRecord, error) {
 	taskDir := filepath.Join(s.runArtifactsRoot, sanitizePathSegment(taskID))
 	runEntries, err := os.ReadDir(taskDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return WorktreeBinding{}, fmt.Errorf("%w: %s", ErrNoActiveOwnedLane, taskID)
+			return "", ownedLaneBootstrapRecord{}, fmt.Errorf("%w: %s", ErrNoActiveOwnedLane, taskID)
 		}
-		return WorktreeBinding{}, fmt.Errorf("read task-run dir %s: %w", taskDir, err)
+		return "", ownedLaneBootstrapRecord{}, fmt.Errorf("read task-run dir %s: %w", taskDir, err)
 	}
 
 	var activePath string
@@ -281,17 +300,17 @@ func (s *Service) SetRunGateState(taskID string, state string) (WorktreeBinding,
 			if os.IsNotExist(err) {
 				continue
 			}
-			return WorktreeBinding{}, fmt.Errorf("read owned-lane bootstrap %s: %w", recordPath, err)
+			return "", ownedLaneBootstrapRecord{}, fmt.Errorf("read owned-lane bootstrap %s: %w", recordPath, err)
 		}
 		var record ownedLaneBootstrapRecord
 		if err := json.Unmarshal(raw, &record); err != nil {
-			return WorktreeBinding{}, fmt.Errorf("decode owned-lane bootstrap %s: %w", recordPath, err)
+			return "", ownedLaneBootstrapRecord{}, fmt.Errorf("decode owned-lane bootstrap %s: %w", recordPath, err)
 		}
 		if record.OwnedRepoRoot == "" {
 			continue
 		}
 		if _, err := os.Stat(record.OwnedRepoRoot); err != nil {
-			// Worktree gone (reclaimed on close) -> not an active lane to park.
+			// Worktree gone (reclaimed on close) -> not an active lane.
 			continue
 		}
 		if activePath == "" || record.BootstrappedAt.After(activeRecord.BootstrappedAt) {
@@ -300,16 +319,55 @@ func (s *Service) SetRunGateState(taskID string, state string) (WorktreeBinding,
 		}
 	}
 	if activePath == "" {
-		return WorktreeBinding{}, fmt.Errorf("%w: %s", ErrNoActiveOwnedLane, taskID)
+		return "", ownedLaneBootstrapRecord{}, fmt.Errorf("%w: %s", ErrNoActiveOwnedLane, taskID)
 	}
+	return activePath, activeRecord, nil
+}
 
-	binding := bindingFromRecord(activeRecord)
-	binding.RunGateState = state
-	activeRecord.Binding = &binding
-	if err := writeJSONFile(activePath, activeRecord); err != nil {
-		return WorktreeBinding{}, fmt.Errorf("persist run/gate state on owned-lane record: %w", err)
+// ReclaimOwnedLane performs the O4 terminal-close handling for a task: it reclaims
+// the task's active owned-lane worktree (cleanupOwnedLane) so the per-repo slot
+// frees and the next Ready issue can dequeue. It is the ONLY deallocating action
+// and is invoked by the consumer ONLY when the GitHub issue is CLOSED — never on a
+// park (Human Needed=Yes retains the worktree+slot). A task with no active owned
+// lane returns ErrNoActiveOwnedLane, which the consumer treats as already-reclaimed.
+func (s *Service) ReclaimOwnedLane(taskID string) error {
+	_, activeRecord, err := s.findActiveLaneRecord(taskID)
+	if err != nil {
+		return err
 	}
-	return WorktreeBinding{RunID: activeRecord.RunID, RepoBinding: binding}, nil
+	return s.cleanupOwnedLane(RepoLane{OwnedRepoRoot: activeRecord.OwnedRepoRoot})
+}
+
+// ActiveOwnedLaneTasks returns the task ids that currently hold an active owned-lane
+// worktree (one per used per-repo slot), deduped and sorted. The consumer uses it
+// for slot accounting (EvaluateSlot / effective free concurrency) and to know which
+// issues already own a worktree to park or reclaim rather than redispatch.
+func (s *Service) ActiveOwnedLaneTasks() ([]string, error) {
+	bindings, err := s.ListActiveWorktrees()
+	if err != nil {
+		return nil, err
+	}
+	seen := map[string]bool{}
+	tasks := make([]string, 0, len(bindings))
+	for _, binding := range bindings {
+		if binding.TaskID == "" || seen[binding.TaskID] {
+			continue
+		}
+		seen[binding.TaskID] = true
+		tasks = append(tasks, binding.TaskID)
+	}
+	sort.Strings(tasks)
+	return tasks, nil
+}
+
+// RepoSlotLimit reports the per-repo queue_workers cap (max concurrent owned
+// lanes) for this service's repo, resolved from REPO-MANIFEST.json. The consumer's
+// SlotSizer reads it to size EvaluateSlot / effective free concurrency.
+func (s *Service) RepoSlotLimit() int {
+	if s.repoSlotLimit == nil {
+		return queue.DefaultQueueWorkers
+	}
+	return s.repoSlotLimit()
 }
 
 func (s *Service) ListTasks(ctx context.Context) ([]TaskView, error) {
