@@ -8,3 +8,6 @@ runtime/
 artifacts/
 *.db
 *.sqlite3
+
+# LibreOffice/OpenOffice document lock files (e.g. .~lock.<name>#)
+.~lock.*#
