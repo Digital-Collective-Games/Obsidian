@@ -423,6 +423,18 @@ Concurrency + worktree-lifecycle sub-scenarios (required):
 Proof of all three (live, registry-driven, `queue_workers=2`):
 [Tracking/Task-0015/Testing/PASS-0006/REG-007-CONCURRENCY-RELEASE-PROOF.md](./Tracking/Task-0015/Testing/PASS-0006/REG-007-CONCURRENCY-RELEASE-PROOF.md).
 
+- **Full deallocate/reuse cycle (required):** with `queue_workers=N`, allocate ALL N
+  slots, let the dispatched agents complete and ANNOUNCE done, simulate human closure
+  approval, and confirm EVERY worktree DEALLOCATES (slots freed); then queue another
+  task and confirm it REUSES a freed slot. The deallocate must actually free the
+  worktree (a closed issue whose worktree is only pruned by hand does NOT satisfy this).
+  To simulate the human closure approval in-test ONLY, set
+  `OBSIDIAN_AUTO_CLOSE_QUEUED=true` (default OFF in production; the agent announces done
+  by setting its `TASK-STATE.json current_gate="closure"` and never closes the issue
+  itself). Proof: [Tracking/Task-0015/Testing/PASS-0008/REG-007-FULL-CYCLE-PROOF.md](./Tracking/Task-0015/Testing/PASS-0008/REG-007-FULL-CYCLE-PROOF.md)
+  (resolves [BUG-0002](./Tracking/Task-0015/BUG-0002.md): reclaim now terminates the
+  launched agent + is idempotent/self-healing, so a close ALWAYS deallocates).
+
 ## Supporting Smoke
 
 ### SMOKE-001 Ingest Core

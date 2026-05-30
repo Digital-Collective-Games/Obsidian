@@ -304,7 +304,7 @@ func (s *Service) SetRunGateState(taskID string, state string) (WorktreeBinding,
 // discovers the agent's session (DiscoverSession), the consumer calls this to
 // replace those placeholders with the real values the O5 watchdog stats and the O6
 // endpoint reports. It never changes the run/gate state and never deallocates.
-func (s *Service) BindLaunchedSession(taskID string, sessionID string, transcriptPath string) (WorktreeBinding, error) {
+func (s *Service) BindLaunchedSession(taskID string, sessionID string, transcriptPath string, pid int) (WorktreeBinding, error) {
 	activePath, activeRecord, err := s.findActiveLaneRecord(taskID)
 	if err != nil {
 		return WorktreeBinding{}, err
@@ -313,6 +313,7 @@ func (s *Service) BindLaunchedSession(taskID string, sessionID string, transcrip
 	binding := bindingFromRecord(activeRecord)
 	binding.AgentSessionID = sessionID
 	binding.SessionTranscriptPath = transcriptPath
+	binding.LaunchedPID = pid
 	activeRecord.Binding = &binding
 	if err := writeJSONFile(activePath, activeRecord); err != nil {
 		return WorktreeBinding{}, fmt.Errorf("persist launched-session binding on owned-lane record: %w", err)
@@ -381,7 +382,80 @@ func (s *Service) ReclaimOwnedLane(taskID string) error {
 	if err != nil {
 		return err
 	}
+	// BUG-0002: terminate the launched agent BEFORE removing the worktree, so its
+	// open handle on the checkout does not make git worktree remove --force
+	// partially fail and leave a residual directory. Best-effort: a missing PID or
+	// a kill failure never blocks the reclaim (cleanupOwnedLane is self-healing).
+	if activeRecord.Binding != nil && activeRecord.Binding.LaunchedPID > 0 {
+		terminateAgentProcess(activeRecord.Binding.LaunchedPID)
+	}
 	return s.cleanupOwnedLane(RepoLane{OwnedRepoRoot: activeRecord.OwnedRepoRoot})
+}
+
+// terminateAgentProcess best-effort terminates the launched agent process (and its
+// tree) before the owned worktree is removed (BUG-0002). It NEVER returns a fatal
+// error that could block reclaim: cleanupOwnedLane self-heals if the process is
+// still mid-exit. On Windows it first verifies the PID's image is the claude
+// executable (tasklist) so a reused PID is never killed, then taskkill /T /F. On
+// other platforms it signals the process directly. An already-exited / not-found
+// process is ignored.
+func terminateAgentProcess(pid int) {
+	if pid <= 0 {
+		return
+	}
+	if runtime.GOOS == "windows" {
+		// Guard against killing an innocent reused PID: only proceed when the PID's
+		// current image is claude. A lookup failure or a non-claude image is treated
+		// as "nothing to kill".
+		out, err := exec.Command("tasklist", "/FI", fmt.Sprintf("PID eq %d", pid), "/FO", "CSV", "/NH").Output()
+		if err != nil || !strings.Contains(strings.ToLower(string(out)), "claude") {
+			return
+		}
+		_ = exec.Command("taskkill", "/PID", fmt.Sprintf("%d", pid), "/T", "/F").Run()
+		return
+	}
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		return
+	}
+	_ = proc.Kill()
+}
+
+// ClosureRequested reports whether the task's dispatched agent has ANNOUNCED
+// completion by setting current_gate to "closure" in its OWNED worktree's
+// Tracking/<taskID>/TASK-STATE.json. It is read by the TEST-ONLY auto-close path
+// (OBSIDIAN_AUTO_CLOSE_QUEUED) so the consumer can simulate a human closing the
+// issue. A task with no active owned lane (ErrNoActiveOwnedLane) or a missing state
+// file reports false, nil — not an error — so a poll never wedges on an absent file.
+func (s *Service) ClosureRequested(taskID string) (bool, error) {
+	_, activeRecord, err := s.findActiveLaneRecord(taskID)
+	if err != nil {
+		if errors.Is(err, ErrNoActiveOwnedLane) {
+			return false, nil
+		}
+		return false, err
+	}
+	return closureRequestedAtRoot(activeRecord.OwnedRepoRoot, taskID)
+}
+
+// closureRequestedAtRoot reads <ownedRepoRoot>/Tracking/<taskID>/TASK-STATE.json and
+// reports whether its current_gate is "closure". A missing file reports false, nil
+// (the agent has not announced completion yet). It reuses the taskStateFile shape
+// the loadTask read uses so the gate field decodes identically.
+func closureRequestedAtRoot(ownedRepoRoot string, taskID string) (bool, error) {
+	statePath := filepath.Join(ownedRepoRoot, "Tracking", taskID, "TASK-STATE.json")
+	raw, err := os.ReadFile(statePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("read %s: %w", statePath, err)
+	}
+	var state taskStateFile
+	if err := json.Unmarshal(raw, &state); err != nil {
+		return false, fmt.Errorf("decode %s: %w", statePath, err)
+	}
+	return state.CurrentGate == "closure", nil
 }
 
 // ActiveOwnedLaneTasks returns the task ids that currently hold an active owned-lane
@@ -1440,16 +1514,58 @@ func (s *Service) cleanupOwnedLane(repoLane RepoLane) error {
 	if !pathWithinRoot(repoLane.OwnedRepoRoot, s.ownedLaneRoot) {
 		return fmt.Errorf("owned repo root %q is outside the backend-owned lane root", repoLane.OwnedRepoRoot)
 	}
+	return removeOwnedLaneWorktree(s.declaredWorktreeRoot, s.ownedLaneRoot, repoLane.OwnedRepoRoot)
+}
+
+// removeOwnedLaneWorktree removes an owned-lane worktree idempotently and
+// self-heals a residual checkout (BUG-0002). It first runs git worktree remove
+// --force. On success it also best-effort removes any residual directory left by a
+// Windows handle and returns nil. On failure (e.g. a partial removal already
+// unregistered the worktree, so a retry reports "is not a working tree") it does
+// NOT immediately fail: it prunes stale worktree metadata, then retries
+// os.RemoveAll on the checkout to tolerate a closing Windows handle. It returns nil
+// once the directory no longer exists on disk (the lane IS reclaimed), and only
+// returns an error when the directory still exists after every attempt.
+//
+// declaredWorktreeRoot is the repo the worktree was added under (git -C target);
+// ownedLaneRoot anchors the longpaths/prune invocation; ownedRepoRoot is the
+// checkout to remove. The caller is responsible for the pathWithinRoot guard.
+func removeOwnedLaneWorktree(declaredWorktreeRoot string, ownedLaneRoot string, ownedRepoRoot string) error {
 	argv := []string{}
 	if runtime.GOOS == "windows" {
 		argv = append(argv, "-c", "core.longpaths=true")
 	}
-	argv = append(argv, "-C", s.declaredWorktreeRoot, "worktree", "remove", "--force", repoLane.OwnedRepoRoot)
-	cmd := exec.Command("git", argv...)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("remove owned worktree: %w: %s", err, strings.TrimSpace(string(output)))
+	argv = append(argv, "-C", declaredWorktreeRoot, "worktree", "remove", "--force", ownedRepoRoot)
+	output, err := exec.Command("git", argv...).CombinedOutput()
+	if err == nil {
+		// Clear any residual the forced removal left behind (best-effort).
+		_ = os.RemoveAll(ownedRepoRoot)
+		return nil
 	}
-	return nil
+	gitErr := fmt.Errorf("remove owned worktree: %w: %s", err, strings.TrimSpace(string(output)))
+
+	// Self-heal: prune stale worktree metadata, then retry RemoveAll to tolerate a
+	// Windows handle that is still closing. The directory becoming absent means the
+	// lane is reclaimed even though the forced removal reported an error.
+	pruneArgv := []string{}
+	if runtime.GOOS == "windows" {
+		pruneArgv = append(pruneArgv, "-c", "core.longpaths=true")
+	}
+	pruneArgv = append(pruneArgv, "-C", declaredWorktreeRoot, "worktree", "prune")
+	_ = exec.Command("git", pruneArgv...).Run()
+
+	var removeAllErr error
+	for attempt := 0; attempt < 5; attempt++ {
+		removeAllErr = os.RemoveAll(ownedRepoRoot)
+		if _, statErr := os.Stat(ownedRepoRoot); os.IsNotExist(statErr) {
+			return nil
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	if _, statErr := os.Stat(ownedRepoRoot); os.IsNotExist(statErr) {
+		return nil
+	}
+	return fmt.Errorf("%w; residual checkout remained after prune+removeall: %v", gitErr, removeAllErr)
 }
 
 func (s *Service) restoreOwnedLane(repoLane RepoLane) (RepoLane, error) {

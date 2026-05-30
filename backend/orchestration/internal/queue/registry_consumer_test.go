@@ -224,3 +224,5 @@ func (p *capturingProvider) ListReadyIssues(repo string) ([]IssueRef, error) {
 	*p.record = append(*p.record, repo)
 	return nil, nil
 }
+
+func (p *capturingProvider) CloseIssue(string, int) error { return nil }

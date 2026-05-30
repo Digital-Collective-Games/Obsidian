@@ -12,11 +12,25 @@ import (
 type fakeProvider struct {
 	issues []IssueRef
 	calls  int
+	// closed records every (repo, number) the consumer asked CloseIssue to close, so
+	// the auto-close tests can assert the exact issue closed (and that none closed
+	// when the flag is off).
+	closed []closedIssue
+}
+
+type closedIssue struct {
+	repo   string
+	number int
 }
 
 func (p *fakeProvider) ListReadyIssues(string) ([]IssueRef, error) {
 	p.calls++
 	return append([]IssueRef(nil), p.issues...), nil
+}
+
+func (p *fakeProvider) CloseIssue(repo string, number int) error {
+	p.closed = append(p.closed, closedIssue{repo: repo, number: number})
+	return nil
 }
 
 // fakeDispatcher records every action the consumer takes so the tests can assert
@@ -30,10 +44,13 @@ type fakeDispatcher struct {
 	reclaimed     []string
 	dispatchErr   error
 	failOnSetGate bool
+	// closureRequested[taskID]=true models a dispatched agent that has ANNOUNCED
+	// completion (current_gate=="closure") so the auto-close path can act on it.
+	closureRequested map[string]bool
 }
 
 func newFakeDispatcher(active ...string) *fakeDispatcher {
-	return &fakeDispatcher{active: append([]string(nil), active...), parked: map[string]string{}}
+	return &fakeDispatcher{active: append([]string(nil), active...), parked: map[string]string{}, closureRequested: map[string]bool{}}
 }
 
 func (d *fakeDispatcher) Dispatch(_ context.Context, taskID string) error {
@@ -66,6 +83,10 @@ func (d *fakeDispatcher) Reclaim(_ context.Context, taskID string) error {
 
 func (d *fakeDispatcher) ActiveOwnedLaneTasks() ([]string, error) {
 	return append([]string(nil), d.active...), nil
+}
+
+func (d *fakeDispatcher) ClosureRequested(taskID string) (bool, error) {
+	return d.closureRequested[taskID], nil
 }
 
 // fixedSizer pins the per-repo queue_workers cap for deterministic slot tests.
@@ -280,5 +301,106 @@ func TestDrainOnceDoesNotRedispatchAlreadyRunningReadyTask(t *testing.T) {
 	}
 	if len(dispatcher.dispatched) != 0 {
 		t.Fatalf("dispatched = %v, want none (already running)", dispatcher.dispatched)
+	}
+}
+
+// IssueNumberFromTaskID parses Task-N back to N (inverse of TaskIDForIssue) and
+// errors on a malformed id so a close is never attempted against a bad number.
+func TestIssueNumberFromTaskID(t *testing.T) {
+	ok := map[string]int{
+		"Task-0008":  8,
+		"Task-0012":  12,
+		"Task-7001":  7001,
+		"Task-10000": 10000,
+	}
+	for taskID, want := range ok {
+		got, err := IssueNumberFromTaskID(taskID)
+		if err != nil {
+			t.Fatalf("IssueNumberFromTaskID(%q) error: %v", taskID, err)
+		}
+		if got != want {
+			t.Fatalf("IssueNumberFromTaskID(%q) = %d, want %d", taskID, got, want)
+		}
+	}
+	for _, bad := range []string{"", "Task-", "0008", "Task-00x8", "Issue-8"} {
+		if _, err := IssueNumberFromTaskID(bad); err == nil {
+			t.Fatalf("IssueNumberFromTaskID(%q) = nil error, want error on malformed id", bad)
+		}
+	}
+}
+
+// TEST-ONLY auto-close (ENABLED): an active dispatched task that announced completion
+// (ClosureRequested=true) gets its GitHub issue closed with the correct repo + parsed
+// issue number, and DrainResult.AutoClosed records it. The consumer does NOT reclaim
+// here — the next poll observes the closed issue and reclaims via ActionTerminal.
+func TestDrainOnceAutoCloseClosesAnnouncedTaskWhenEnabled(t *testing.T) {
+	// #7040 is open + Ready and already owns its slot (an active dispatched lane). It
+	// announced completion via current_gate=="closure".
+	provider := &fakeProvider{issues: []IssueRef{
+		{Number: 7040, State: IssueState{Queue: QueueReady}},
+	}}
+	dispatcher := newFakeDispatcher("Task-7040")
+	dispatcher.closureRequested["Task-7040"] = true
+	consumer := NewConsumer(testRepo, provider, dispatcher, fixedSizer(4))
+	consumer.SetAutoCloseEnabled(true)
+
+	result, err := consumer.DrainOnce(context.Background())
+	if err != nil {
+		t.Fatalf("DrainOnce: %v", err)
+	}
+	if want := []closedIssue{{repo: testRepo, number: 7040}}; !reflect.DeepEqual(provider.closed, want) {
+		t.Fatalf("closed = %v, want %v (close issue #7040 on the repo, like a human)", provider.closed, want)
+	}
+	if !reflect.DeepEqual(result.AutoClosed, []string{"Task-7040"}) {
+		t.Fatalf("result.AutoClosed = %v, want [Task-7040]", result.AutoClosed)
+	}
+	// Auto-close must NOT also reclaim: deallocation stays the next-poll ActionTerminal
+	// path (the issue is still open this poll).
+	if len(dispatcher.reclaimed) != 0 {
+		t.Fatalf("reclaimed = %v, want none (auto-close closes only; next poll reclaims)", dispatcher.reclaimed)
+	}
+}
+
+// TEST-ONLY auto-close (DISABLED, the default): even an announced task is NOT closed —
+// the consumer stays read-only against GitHub (A4.6).
+func TestDrainOnceAutoCloseDoesNotCloseWhenDisabled(t *testing.T) {
+	provider := &fakeProvider{issues: []IssueRef{
+		{Number: 7041, State: IssueState{Queue: QueueReady}},
+	}}
+	dispatcher := newFakeDispatcher("Task-7041")
+	dispatcher.closureRequested["Task-7041"] = true
+	consumer := NewConsumer(testRepo, provider, dispatcher, fixedSizer(4)) // auto-close left OFF (default)
+
+	result, err := consumer.DrainOnce(context.Background())
+	if err != nil {
+		t.Fatalf("DrainOnce: %v", err)
+	}
+	if len(provider.closed) != 0 {
+		t.Fatalf("closed = %v, want none (auto-close off => read-only against GitHub)", provider.closed)
+	}
+	if len(result.AutoClosed) != 0 {
+		t.Fatalf("result.AutoClosed = %v, want none (auto-close off)", result.AutoClosed)
+	}
+}
+
+// TEST-ONLY auto-close (ENABLED but NOT announced): an active task that has NOT set
+// current_gate=="closure" (ClosureRequested=false) is not closed.
+func TestDrainOnceAutoCloseDoesNotCloseWhenNotAnnounced(t *testing.T) {
+	provider := &fakeProvider{issues: []IssueRef{
+		{Number: 7042, State: IssueState{Queue: QueueReady}},
+	}}
+	dispatcher := newFakeDispatcher("Task-7042") // active, but closureRequested stays false
+	consumer := NewConsumer(testRepo, provider, dispatcher, fixedSizer(4))
+	consumer.SetAutoCloseEnabled(true)
+
+	result, err := consumer.DrainOnce(context.Background())
+	if err != nil {
+		t.Fatalf("DrainOnce: %v", err)
+	}
+	if len(provider.closed) != 0 {
+		t.Fatalf("closed = %v, want none (task has not announced completion)", provider.closed)
+	}
+	if len(result.AutoClosed) != 0 {
+		t.Fatalf("result.AutoClosed = %v, want none (not announced)", result.AutoClosed)
 	}
 }

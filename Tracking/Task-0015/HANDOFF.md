@@ -225,6 +225,21 @@ Ready → 2 dispatched, 1 deferred), **worktree release on close + dequeue-next*
 The `REGRESSION.md` REG-007 case now lists these as required sub-scenarios. Proof:
 [Testing/PASS-0006/REG-007-CONCURRENCY-RELEASE-PROOF.md](./Testing/PASS-0006/REG-007-CONCURRENCY-RELEASE-PROOF.md).
 
+**PASS-0008 — full deallocate/reuse cycle + BUG-0002 fix (2026-05-30):** the human
+required proof of the FULL lifecycle (allocate both slots → agents complete + announce
+done → simulate human closure → BOTH worktrees DEALLOCATE → queue another → REUSE a
+freed slot). Built an env-gated TEST-ONLY auto-close (`OBSIDIAN_AUTO_CLOSE_QUEUED`,
+default OFF; agent announces via `TASK-STATE.json current_gate="closure"`, never closes
+the issue). The first run EXPOSED [BUG-0002](./BUG-0002.md): the closed task's worktree
+never deallocated (`git worktree remove` "is not a working tree") and the consumer
+WEDGED — the earlier PASS-0006 "release on close" only looked fine because I pruned the
+worktree by hand. Fixed (terminate launched agent before removal + idempotent
+self-healing `cleanupOwnedLane`); re-run PASSED both phases live (`reg007h`,
+`queue_workers=2`). Proof:
+[Testing/PASS-0008/REG-007-FULL-CYCLE-PROOF.md](./Testing/PASS-0008/REG-007-FULL-CYCLE-PROOF.md).
+Note: the auto-close feature + the BUG-0002 fix are committed together (intertwined in
+`service.go`/`queuedrain.go`/`queuelaunch.go`).
+
 ## Where the unsupervised run stopped (2026-05-30)
 
 5 passes fully done + independently verified + committed/pushed (O1, O2, O6, O4,

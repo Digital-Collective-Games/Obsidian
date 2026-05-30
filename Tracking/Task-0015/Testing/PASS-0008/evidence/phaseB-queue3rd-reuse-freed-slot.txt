@@ -1,0 +1,14 @@
+Phase B: queue 3rd (#7) after both freed -> reuse a freed slot -> announce -> auto-close -> deallocate
+t=15s wt=1 [Task-0007] #7=OPEN
+t=30s wt=1 [Task-0007] #7=OPEN
+t=45s wt=1 [Task-0007] #7=OPEN
+t=60s wt=1 [Task-0007] #7=CLOSED
+t=75s wt=0 [] #7=CLOSED
+REUSE+CYCLE: Task-0007 dispatched into a freed slot, announced, auto-closed, deallocated
+=== backend log ===
+2026/05/30 12:46:09 queue-drain auto-close: closed issue #6 (Task-0006) on Digital-Collective-Games/QueueDrainTestbed (simulated human closure approval); next poll reclaims its worktree
+2026/05/30 12:46:09 INFO  queue-drain poll acted Namespace reg007h TaskQueue codex-orchestration WorkerID 63708@agentprime@ WorkflowType codex.queue.drain WorkflowID queue-drain--consumer RunID 019e79c5-81d0-7352-9ba6-7e448b0f8642 Attempt 1 dispatched [] parked [] reclaimed [Task-0006]
+2026/05/30 12:46:54 INFO  queue-drain poll acted Namespace reg007h TaskQueue codex-orchestration WorkerID 63708@agentprime@ WorkflowType codex.queue.drain WorkflowID queue-drain--consumer RunID 019e79c5-81d0-7352-9ba6-7e448b0f8642 Attempt 1 dispatched [Task-0007] parked [] reclaimed []
+2026/05/30 12:47:42 queue-drain auto-close: closed issue #7 (Task-0007) on Digital-Collective-Games/QueueDrainTestbed (simulated human closure approval); next poll reclaims its worktree
+2026/05/30 12:48:06 queue-drain auto-close: closed issue #7 (Task-0007) on Digital-Collective-Games/QueueDrainTestbed (simulated human closure approval); next poll reclaims its worktree
+2026/05/30 12:48:06 INFO  queue-drain poll acted Namespace reg007h TaskQueue codex-orchestration WorkerID 63708@agentprime@ WorkflowType codex.queue.drain WorkflowID queue-drain--consumer RunID 019e79c5-81d0-7352-9ba6-7e448b0f8642 Attempt 1 dispatched [] parked [] reclaimed [Task-0007]

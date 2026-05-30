@@ -5,7 +5,7 @@
   "phase": "implementation",
   "plan_approved": true,
   "current_pass": null,
-  "last_completed_pass": "PASS-0006",
+  "last_completed_pass": "PASS-0008",
   "current_gate": "closure",
   "latest_audit_verdict": "ready",
   "validation": {
@@ -16,9 +16,10 @@
   "blockers": [
     "REOPENED O3 - registry-driven binding (2026-05-30): DONE + committed. The queue consumer reads the central REPO-MANIFEST.json at OBSIDIAN_REGISTRY_PATH, enumerates all repos (global awareness), polls each entry's task_provider (first-class), and dispatches into each entry's local_root capped at its queue_workers (per-repo slots via NewServiceForRepo). Verified via workflow (1 impl + 3 verifiers, all sound, zero blocking) AND a LIVE registry-driven REG-007 re-run PASS (bound via the registry, no QUEUE_DRAIN_REPO; real-UI flip -> dispatched [Task-0005] into the registry's local_root -> claude agent ran). The repo-binding gap is closed. Cosmetic follow-up: drop the unused StartWorker taskService param + decorative QueueDrainConfig.Repo.",
     "Task CLOSURE is a distinct, final human gate (the agent never self-closes); awaiting explicit human closure approval. All sub-objectives O1-O6 + cross-cutting (REG-007) implemented + independently QA'd + committed + pushed.",
-    "O5 hardening follow-up (BUG-0001): kill the launched agent PID on owned-lane reclaim/shutdown (orphan lifecycle) + add launcher launch/error logging.",
+    "PASS-0008 (2026-05-30): full deallocate/reuse lifecycle proven live + env-gated TEST-ONLY auto-close (OBSIDIAN_AUTO_CLOSE_QUEUED, default OFF; agent announces via TASK-STATE current_gate=closure, never self-closes). BUG-0002 (closed task's worktree never deallocated; consumer wedged on 'is not a working tree') FOUND by the full-cycle regression + FIXED (terminate launched agent before removal + idempotent self-healing cleanupOwnedLane) + verified. The earlier PASS-0006 'release on close' only looked fine because the worktree was hand-pruned. See Testing/PASS-0008/REG-007-FULL-CYCLE-PROOF.md.",
+    "O5 hardening follow-up (BUG-0001): launcher launch/error logging still pending. The orphan-agent kill on owned-lane reclaim is now DONE (BUG-0002 fix: reclaim terminates the launched agent before worktree removal).",
     "O5 A5.3 follow-up: a full real-agent stall -> detect -> resume-poke -> incident-email repro (watchdog logic + resume-poke + launch each proven; integrated real-agent stall not separately reproduced)."
   ],
   "next_expected_artifacts": [],
-  "updated_at": "2026-05-30T10:40:00-04:00"
+  "updated_at": "2026-05-30T12:50:00-04:00"
 }

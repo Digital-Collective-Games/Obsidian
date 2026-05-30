@@ -26,7 +26,8 @@ Do the work for this task:
 
 DONE-CONTRACT (mandatory — you are NOT permitted to close the GitHub issue):
 - NEVER close the GitHub issue yourself, for ANY reason (not on perceived completion, not on abandon).
-- When you believe the work is complete, do NOT self-close. Use the obsidian-operator skill to set Human Needed=Yes for this task with a run/gate state of "awaiting closure approval", then STOP and ask the human for an explicit closure directive.
+- When you believe the work is complete, do NOT self-close. ANNOUNCE completion by editing Tracking/{{TASK_ID}}/TASK-STATE.json: read the file, set ONLY the "current_gate" field to "closure" (leave every other field unchanged), and write it back. Then use the obsidian-operator skill to set Human Needed=Yes with a run/gate state of "awaiting closure approval", and STOP and ask the human for an explicit closure directive.
+- Setting current_gate to "closure" is ONLY an announcement that you are done; it is NOT closing the GitHub issue. You still must never close the issue — closure remains a human/backend action.
 - When you need a human mid-work (a research, plan, or regression gate) or judge the task should be abandoned / is a bad idea, likewise use the obsidian-operator skill to set Human Needed=Yes and STOP. Do NOT close the issue.
 - Closing the issue is ALWAYS an explicit human action. A passed test, regression run, plan, or research approval is NOT closure approval.`
 

@@ -85,12 +85,23 @@ type RepoDispatchFactory func(repo RegistryRepo) (RepoDispatch, error)
 type RegistryConsumer struct {
 	loadRegistry RegistryLoader
 	dispatchFor  RepoDispatchFactory
+	// autoCloseEnabled is propagated onto every per-repo Consumer this builds, so the
+	// TEST-ONLY OBSIDIAN_AUTO_CLOSE_QUEUED auto-close is uniform across all registry
+	// repos. Default false keeps every per-repo consumer read-only against GitHub.
+	autoCloseEnabled bool
 }
 
 // NewRegistryConsumer builds the registry-driven consumer over a registry loader
 // (explicit path) and a per-repo dispatch factory.
 func NewRegistryConsumer(loadRegistry RegistryLoader, dispatchFor RepoDispatchFactory) *RegistryConsumer {
 	return &RegistryConsumer{loadRegistry: loadRegistry, dispatchFor: dispatchFor}
+}
+
+// SetAutoCloseEnabled toggles the TEST-ONLY simulated-human auto-close, propagated to
+// each per-repo Consumer this builds. It is set from the OBSIDIAN_AUTO_CLOSE_QUEUED
+// config flag at wiring time.
+func (c *RegistryConsumer) SetAutoCloseEnabled(enabled bool) {
+	c.autoCloseEnabled = enabled
 }
 
 // DrainOnce performs one poll cycle across ALL registered repos. It loads the
@@ -120,6 +131,7 @@ func (c *RegistryConsumer) DrainOnce(ctx context.Context) (RegistryDrainResult, 
 			continue
 		}
 		consumer := NewConsumer(repo.ProviderRepo, dispatch.Provider, dispatch.Dispatcher, dispatch.Sizer)
+		consumer.SetAutoCloseEnabled(c.autoCloseEnabled)
 		result, err := consumer.DrainOnce(ctx)
 		if err != nil {
 			if firstErr == nil {

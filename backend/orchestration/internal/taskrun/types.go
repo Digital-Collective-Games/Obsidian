@@ -200,6 +200,11 @@ type RepoBinding struct {
 	// RunGateState is the run/gate state. Defaults to RunGateStateRunning at
 	// dispatch; the parked-needs-human / which-gate enum is O4/PASS-0003 work.
 	RunGateState string `json:"run_gate_state"`
+	// LaunchedPID is the launched agent's OS process id, persisted so reclaim can
+	// terminate the agent before removing the worktree (BUG-0002): on Windows a
+	// live agent's open handle on the checkout makes git worktree remove --force
+	// partially fail and leave a residual directory.
+	LaunchedPID int `json:"launched_pid,omitempty"`
 }
 
 type RunFollowUp struct {

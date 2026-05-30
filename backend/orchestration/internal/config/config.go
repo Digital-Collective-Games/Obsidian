@@ -51,6 +51,14 @@ type Config struct {
 	// the launcher's validated defaults.
 	QueueAgentAllowedTools   string // CODEX_ORCHESTRATION_QUEUE_AGENT_ALLOWED_TOOLS
 	QueueAgentPermissionMode string // CODEX_ORCHESTRATION_QUEUE_AGENT_PERMISSION_MODE
+
+	// AutoCloseQueued is a TEST-ONLY toggle that lets the queue-drain consumer SIMULATE
+	// a human approving a close: when an active dispatched task announces completion
+	// (its worktree TASK-STATE.json current_gate == "closure") the consumer closes the
+	// GitHub issue exactly as a human would, so a regression test can prove the full
+	// dispatch -> done -> close -> reclaim -> slot-reuse lifecycle. Default FALSE so the
+	// consumer stays read-only against GitHub (A4.6) and only a human closes.
+	AutoCloseQueued bool // OBSIDIAN_AUTO_CLOSE_QUEUED (default false)
 }
 
 func Load() (Config, error) {
@@ -75,6 +83,10 @@ func Load() (Config, error) {
 		LaunchQueueAgent:         envBoolOrDefault("CODEX_ORCHESTRATION_QUEUE_LAUNCH_AGENT", false),
 		QueueAgentAllowedTools:   envOrDefault("CODEX_ORCHESTRATION_QUEUE_AGENT_ALLOWED_TOOLS", "Read,Edit,Bash,Agent"),
 		QueueAgentPermissionMode: envOrDefault("CODEX_ORCHESTRATION_QUEUE_AGENT_PERMISSION_MODE", ""),
+
+		// TEST-ONLY: simulates human closure approval; default false keeps the consumer
+		// read-only against GitHub.
+		AutoCloseQueued: envBoolOrDefault("OBSIDIAN_AUTO_CLOSE_QUEUED", false),
 	}
 	cfg.WorktreeRoot = envOrDefault("CODEX_ORCHESTRATION_WORKTREE_ROOT", resolveWorktreeRoot())
 	cfg.TrackingRoot = envOrDefault("CODEX_ORCHESTRATION_TRACKING_ROOT", filepath.Join(cfg.WorktreeRoot, "Tracking"))

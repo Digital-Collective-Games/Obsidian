@@ -110,12 +110,17 @@ func TestBindLaunchedSessionReplacesPlaceholders(t *testing.T) {
 
 	const wantSession = "019e771f-94db-7c22-bd3a-cf13a11df3ff"
 	const wantTranscript = `C:\Users\gregs\.codex\sessions\2026\05\30\rollout-019e771f.jsonl`
-	updated, err := service.BindLaunchedSession("Task-0008", wantSession, wantTranscript)
+	const wantPID = 4242
+	updated, err := service.BindLaunchedSession("Task-0008", wantSession, wantTranscript, wantPID)
 	if err != nil {
 		t.Fatalf("bind launched session: %v", err)
 	}
 	if updated.AgentSessionID != wantSession || updated.SessionTranscriptPath != wantTranscript {
 		t.Fatalf("binding not updated with launched session: %#v", updated)
+	}
+	// BUG-0002: the launched PID is persisted so reclaim can terminate the agent.
+	if updated.LaunchedPID != wantPID {
+		t.Fatalf("binding LaunchedPID = %d, want %d", updated.LaunchedPID, wantPID)
 	}
 	// Run/gate state is untouched (still running) and the worktree is not deallocated.
 	if updated.RunGateState != RunGateStateRunning {
@@ -128,6 +133,9 @@ func TestBindLaunchedSessionReplacesPlaceholders(t *testing.T) {
 	}
 	if len(worktrees) != 1 || worktrees[0].AgentSessionID != wantSession || worktrees[0].SessionTranscriptPath != wantTranscript {
 		t.Fatalf("launched-session binding did not persist: %#v", worktrees)
+	}
+	if worktrees[0].LaunchedPID != wantPID {
+		t.Fatalf("launched-session binding LaunchedPID did not persist: got %d, want %d", worktrees[0].LaunchedPID, wantPID)
 	}
 }
 

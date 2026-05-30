@@ -25,6 +25,11 @@ type QueueProvider interface {
 	// implementation MAY also include closed issues that still hold a worktree so
 	// the consumer can reclaim them. The consumer applies DecideQueueAction to each.
 	ListReadyIssues(repo string) ([]IssueRef, error)
+	// CloseIssue closes issue #number on repo, exactly as a human closing the issue
+	// would (reason "completed"). It is the ONLY GitHub-write the consumer performs,
+	// and it is invoked ONLY when the TEST-ONLY OBSIDIAN_AUTO_CLOSE_QUEUED auto-close
+	// is enabled (otherwise the consumer never calls it and stays read-only, A4.6).
+	CloseIssue(repo string, number int) error
 }
 
 // IssueRef is one provider-observed GitHub issue. Number is the issue #N (which
@@ -153,6 +158,17 @@ func (p *ghQueueProvider) ListReadyIssues(repo string) ([]IssueRef, error) {
 		refs = append(refs, IssueRef{Number: issue.Number, State: state})
 	}
 	return refs, nil
+}
+
+// CloseIssue closes issue #number on repo via the gh CLI, the same close a human
+// performs. It is the ONLY write the provider issues and runs ONLY behind the
+// TEST-ONLY auto-close flag. The gh CLI accepts the bare issue number.
+func (p *ghQueueProvider) CloseIssue(repo string, number int) error {
+	if repo == "" {
+		repo = p.repo
+	}
+	_, err := p.run("issue", "close", strconv.Itoa(number), "--repo", repo, "--reason", "completed")
+	return err
 }
 
 func (p *ghQueueProvider) fieldIDMap() (map[int]string, error) {

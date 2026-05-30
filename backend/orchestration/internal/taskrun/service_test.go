@@ -2045,6 +2045,75 @@ func hasLaunchTargetEnding(targets []LaunchTarget, label string, suffix string) 
 	return false
 }
 
+// closureRequestedAtRoot is the TEST-ONLY auto-close closure read: it reports true
+// only when the OWNED worktree's Tracking/<taskID>/TASK-STATE.json sets current_gate
+// to "closure", false for any other value, and false (no error) when the file is
+// missing — so the consumer's auto-close never wedges on an absent announcement.
+func TestClosureRequestedAtRoot(t *testing.T) {
+	const taskID = "Task-0008"
+	withState := func(t *testing.T, currentGate string) string {
+		t.Helper()
+		root := t.TempDir()
+		taskDir := filepath.Join(root, "Tracking", taskID)
+		if err := os.MkdirAll(taskDir, 0o755); err != nil {
+			t.Fatalf("mkdir task dir: %v", err)
+		}
+		writeFile(t, filepath.Join(taskDir, "TASK-STATE.json"), `{
+  "task_id": "Task-0008",
+  "status": "in_progress",
+  "phase": "implementation",
+  "plan_approved": true,
+  "current_pass": "PASS-0001",
+  "current_gate": "`+currentGate+`",
+  "blockers": [],
+  "updated_at": "2026-04-24T16:27:00-04:00"
+}`)
+		return root
+	}
+
+	// current_gate=="closure" => announced completion.
+	requested, err := closureRequestedAtRoot(withState(t, "closure"), taskID)
+	if err != nil {
+		t.Fatalf("closureRequestedAtRoot(closure): %v", err)
+	}
+	if !requested {
+		t.Fatal("current_gate=closure must report ClosureRequested=true")
+	}
+
+	// any other gate => not announced.
+	requested, err = closureRequestedAtRoot(withState(t, "implementation"), taskID)
+	if err != nil {
+		t.Fatalf("closureRequestedAtRoot(implementation): %v", err)
+	}
+	if requested {
+		t.Fatal("current_gate=implementation must report ClosureRequested=false")
+	}
+
+	// missing TASK-STATE.json => false, nil (not an error).
+	requested, err = closureRequestedAtRoot(t.TempDir(), taskID)
+	if err != nil {
+		t.Fatalf("closureRequestedAtRoot(missing file): %v", err)
+	}
+	if requested {
+		t.Fatal("missing state file must report ClosureRequested=false without error")
+	}
+}
+
+// ClosureRequested with no active owned lane is false, nil (the auto-close treats an
+// absent lane as not-yet-announced rather than an error).
+func TestClosureRequestedNoActiveLaneIsFalse(t *testing.T) {
+	worktreeRoot := writeTaskTrackingRoot(t, map[string]taskFixture{})
+	service := NewService(worktreeRoot, filepath.Join(worktreeRoot, ".runs"), nil)
+
+	requested, err := service.ClosureRequested("Task-0008")
+	if err != nil {
+		t.Fatalf("ClosureRequested with no active lane: %v", err)
+	}
+	if requested {
+		t.Fatal("ClosureRequested must be false when the task has no active owned lane")
+	}
+}
+
 type taskFixture struct {
 	taskMD        string
 	taskState     string

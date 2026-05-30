@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 )
@@ -198,4 +199,45 @@ func TestListActiveWorktreesSkipsReclaimedWorktree(t *testing.T) {
 	if len(worktrees) != 0 {
 		t.Fatalf("active worktrees after cleanup = %d, want 0: %#v", len(worktrees), worktrees)
 	}
+}
+
+// BUG-0002 PART B: removeOwnedLaneWorktree must be idempotent / self-healing. When
+// the checkout is NOT a registered git worktree (e.g. an earlier forced removal
+// already unregistered it, so git reports "is not a working tree"), the helper must
+// NOT wedge by returning the git error every retry. Instead it prunes + RemoveAll
+// and reports success once the residual directory is gone.
+func TestRemoveOwnedLaneWorktreeSelfHealsResidual(t *testing.T) {
+	ownedLaneRoot := t.TempDir()
+	// declaredWorktreeRoot is a real git repo so the prune invocation is valid, but
+	// the residual checkout was never registered as a worktree under it, so git
+	// worktree remove --force fails with "is not a working tree".
+	declaredWorktreeRoot := t.TempDir()
+	if err := exec.Command("git", "-C", declaredWorktreeRoot, "init").Run(); err != nil {
+		t.Fatalf("git init declared root: %v", err)
+	}
+
+	residual := filepath.Join(ownedLaneRoot, "Task-0005-residual", "w")
+	if err := os.MkdirAll(residual, 0o755); err != nil {
+		t.Fatalf("mkdir residual: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(residual, "leftover.txt"), []byte("stale"), 0o644); err != nil {
+		t.Fatalf("write residual file: %v", err)
+	}
+
+	if err := removeOwnedLaneWorktree(declaredWorktreeRoot, ownedLaneRoot, residual); err != nil {
+		t.Fatalf("removeOwnedLaneWorktree on a non-worktree residual should self-heal, got: %v", err)
+	}
+	if _, err := os.Stat(residual); !os.IsNotExist(err) {
+		t.Fatalf("residual checkout still exists after self-heal: stat err = %v", err)
+	}
+}
+
+// BUG-0002 PART A: terminateAgentProcess is best-effort and must NEVER error or
+// panic for a PID that does not exist (already-exited agent or a stale persisted
+// PID), so it can never block reclaim.
+func TestTerminateAgentProcessBestEffortMissingPID(t *testing.T) {
+	// A very large PID that is exceedingly unlikely to be a live process.
+	terminateAgentProcess(2000000000)
+	// Non-positive PIDs are a no-op (no persisted PID).
+	terminateAgentProcess(0)
 }

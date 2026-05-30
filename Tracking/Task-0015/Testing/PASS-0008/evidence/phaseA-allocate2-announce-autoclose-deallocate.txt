@@ -1,0 +1,16 @@
+Phase A (BUG-0002 fixed): allocate 2 -> announce -> auto-close -> DEALLOCATE
+t=15s wt=2 [Task-0005:closure Task-0006:] #5=OPEN #6=OPEN
+t=30s wt=2 [Task-0005:closure Task-0006:] #5=CLOSED #6=OPEN
+t=45s wt=2 [Task-0005:closure Task-0006:closure] #5=CLOSED #6=OPEN
+t=60s wt=1 [Task-0006:closure] #5=CLOSED #6=CLOSED
+t=75s wt=0 [] #5=CLOSED #6=CLOSED
+FULL DEALLOC: both auto-closed + worktrees=0 (slots freed)
+=== backend dispatched/auto-close/reclaim log ===
+2026/05/30 12:44:34 INFO  queue-drain poll acted Namespace reg007h TaskQueue codex-orchestration WorkerID 63708@agentprime@ WorkflowType codex.queue.drain WorkflowID queue-drain--consumer RunID 019e79c5-81d0-7352-9ba6-7e448b0f8642 Attempt 1 dispatched [Task-0005] parked [] reclaimed []
+2026/05/30 12:44:58 INFO  queue-drain poll acted Namespace reg007h TaskQueue codex-orchestration WorkerID 63708@agentprime@ WorkflowType codex.queue.drain WorkflowID queue-drain--consumer RunID 019e79c5-81d0-7352-9ba6-7e448b0f8642 Attempt 1 dispatched [Task-0006] parked [] reclaimed []
+2026/05/30 12:45:22 queue-drain auto-close: closed issue #5 (Task-0005) on Digital-Collective-Games/QueueDrainTestbed (simulated human closure approval); next poll reclaims its worktree
+2026/05/30 12:45:46 queue-drain auto-close: closed issue #5 (Task-0005) on Digital-Collective-Games/QueueDrainTestbed (simulated human closure approval); next poll reclaims its worktree
+2026/05/30 12:45:47 queue-drain auto-close: closed issue #6 (Task-0006) on Digital-Collective-Games/QueueDrainTestbed (simulated human closure approval); next poll reclaims its worktree
+2026/05/30 12:45:47 INFO  queue-drain poll acted Namespace reg007h TaskQueue codex-orchestration WorkerID 63708@agentprime@ WorkflowType codex.queue.drain WorkflowID queue-drain--consumer RunID 019e79c5-81d0-7352-9ba6-7e448b0f8642 Attempt 1 dispatched [] parked [] reclaimed [Task-0005]
+2026/05/30 12:46:09 queue-drain auto-close: closed issue #6 (Task-0006) on Digital-Collective-Games/QueueDrainTestbed (simulated human closure approval); next poll reclaims its worktree
+2026/05/30 12:46:09 INFO  queue-drain poll acted Namespace reg007h TaskQueue codex-orchestration WorkerID 63708@agentprime@ WorkflowType codex.queue.drain WorkflowID queue-drain--consumer RunID 019e79c5-81d0-7352-9ba6-7e448b0f8642 Attempt 1 dispatched [] parked [] reclaimed [Task-0006]

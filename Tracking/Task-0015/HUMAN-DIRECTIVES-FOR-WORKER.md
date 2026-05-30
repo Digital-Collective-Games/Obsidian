@@ -370,3 +370,34 @@ coordinator, and agent-auditor preferences.
   `OBSIDIAN_REGISTRY_PATH`). A global rename of the existing `CODEX_ORCHESTRATION_*`
   vars is a separate, riskier follow-up (it touches the live pinned service lane +
   LaneHelpers) — not done in this pass.
+
+## Verbatim Human Directive — env-gated auto-closure + full-cycle deallocate/reuse regression (2026-05-30)
+
+> Its true that worktrees should sit there allocated, but an important regression
+> test is to simulate human approval for a close (only within the scope of that
+> particular regression test is that allowed) then have the worker be given the
+> directive to shut down once they announce they're done. You could code something
+> like if the task-state is requesting closure, then if some env variable allows
+> auto-closure for queued tasks, then do that. And follow it to its completion to
+> make sure its deallocated, then throw another task at it to make sure the new slot
+> can be reclaimed. Like you could have only 2 worker slots. In that case, allocate
+> them both, let one or both complete, make sure they deallocate, then queue up
+> another slot. This is all simulating what humans are going to assume with your surface.
+
+### Worker-Safe Normalization (AUTHORITATIVE)
+- PRODUCTION is UNCHANGED: the agent NEVER self-closes; only an explicit human
+  closure approval closes a task and deallocates its worktree.
+- TEST-ONLY affordance: an env-gated auto-closure (`OBSIDIAN_AUTO_CLOSE_QUEUED`,
+  default OFF) SIMULATES the human approving a close, allowed ONLY within a
+  regression test. When ON, if a dispatched run's TASK-STATE is REQUESTING CLOSURE
+  (the agent announced done), the consumer auto-closes the GitHub issue (via the
+  existing human-gated close path) → the existing close → reclaim → dequeue flow
+  deallocates the worktree + frees the slot. Default OFF preserves the human-only
+  closure rule (so this does not reintroduce a production auto-close-from-local-state).
+- The dispatched worker is directed to: do its work → ANNOUNCE DONE (mark its
+  TASK-STATE as requesting closure, e.g. `current_gate: "closure"`) → SHUT DOWN.
+- Full-cycle regression (simulate the human-expected surface): with
+  `queue_workers = 2`, allocate BOTH slots, let the agents complete + announce done,
+  (env-gated) auto-close → verify BOTH worktrees DEALLOCATE + slots free, then queue
+  ANOTHER task and verify it REUSES a freed slot. Prove allocate → complete →
+  announce → (simulated-human) close → deallocate → reuse.

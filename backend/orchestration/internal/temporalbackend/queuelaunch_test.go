@@ -22,6 +22,7 @@ type fakeBinder struct {
 
 type boundSession struct {
 	taskID, sessionID, transcriptPath string
+	pid                               int
 }
 
 func (f *fakeBinder) Dispatch(_ context.Context, taskID string) (taskrun.TaskRunView, error) {
@@ -34,8 +35,8 @@ func (f *fakeBinder) Dispatch(_ context.Context, taskID string) (taskrun.TaskRun
 	}, nil
 }
 
-func (f *fakeBinder) BindLaunchedSession(taskID, sessionID, transcriptPath string) (taskrun.WorktreeBinding, error) {
-	f.bound = append(f.bound, boundSession{taskID, sessionID, transcriptPath})
+func (f *fakeBinder) BindLaunchedSession(taskID, sessionID, transcriptPath string, pid int) (taskrun.WorktreeBinding, error) {
+	f.bound = append(f.bound, boundSession{taskID, sessionID, transcriptPath, pid})
 	return taskrun.WorktreeBinding{}, nil
 }
 
@@ -55,6 +56,8 @@ func (f *fakeBinder) ListActiveWorktrees() ([]taskrun.WorktreeBinding, error) {
 		RepoBinding: taskrun.RepoBinding{TaskID: f.dispatchTask, RunGateState: f.gateState},
 	}}, nil
 }
+
+func (f *fakeBinder) ClosureRequested(string) (bool, error) { return false, nil }
 
 // fakeLauncher records the launch spec and returns a fixed session id + transcript
 // path, so the wiring test proves the launcher seam was invoked WITHOUT launching a
@@ -88,6 +91,7 @@ func TestDispatchLaunchEnabledLaunchesBindsAndSupervises(t *testing.T) {
 	launcher := &fakeLauncher{res: queue.LaunchResult{
 		SessionID:      "11111111-2222-4333-8444-555555555555",
 		TranscriptPath: `C:\Users\gregs\.claude\projects\c--Agent-QueueDrainTestbed\sess.jsonl`,
+		PID:            4242,
 	}}
 	supervisor := &fakeSupervisor{}
 	d := taskrunDispatcher{
@@ -134,6 +138,10 @@ func TestDispatchLaunchEnabledLaunchesBindsAndSupervises(t *testing.T) {
 	b := binder.bound[0]
 	if b.taskID != "Task-7001" || b.sessionID != launcher.res.SessionID || b.transcriptPath != launcher.res.TranscriptPath {
 		t.Fatalf("bound = %+v, want the launcher's session/transcript for Task-7001", b)
+	}
+	// BUG-0002: the launched PID is persisted so reclaim can terminate the agent.
+	if b.pid != launcher.res.PID {
+		t.Fatalf("bound pid = %d, want the launcher's pid %d", b.pid, launcher.res.PID)
 	}
 	// (d) supervisor started for the run (run id == active run id of the task).
 	if len(supervisor.started) != 1 {

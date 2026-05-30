@@ -68,7 +68,7 @@ func (d taskrunDispatcher) launchAgent(ctx context.Context, taskID string, view 
 	if err != nil {
 		return fmt.Errorf("launch agent for %s: %w", taskID, err)
 	}
-	if _, err := d.service.BindLaunchedSession(taskID, res.SessionID, res.TranscriptPath); err != nil {
+	if _, err := d.service.BindLaunchedSession(taskID, res.SessionID, res.TranscriptPath, res.PID); err != nil {
 		return fmt.Errorf("bind launched session for %s: %w", taskID, err)
 	}
 	if d.supervisor != nil {
@@ -107,6 +107,12 @@ func (d taskrunDispatcher) Reclaim(_ context.Context, taskID string) error {
 
 func (d taskrunDispatcher) ActiveOwnedLaneTasks() ([]string, error) {
 	return d.service.ActiveOwnedLaneTasks()
+}
+
+// ClosureRequested delegates to the taskrun service's read of the task's owned
+// worktree TASK-STATE.json current_gate (the TEST-ONLY auto-close closure signal).
+func (d taskrunDispatcher) ClosureRequested(taskID string) (bool, error) {
+	return d.service.ClosureRequested(taskID)
 }
 
 // newQueueDrainActivities builds the REGISTRY-DRIVEN consumer for the worker's poll
@@ -159,6 +165,10 @@ func newQueueDrainActivities(cfg config.Config, runtime taskrun.Runtime) (*queue
 		return queue.RepoDispatch{Provider: provider, Dispatcher: dispatcher, Sizer: service}, nil
 	}
 	consumer := queue.NewRegistryConsumer(loadRegistry, dispatchFor)
+	// TEST-ONLY: when OBSIDIAN_AUTO_CLOSE_QUEUED is set, each per-repo consumer closes
+	// the issue of a task that announced completion (simulated human closure). Default
+	// false keeps the consumer read-only against GitHub.
+	consumer.SetAutoCloseEnabled(cfg.AutoCloseQueued)
 	return queue.NewQueueDrainActivities(consumer), nil
 }
 

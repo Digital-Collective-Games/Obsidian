@@ -24,11 +24,12 @@ import (
 // real git worktree, claude process, or Temporal runtime.
 type dispatchBinder interface {
 	Dispatch(ctx context.Context, taskID string) (taskrun.TaskRunView, error)
-	BindLaunchedSession(taskID, sessionID, transcriptPath string) (taskrun.WorktreeBinding, error)
+	BindLaunchedSession(taskID, sessionID, transcriptPath string, pid int) (taskrun.WorktreeBinding, error)
 	SetRunGateState(taskID, state string) (taskrun.WorktreeBinding, error)
 	ReclaimOwnedLane(taskID string) error
 	ActiveOwnedLaneTasks() ([]string, error)
 	ListActiveWorktrees() ([]taskrun.WorktreeBinding, error)
+	ClosureRequested(taskID string) (bool, error)
 }
 
 // agentLauncher launches a top-level claude agent in an owned worktree. Production
