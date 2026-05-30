@@ -14,12 +14,12 @@
     "regression": "not_run"
   },
   "blockers": [
-    "PASS-0005 (O5) PARTIAL: deterministic watchdog + launcher/discovery committed; A5.1 (HARD, real top-level agent spawning a subagent) and the poke 'actually wake' input-delivery are PENDING a SUPERVISED session (unsafe/under-specified to run unattended).",
-    "PASS-0006 (regression) PENDING the human: real-GitHub-UI Queue=Ready flip via the Chrome debug tab on a QueueDrainTestbed issue -> backend pickup; add REG-007.",
+    "PASS-0005 (O5): claude-only launcher committed; A5.1 (HARD) PROVEN with claude + poke-wake real (claude --resume). Remaining for FULL O5 closure: (a) wire launcher+watchdog into the live consumer dispatch path; (b) full integrated real-agent stall->detect->poke->email repro.",
+    "PASS-0006 (regression) now UNBLOCKED (Chrome debug tab GitHub-authenticated on :9222): real-GitHub-UI Queue=Ready flip on a QueueDrainTestbed issue -> backend pickup; add REG-007.",
     "Task CLOSURE is a distinct, final human gate (never self-close)."
   ],
   "next_expected_artifacts": [
     "Testing/PASS-0006-CHECKLIST.json"
   ],
-  "updated_at": "2026-05-30T05:45:00-04:00"
+  "updated_at": "2026-05-30T08:35:00-04:00"
 }

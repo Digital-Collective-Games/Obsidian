@@ -1,8 +1,11 @@
 package queue
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"sort"
 	"strings"
 	"time"
@@ -499,6 +502,105 @@ func (p *RecordingPoker) DeliverWake(runID string) (bool, error) {
 // PokeCount / WakeCount are convenience accessors for tests/proof.
 func (p *RecordingPoker) PokeCount() int { return len(p.Pokes) }
 func (p *RecordingPoker) WakeCount() int { return len(p.Wakes) }
+
+// WakeTarget is what a run's poke needs to wake the headless claude agent: the
+// resolved claude executable, the agent's session id, and the owned worktree cwd.
+// The production poker resolves this from the O6 binding (run id -> bound session +
+// worktree); the watchdog itself never holds it (D3: external, invisible).
+type WakeTarget struct {
+	Executable   string
+	SessionID    string
+	WorktreePath string
+}
+
+// WakeRunner runs a wake command (executable, args, cwd) and reports whether it
+// exited 0. It is injected so DeliverWake is testable with a fake exit-0 runner (no
+// real claude process). The production runner execs `claude --resume`.
+type WakeRunner func(ctx context.Context, executable string, args []string, cwd string) (exitCode int, err error)
+
+// ClaudeResumePoker is the production Poker: Poke records the one wake/poke against
+// the run (via the injected record func, wired in production to taskrun.PokeRun), and
+// DeliverWake actually wakes the agent by running `claude --resume <session-id> -p
+// "<WakeMessage>"` in the worktree with the same env overrides as launch — the REAL
+// wake-input delivery (it resumes the same session and appends to the same
+// transcript). DeliverWake returns delivered=true only on exit 0.
+type ClaudeResumePoker struct {
+	// resolve maps a run id to its wake target (executable + session id + worktree).
+	resolve func(runID string) (WakeTarget, error)
+	// record records the one poke against the run (production: taskrun.PokeRun). May
+	// be nil (the wake is still delivered).
+	record func(runID string) error
+	// run executes the wake command. Required.
+	run WakeRunner
+	// ctx bounds each wake run. Nil uses context.Background.
+	ctx context.Context
+}
+
+// NewClaudeResumePoker builds the production poker. run is required; resolve maps the
+// run id to its wake target; record (optional) records the poke against run state.
+func NewClaudeResumePoker(resolve func(runID string) (WakeTarget, error), record func(runID string) error, run WakeRunner) *ClaudeResumePoker {
+	return &ClaudeResumePoker{resolve: resolve, record: record, run: run}
+}
+
+// Poke records the one wake/poke against the run (poke_worker_check follow-up). The
+// actual wake-input delivery happens in DeliverWake.
+func (p *ClaudeResumePoker) Poke(runID string) error {
+	if p.record == nil {
+		return nil
+	}
+	return p.record(runID)
+}
+
+// DeliverWake runs `claude --resume <session-id> -p "<WakeMessage>"` in the run's
+// worktree to actually wake the headless agent and append to its session transcript.
+// It returns delivered=true only when the resume exits 0.
+func (p *ClaudeResumePoker) DeliverWake(runID string) (bool, error) {
+	if p.resolve == nil || p.run == nil {
+		return false, nil
+	}
+	target, err := p.resolve(runID)
+	if err != nil {
+		return false, fmt.Errorf("resolve wake target for run %s: %w", runID, err)
+	}
+	exe, args, err := buildWakeCommand(target.Executable, target.SessionID, WakeMessage)
+	if err != nil {
+		return false, err
+	}
+	ctx := p.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	code, err := p.run(ctx, exe, args, target.WorktreePath)
+	if err != nil {
+		return false, fmt.Errorf("deliver wake to run %s: %w", runID, err)
+	}
+	return code == 0, nil
+}
+
+// RunClaudeWake is the production WakeRunner: it execs the claude resume-wake command
+// in cwd with the same env overrides as launch (claudeChildEnv) and returns its exit
+// code. Stdout/stderr are discarded (the wake's only durable effect is the transcript
+// append, which the watchdog detects on its next poll).
+func RunClaudeWake(ctx context.Context, executable string, args []string, cwd string) (int, error) {
+	cmd := exec.CommandContext(ctx, executable, args...)
+	cmd.Dir = cwd
+	cmd.Env = claudeChildEnv(os.Environ())
+	err := cmd.Run()
+	code := -1
+	if cmd.ProcessState != nil {
+		code = cmd.ProcessState.ExitCode()
+	}
+	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			// A non-zero exit is reported via the code, not as a runner error, so the
+			// poker can report delivered=false without treating it as a fault.
+			return code, nil
+		}
+		return code, err
+	}
+	return code, nil
+}
 
 // OSStatTranscript is the production TranscriptStat: a single os.Stat returning the
 // transcript file's size + mtime (the cheap O(1) sample LIVENESS-SIGNAL.md pins). A

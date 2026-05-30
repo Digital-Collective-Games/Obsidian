@@ -80,3 +80,41 @@ passes (the queue mirror strings match `taskrun/types.go` exactly).
 3. Wire launcher → `DiscoverSession` → `BindLaunchedSession` and the watchdog → a
    real gmail incident sink into the live consumer, then run the real-agent stall
    repro (the real-agent half of A5.3).
+
+## UPDATE 2026-05-30 — claude-only launcher: A5.1 + poke-wake now SOLVED
+
+Per the human directive "dispatch CLAUDE only, not codex" (HUMAN-DIRECTIVES), the
+launcher was converted to claude-only and the two PENDING items were resolved:
+
+- **A5.1 (HARD) — now PROVEN.** A real bounded top-level `claude` launched via the
+  launcher code spawned its OWN subagent. Independent QA re-derived it (session
+  `56ce837a-…`): `is_error=false`; transcript at the deterministic path
+  `~/.claude/projects/c--Agent-QueueDrainTestbed/56ce837a-….jsonl`; a subagent
+  transcript appeared at `…/56ce837a-…/subagents/agent-a771ef06….jsonl` (with
+  `SUBAGENT-OK`). The launched `claude -p` is top-level (not nested, not codex) and
+  spawns subagents once `CLAUDE_CODE_ENABLE_TASKS=1` overrides the host's `=0`.
+  F-O5-toplevel NOT triggered.
+- **Poke "actually wake" — now REAL.** `DeliverWake` runs
+  `claude --resume <session-id> -p "<nudge>"`; QA confirmed it appends to the SAME
+  transcript (21438→31519 bytes) and returns `delivered=true`. The previously
+  unsolved input-delivery mechanism (coordinator-review correction 3) is resolved.
+- **Deterministic binding** — the session id is set up front (`--session-id <uuid>`),
+  so the transcript path is computed deterministically (slug rule verified for both
+  `QueueDrainTestbed` and `CodexDashboard`); post-launch `DiscoverSession` retained
+  only as a verification fallback. The claude binary is resolved (env → PATH →
+  newest extension binary), never hardcoded. Codex dispatch fully removed (QA
+  grep-confirmed no `RuntimeCodex`/`codex exec`/`discoverCodexSession`).
+- AX.1: `go build`/`go vet`/`go test ./...` clean; new launcher/watchdog tests
+  substantive; churn = logic-only (gofmt clean).
+
+### What still remains for FULL O5 closure (integration)
+
+1. **Wire the launcher + watchdog into the live consumer dispatch path** so a
+   dispatched task actually launches the claude agent in its worktree and starts the
+   external watchdog (today the consumer dispatches via `taskrun.Service.Dispatch`
+   backend activities; the launcher/watchdog are built + unit/bounded-live proven but
+   not yet wired into that flow).
+2. **Full integrated real-agent stall → detect → resume-poke → escalate → (mocked)
+   email repro** (the real-agent half of A5.3) — all components are individually
+   proven (watchdog detect on a real transcript's mtime; resume-poke appends; incident
+   email assembly); this ties them together against a real launched claude.

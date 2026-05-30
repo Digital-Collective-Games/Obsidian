@@ -2,6 +2,7 @@ package queue
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -12,48 +13,39 @@ import (
 	"time"
 )
 
-// O5 (5a) top-level agent launcher + POST-LAUNCH session discovery.
+// O5 (5a) top-level CLAUDE agent launcher + deterministic session binding.
 //
-// The agent dispatched into an owned worktree MUST be a TOP-LEVEL process able to
-// spawn its OWN subagents (D3 / A5.1) — never a nested subagent. The only existing
-// agent-launch precedent (jobexec `codex exec`) is a blocking, non-interactive run
-// that captures NO session id. This launcher reuses that `codex exec` invocation
-// shape but adds the missing piece the coordinator review flagged (correction 2):
-// the launched agent's OWN session id + transcript path do NOT exist until AFTER
-// launch and CANNOT come from the backend's dispatch-time DeepContext (that holds
-// the BACKEND process's session env). So we discover them post-launch by scanning
-// the agent runtime's sessions dir for the newest session file created after the
-// launch instant whose recorded cwd matches the worktree.
+// Per the human directive "dispatch CLAUDE only, not codex" (2026-05-30, refines
+// D3): the dispatched queue agent is `claude` ONLY. The agent dispatched into an
+// owned worktree MUST be a TOP-LEVEL process able to spawn its OWN subagents via the
+// Agent tool (A5.1) — never a nested subagent, and never codex.
+//
+// The launched agent's session id is now known UP FRONT: we generate a UUID v4 and
+// pass it as `--session-id`, so claude writes its transcript at a DETERMINISTIC path
+// computed from (worktree, session-id) via the slug rule (no post-launch scan needed
+// to learn the id). DiscoverSession is retained ONLY as a verification fallback to
+// confirm the transcript file appeared at the computed path shortly after launch.
 //
 // internal/queue stays a leaf package: the launcher exposes plain inputs/outputs;
-// production (taskrun) maps the discovered session into the O6 binding (replacing
-// the dispatch-context placeholders) without this package importing taskrun.
+// production (taskrun) maps the up-front session id + computed transcript path into
+// the O6 binding without this package importing taskrun.
 
-// AgentRuntime selects which headless agent CLI is launched and which sessions
-// layout post-launch discovery scans.
-type AgentRuntime string
-
-const (
-	// RuntimeCodex launches `codex exec` and discovers rollout-*.jsonl under
-	// ~/.codex/sessions/YYYY/MM/DD/.
-	RuntimeCodex AgentRuntime = "codex"
-	// RuntimeClaude launches `claude` (headless) and discovers <session>.jsonl under
-	// ~/.claude/projects/<slug>/.
-	RuntimeClaude AgentRuntime = "claude"
-)
-
-// LaunchSpec is the input to launching a top-level agent in an owned worktree.
+// LaunchSpec is the input to launching a top-level claude agent in an owned worktree.
 type LaunchSpec struct {
-	// Runtime is the headless agent CLI to launch.
-	Runtime AgentRuntime
-	// Executable is the resolved agent CLI path (e.g. codex.exe). Required.
+	// Executable is the resolved claude CLI path. Optional: empty resolves via
+	// ResolveClaudeExecutable (configurable path/env, else the newest installed
+	// claude-code extension binary).
 	Executable string
 	// WorktreePath is the owned worktree the agent runs in (its cwd). Required.
 	WorktreePath string
 	// Prompt is the task instruction handed to the agent.
 	Prompt string
-	// SessionsRoot is the agent runtime's sessions root to scan for the launched
-	// session (~/.codex/sessions for codex; ~/.claude/projects for claude). Required.
+	// SessionID is the agent's session id. Optional: empty generates a UUID v4. It is
+	// passed to claude as --session-id, so it (and the transcript path) are known
+	// before launch.
+	SessionID string
+	// SessionsRoot is claude's projects root (~/.claude/projects) used by the
+	// DiscoverSession verification fallback. Optional.
 	SessionsRoot string
 	// Timeout bounds the launched process. Zero means no enforced timeout (callers
 	// in unattended contexts MUST set one). The launcher always returns once the
@@ -64,27 +56,35 @@ type LaunchSpec struct {
 	StderrPath string
 }
 
-// LaunchResult reports what the launcher started and discovered.
+// LaunchResult reports what the launcher started.
 type LaunchResult struct {
 	// PID is the launched agent process id.
 	PID int
-	// LaunchedAt is the instant just before the process started (the discovery
-	// floor: only session files created at/after this are the launched agent's).
+	// LaunchedAt is the instant just before the process started.
 	LaunchedAt time.Time
-	// SessionID is the launched agent's OWN session id, discovered post-launch.
+	// SessionID is the launched agent's session id (the one passed to --session-id;
+	// known UP FRONT, not discovered).
 	SessionID string
-	// TranscriptPath is the launched agent's OWN session transcript, discovered
-	// post-launch. This is the path the O5 watchdog stats and the O6 binding records
-	// (replacing the dispatch-context placeholders).
+	// TranscriptPath is the launched agent's session transcript, computed
+	// deterministically from (worktree, session-id). This is the path the O5 watchdog
+	// stats and the O6 binding records.
 	TranscriptPath string
+	// Command is the resolved executable + args (for proof/logging).
+	Command []string
 	// Exited / ExitCode report process completion (for a bounded demo run).
 	Exited   bool
 	ExitCode int
 }
 
-// buildAgentCommand builds the top-level agent command. For codex it mirrors the
-// jobexec `codex exec` invocation shape (non-interactive, bypassing sandbox in the
-// owned worktree). It is split out so the argument shape is unit-testable without
+// buildAgentCommand builds the top-level CLAUDE command (the VALIDATED invocation
+// proven on this machine to run headlessly and spawn its own subagent):
+//
+//	claude --session-id <UUID> -p "<prompt>" --permission-mode bypassPermissions \
+//	       --allowedTools "Agent" --output-format json
+//
+// run with cwd = the owned worktree. It is a top-level OS process (NOT a nested
+// subagent), so the agent is free to spawn its own subagents via the Agent tool
+// (A5.1 / D3). It is split out so the argument shape is unit-testable without
 // launching a process.
 func buildAgentCommand(spec LaunchSpec) (string, []string, error) {
 	if spec.Executable == "" {
@@ -93,29 +93,153 @@ func buildAgentCommand(spec LaunchSpec) (string, []string, error) {
 	if spec.WorktreePath == "" {
 		return "", nil, fmt.Errorf("launch: worktree path is empty")
 	}
-	switch spec.Runtime {
-	case RuntimeCodex:
-		return spec.Executable, []string{
-			"exec",
-			"--dangerously-bypass-approvals-and-sandbox",
-			"--skip-git-repo-check",
-			"--json",
-			"-C", spec.WorktreePath,
-			spec.Prompt,
-		}, nil
-	case RuntimeClaude:
-		return spec.Executable, []string{
-			"-p", spec.Prompt,
-			"--output-format", "stream-json",
-			"--verbose",
-		}, nil
-	default:
-		return "", nil, fmt.Errorf("launch: unsupported runtime %q", spec.Runtime)
+	if spec.SessionID == "" {
+		return "", nil, fmt.Errorf("launch: session id is empty")
 	}
+	return spec.Executable, []string{
+		"--session-id", spec.SessionID,
+		"-p", spec.Prompt,
+		"--permission-mode", "bypassPermissions",
+		"--allowedTools", "Agent",
+		"--output-format", "json",
+	}, nil
 }
 
-// Launcher launches a top-level agent and discovers its session post-launch. now is
-// injected so the discovery floor (LaunchedAt) is testable without real wall time.
+// WakeMessage is the fixed nudge delivered to a stalled agent on the one poke (D4):
+// either write a durable stop update or resume work.
+const WakeMessage = "Write a durable stop update — set Human Needed=Yes or request closure — or get back to work."
+
+// buildWakeCommand builds the VALIDATED claude resume-wake invocation that actually
+// delivers input to a stalled headless agent and appends to its SAME session
+// transcript (proven on this machine):
+//
+//	claude --resume <session-id> -p "<wake message>"
+//
+// run with cwd = the owned worktree and the same env overrides as launch
+// (claudeChildEnv). It is split out so the wake argument shape is unit-testable
+// without launching a process.
+func buildWakeCommand(executable, sessionID, message string) (string, []string, error) {
+	if executable == "" {
+		return "", nil, fmt.Errorf("wake: executable is empty")
+	}
+	if sessionID == "" {
+		return "", nil, fmt.Errorf("wake: session id is empty")
+	}
+	return executable, []string{
+		"--resume", sessionID,
+		"-p", message,
+	}, nil
+}
+
+// claudeChildEnv returns the environment for a dispatched claude child: the parent's
+// environment with the critical overrides the validated invocation requires —
+//   - CLAUDE_CODE_ENABLE_TASKS=1 (the host sets =0, which disables the Agent/subagent
+//     tool the dispatched agent MUST be able to use; A5.1),
+//   - CLAUDE_CODE_SESSION_ID and CLAUDE_CODE_ENTRYPOINT UNSET (so the child does not
+//     inherit the parent backend's session/entrypoint),
+//
+// and the rest of the environment passed through. It is split out so the override
+// rule is unit-testable without launching a process.
+func claudeChildEnv(parent []string) []string {
+	out := make([]string, 0, len(parent)+1)
+	for _, kv := range parent {
+		key := kv
+		if i := strings.IndexByte(kv, '='); i >= 0 {
+			key = kv[:i]
+		}
+		switch key {
+		case "CLAUDE_CODE_ENABLE_TASKS", "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_ENTRYPOINT":
+			// Dropped here; ENABLE_TASKS is re-added below, the others stay unset.
+			continue
+		}
+		out = append(out, kv)
+	}
+	out = append(out, "CLAUDE_CODE_ENABLE_TASKS=1")
+	return out
+}
+
+// ResolveClaudeExecutable resolves the claude CLI path. Resolution order:
+//  1. the configured CODEX_ORCHESTRATION_CLAUDE_BIN env var (explicit override),
+//  2. `claude` on PATH,
+//  3. the NEWEST installed `anthropic.claude-code-*/resources/native-binary/claude.exe`
+//     found under the VS Code / VS Code-OSS / Cursor extensions dirs.
+//
+// It errors clearly if none is found (it never silently returns a bare "claude" that
+// would then fail at launch). The versioned extension dir is resolved, NOT hardcoded.
+func ResolveClaudeExecutable() (string, error) {
+	if configured := strings.TrimSpace(os.Getenv("CODEX_ORCHESTRATION_CLAUDE_BIN")); configured != "" {
+		return configured, nil
+	}
+	if path, err := exec.LookPath("claude"); err == nil {
+		return path, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve claude: user home: %w", err)
+	}
+	var candidates []string
+	extDirs := []string{
+		filepath.Join(home, ".vscode-oss", "extensions"),
+		filepath.Join(home, ".vscode", "extensions"),
+		filepath.Join(home, ".cursor", "extensions"),
+	}
+	for _, ext := range extDirs {
+		matches, _ := filepath.Glob(filepath.Join(ext, "anthropic.claude-code-*", "resources", "native-binary", "claude.exe"))
+		candidates = append(candidates, matches...)
+	}
+	if len(candidates) == 0 {
+		return "", fmt.Errorf("resolve claude: no claude executable found (set CODEX_ORCHESTRATION_CLAUDE_BIN, put claude on PATH, or install the claude-code extension)")
+	}
+	// Lexical sort puts the newest version dir last (e.g. ...-2.1.158-... wins).
+	sort.Strings(candidates)
+	return candidates[len(candidates)-1], nil
+}
+
+// newSessionID generates a random UUID v4 string for --session-id.
+func newSessionID() (string, error) {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", fmt.Errorf("generate session id: %w", err)
+	}
+	b[6] = (b[6] & 0x0f) | 0x40 // version 4
+	b[8] = (b[8] & 0x3f) | 0x80 // variant 10
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16]), nil
+}
+
+// claudeProjectSlug computes claude's project-dir slug for a worktree cwd: the
+// absolute path with the drive letter lowercased and every ':' , '\\' and '/'
+// replaced by '-'. Verified on this machine:
+//
+//	C:\Agent\QueueDrainTestbed -> c--Agent-QueueDrainTestbed
+//	C:\Agent\CodexDashboard    -> c--Agent-CodexDashboard
+func claudeProjectSlug(worktreePath string) string {
+	p := strings.TrimSpace(worktreePath)
+	// Lowercase the drive letter (e.g. "C:" -> "c:") without touching the rest.
+	if len(p) >= 2 && p[1] == ':' {
+		p = strings.ToLower(p[:1]) + p[1:]
+	}
+	repl := strings.NewReplacer(":", "-", "\\", "-", "/", "-")
+	return repl.Replace(p)
+}
+
+// ClaudeTranscriptPath computes the DETERMINISTIC transcript path for a claude run
+// from its worktree cwd + session id:
+//
+//	~/.claude/projects/<slug>/<session-id>.jsonl
+//
+// where <slug> = claudeProjectSlug(worktreePath). This is the PRIMARY binding source
+// (the watchdog stats it; the O6 binding records it) — known before launch because
+// the session id is set up front.
+func ClaudeTranscriptPath(worktreePath, sessionID string) (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("claude transcript path: user home: %w", err)
+	}
+	return filepath.Join(home, ".claude", "projects", claudeProjectSlug(worktreePath), sessionID+".jsonl"), nil
+}
+
+// Launcher launches a top-level claude agent. now is injected so LaunchedAt is
+// testable without real wall time.
 type Launcher struct {
 	now func() time.Time
 }
@@ -128,17 +252,40 @@ func NewLauncher(now func() time.Time) *Launcher {
 	return &Launcher{now: now}
 }
 
-// Start launches the agent as a top-level process in its worktree and (optionally,
-// when wait is true) waits for it to exit within the spec's timeout, then discovers
-// the launched session. It does NOT launch the agent as a nested subagent: it is a
-// distinct OS process via exec, exactly like jobexec's codex exec, so the agent is
-// free to spawn its own subagents (A5.1).
+// Start launches claude as a top-level process in its worktree and (optionally, when
+// wait is true) waits for it to exit within the spec's timeout. The session id is
+// generated up front (if not supplied) and the transcript path is computed
+// deterministically, so the binding is known before the process even appends.
+//
+// It does NOT launch claude as a nested subagent: it is a distinct OS process via
+// exec, so the agent is free to spawn its OWN subagents via the Agent tool (A5.1).
+// The child env applies the validated overrides (claudeChildEnv).
 //
 // SAFETY: the caller is responsible for bounding what the agent may do (a trivial
 // prompt + a hard timeout + a throwaway worktree). Start never pushes and never acts
 // outside the worktree it is given.
 func (l *Launcher) Start(ctx context.Context, spec LaunchSpec, wait bool) (LaunchResult, error) {
+	if spec.Executable == "" {
+		resolved, err := ResolveClaudeExecutable()
+		if err != nil {
+			return LaunchResult{}, err
+		}
+		spec.Executable = resolved
+	}
+	if spec.SessionID == "" {
+		id, err := newSessionID()
+		if err != nil {
+			return LaunchResult{}, err
+		}
+		spec.SessionID = id
+	}
+
 	executable, args, err := buildAgentCommand(spec)
+	if err != nil {
+		return LaunchResult{}, err
+	}
+
+	transcriptPath, err := ClaudeTranscriptPath(spec.WorktreePath, spec.SessionID)
 	if err != nil {
 		return LaunchResult{}, err
 	}
@@ -147,6 +294,7 @@ func (l *Launcher) Start(ctx context.Context, spec LaunchSpec, wait bool) (Launc
 
 	cmd := exec.CommandContext(ctx, executable, args...)
 	cmd.Dir = spec.WorktreePath
+	cmd.Env = claudeChildEnv(os.Environ())
 	if spec.StdoutPath != "" {
 		f, err := os.Create(spec.StdoutPath)
 		if err != nil {
@@ -167,18 +315,18 @@ func (l *Launcher) Start(ctx context.Context, spec LaunchSpec, wait bool) (Launc
 	if err := cmd.Start(); err != nil {
 		return LaunchResult{}, fmt.Errorf("start agent: %w", err)
 	}
-	result := LaunchResult{PID: cmd.Process.Pid, LaunchedAt: launchedAt}
+	result := LaunchResult{
+		PID:            cmd.Process.Pid,
+		LaunchedAt:     launchedAt,
+		SessionID:      spec.SessionID,
+		TranscriptPath: transcriptPath,
+		Command:        append([]string{executable}, args...),
+	}
 
 	if wait {
 		waitErr := waitWithTimeout(cmd, spec.Timeout)
 		result.Exited = true
 		result.ExitCode = exitCodeOf(cmd)
-		// A timeout/non-zero exit is reported to the caller; discovery still runs so
-		// even a bounded demo can confirm a session file appeared.
-		if disc, derr := DiscoverSession(spec.Runtime, spec.SessionsRoot, spec.WorktreePath, launchedAt); derr == nil {
-			result.SessionID = disc.SessionID
-			result.TranscriptPath = disc.TranscriptPath
-		}
 		if waitErr != nil {
 			return result, waitErr
 		}
@@ -213,112 +361,26 @@ func exitCodeOf(cmd *exec.Cmd) int {
 	return cmd.ProcessState.ExitCode()
 }
 
-// DiscoveredSession is the result of post-launch session discovery.
+// DiscoveredSession is the result of the post-launch session verification fallback.
 type DiscoveredSession struct {
 	SessionID      string
 	TranscriptPath string
 }
 
-// DiscoverSession finds the launched agent's OWN session file post-launch. It scans
-// the runtime's sessions layout for the newest session file created at/after
-// launchedAt whose recorded cwd matches the worktree. This is the missing piece the
-// dispatch-time DeepContext cannot supply (correction 2): the launched agent's
-// session id/transcript do not exist until after launch.
+// DiscoverSession is a VERIFICATION FALLBACK: it confirms claude wrote a transcript
+// for the launched run by scanning ~/.claude/projects/<slug>/ for the newest
+// <session>.jsonl created at/after launchedAt whose recorded cwd matches the worktree
+// (skipping per-subagent transcripts under .../<session>/subagents/). The PRIMARY
+// binding source is now the up-front session id + ClaudeTranscriptPath; this exists
+// only to confirm the file appeared at the computed path shortly after launch.
 //
-//   - codex: rollout-*.jsonl under sessionsRoot/YYYY/MM/DD/; the first line is a
-//     session_meta event carrying payload.id (session id) and payload.cwd.
-//   - claude: <session>.jsonl under sessionsRoot/<slug>/; each line carries cwd and
-//     sessionId. The slug for a cwd is the path with separators replaced by '-'.
-//
-// It returns an error when no matching session file appears (so the caller does not
-// silently bind an empty/placeholder session).
-func DiscoverSession(runtime AgentRuntime, sessionsRoot, worktreePath string, launchedAt time.Time) (DiscoveredSession, error) {
-	switch runtime {
-	case RuntimeCodex:
-		return discoverCodexSession(sessionsRoot, worktreePath, launchedAt)
-	case RuntimeClaude:
-		return discoverClaudeSession(sessionsRoot, worktreePath, launchedAt)
-	default:
-		return DiscoveredSession{}, fmt.Errorf("discover: unsupported runtime %q", runtime)
-	}
-}
-
-// candidate is a discovered session file with the facts used to rank it.
-type candidate struct {
-	path      string
-	sessionID string
-	createdAt time.Time // file mtime (creation proxy for an append-only just-written file)
-}
-
-func discoverCodexSession(sessionsRoot, worktreePath string, launchedAt time.Time) (DiscoveredSession, error) {
+// It returns an error when no matching session file appears (so the caller can
+// surface a launch that produced no transcript).
+func DiscoverSession(sessionsRoot, worktreePath string, launchedAt time.Time) (DiscoveredSession, error) {
 	var candidates []candidate
 	walkErr := filepath.WalkDir(sessionsRoot, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return nil // tolerate unreadable subtrees
-		}
-		if d.IsDir() {
-			return nil
-		}
-		name := d.Name()
-		if !strings.HasPrefix(name, "rollout-") || !strings.HasSuffix(name, ".jsonl") {
-			return nil
-		}
-		info, err := d.Info()
-		if err != nil {
-			return nil
-		}
-		// Only files touched at/after the launch instant are the launched session.
-		if info.ModTime().Before(launchedAt) {
-			return nil
-		}
-		id, cwd, ok := readCodexSessionMeta(path)
-		if !ok {
-			return nil
-		}
-		if !sameRoot(cwd, worktreePath) {
-			return nil
-		}
-		candidates = append(candidates, candidate{path: path, sessionID: id, createdAt: info.ModTime()})
-		return nil
-	})
-	if walkErr != nil {
-		return DiscoveredSession{}, fmt.Errorf("scan codex sessions %s: %w", sessionsRoot, walkErr)
-	}
-	return pickNewest(candidates, "codex", worktreePath)
-}
-
-// readCodexSessionMeta reads the first line of a rollout file and extracts the
-// session id (payload.id) and cwd (payload.cwd) from the session_meta event.
-func readCodexSessionMeta(path string) (id, cwd string, ok bool) {
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return "", "", false
-	}
-	line := raw
-	if idx := indexByte(raw, '\n'); idx >= 0 {
-		line = raw[:idx]
-	}
-	var head struct {
-		Type    string `json:"type"`
-		Payload struct {
-			ID  string `json:"id"`
-			Cwd string `json:"cwd"`
-		} `json:"payload"`
-	}
-	if err := json.Unmarshal(line, &head); err != nil {
-		return "", "", false
-	}
-	if head.Type != "session_meta" || head.Payload.ID == "" {
-		return "", "", false
-	}
-	return head.Payload.ID, head.Payload.Cwd, true
-}
-
-func discoverClaudeSession(sessionsRoot, worktreePath string, launchedAt time.Time) (DiscoveredSession, error) {
-	var candidates []candidate
-	walkErr := filepath.WalkDir(sessionsRoot, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return nil
 		}
 		if d.IsDir() {
 			return nil
@@ -344,7 +406,14 @@ func discoverClaudeSession(sessionsRoot, worktreePath string, launchedAt time.Ti
 	if walkErr != nil {
 		return DiscoveredSession{}, fmt.Errorf("scan claude sessions %s: %w", sessionsRoot, walkErr)
 	}
-	return pickNewest(candidates, "claude", worktreePath)
+	return pickNewest(candidates, worktreePath)
+}
+
+// candidate is a discovered session file with the facts used to rank it.
+type candidate struct {
+	path      string
+	sessionID string
+	createdAt time.Time // file mtime (creation proxy for an append-only just-written file)
 }
 
 // readClaudeSessionMeta reads the first decodable line of a claude transcript and
@@ -374,9 +443,9 @@ func readClaudeSessionMeta(path string) (id, cwd string, ok bool) {
 
 // pickNewest returns the newest matching candidate (the launched session) or an
 // error naming what was scanned when none matched.
-func pickNewest(candidates []candidate, runtime, worktreePath string) (DiscoveredSession, error) {
+func pickNewest(candidates []candidate, worktreePath string) (DiscoveredSession, error) {
 	if len(candidates) == 0 {
-		return DiscoveredSession{}, fmt.Errorf("no %s session file created after launch matched worktree %s", runtime, worktreePath)
+		return DiscoveredSession{}, fmt.Errorf("no claude session file created after launch matched worktree %s", worktreePath)
 	}
 	sort.Slice(candidates, func(i, j int) bool { return candidates[i].createdAt.After(candidates[j].createdAt) })
 	best := candidates[0]
@@ -387,15 +456,6 @@ func pickNewest(candidates []candidate, runtime, worktreePath string) (Discovere
 // differences (reusing the manifest's normalizeRoot rules).
 func sameRoot(a, b string) bool {
 	return normalizeRoot(a) == normalizeRoot(b)
-}
-
-func indexByte(b []byte, c byte) int {
-	for i := range b {
-		if b[i] == c {
-			return i
-		}
-	}
-	return -1
 }
 
 func splitLines(b []byte) [][]byte {

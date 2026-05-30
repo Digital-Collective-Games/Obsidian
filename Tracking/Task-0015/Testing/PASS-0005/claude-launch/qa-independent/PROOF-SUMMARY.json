@@ -1,0 +1,27 @@
+{
+  "is_error": false,
+  "launch_command": [
+    "C:\\Users\\gregs\\.vscode-oss\\extensions\\anthropic.claude-code-2.1.158-win32-x64\\resources\\native-binary\\claude.exe",
+    "--session-id",
+    "56ce837a-2df5-48e8-90f5-b125fe8e7c46",
+    "-p",
+    "Use the Agent tool to launch exactly one general-purpose subagent that replies SUBAGENT-OK, then reply DONE and stop. Do not modify files.",
+    "--permission-mode",
+    "bypassPermissions",
+    "--allowedTools",
+    "Agent",
+    "--output-format",
+    "json"
+  ],
+  "recorded_at": "2026-05-30T12:22:40Z",
+  "result": "DONE",
+  "session_id": "56ce837a-2df5-48e8-90f5-b125fe8e7c46",
+  "subagent_transcripts": [
+    "C:\\Users\\gregs\\.claude\\projects\\c--Agent-QueueDrainTestbed\\56ce837a-2df5-48e8-90f5-b125fe8e7c46\\subagents\\agent-a771ef06abe058724.jsonl",
+    "C:\\Users\\gregs\\.claude\\projects\\c--Agent-QueueDrainTestbed\\56ce837a-2df5-48e8-90f5-b125fe8e7c46\\subagents\\agent-a771ef06abe058724.meta.json"
+  ],
+  "transcript_after_launch_bytes": 21438,
+  "transcript_after_wake_bytes": 31519,
+  "transcript_path": "C:\\Users\\gregs\\.claude\\projects\\c--Agent-QueueDrainTestbed\\56ce837a-2df5-48e8-90f5-b125fe8e7c46.jsonl",
+  "wake_delivered": true
+}

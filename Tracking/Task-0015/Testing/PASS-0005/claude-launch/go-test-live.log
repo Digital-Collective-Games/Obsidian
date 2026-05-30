@@ -1,0 +1,9 @@
+=== RUN   TestLiveClaudeLaunchA51Smoke
+    launchlive_test.go:57: launch: pid=45460 session=fc52a7a0-1525-468c-abca-24afc027c010 transcript=C:\Users\gregs\.claude\projects\c--Agent-QueueDrainTestbed\fc52a7a0-1525-468c-abca-24afc027c010.jsonl exit=0 cmd=[C:\Users\gregs\.vscode-oss\extensions\anthropic.claude-code-2.1.158-win32-x64\resources\native-binary\claude.exe --session-id fc52a7a0-1525-468c-abca-24afc027c010 -p Use the Agent tool to launch exactly one general-purpose subagent that replies SUBAGENT-OK, then reply DONE and stop. Do not modify files. --permission-mode bypassPermissions --allowedTools Agent --output-format json]
+    launchlive_test.go:75: claude json: session_id=fc52a7a0-1525-468c-abca-24afc027c010 is_error=false result="The subagent replied `SUBAGENT-OK`.\n\nDONE"
+    launchlive_test.go:89: transcript at deterministic path: C:\Users\gregs\.claude\projects\c--Agent-QueueDrainTestbed\fc52a7a0-1525-468c-abca-24afc027c010.jsonl (21335 bytes)
+    launchlive_test.go:101: subagent transcript(s): [C:\Users\gregs\.claude\projects\c--Agent-QueueDrainTestbed\fc52a7a0-1525-468c-abca-24afc027c010\subagents\agent-a9ef1669c2c4f16af.jsonl C:\Users\gregs\.claude\projects\c--Agent-QueueDrainTestbed\fc52a7a0-1525-468c-abca-24afc027c010\subagents\agent-a9ef1669c2c4f16af.meta.json]
+    launchlive_test.go:130: transcript size: after_launch=21335 after_wake=32949
+--- PASS: TestLiveClaudeLaunchA51Smoke (36.47s)
+PASS
+ok  	github.com/gregsemple2003/CodexDesktop/backend/orchestration/internal/queue	36.555s

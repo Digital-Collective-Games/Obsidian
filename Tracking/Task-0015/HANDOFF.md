@@ -98,10 +98,15 @@
    re-derived the watchdog live against a real transcript: A5.2/A5.4/A5.5 (HARD) +
    A5.3-watchdog-half PASS, F-O5-signal/parked not triggered, `go test` clean —
    [Testing/PASS-0005-AUDIT.md](./Testing/PASS-0005-AUDIT.md).
-   **PENDING SUPERVISED (honestly deferred, not faked):** A5.1 (HARD — real
-   top-level agent spawning its own subagent: cannot be made bounded-safe
-   unattended) and the poke "actually wake" input-delivery (no mechanism exists;
-   `DeliverWake`=false). See the PASS-0005 checklist blockers.
+   **UPDATE 2026-05-30 — claude-only launcher (committed): A5.1 + poke-wake SOLVED.**
+   Per the "dispatch CLAUDE only" directive, the launcher is now claude-only (codex
+   path removed). **A5.1 (HARD) PROVEN**: a real bounded top-level `claude -p`
+   launched via the launcher spawned its own subagent (subagent transcript present);
+   session id set up front → deterministic transcript path. **Poke-wake REAL**:
+   `DeliverWake` = `claude --resume <id> -p "<nudge>"`, QA-confirmed to append to the
+   same transcript. Independent QA re-derived both. Remaining for FULL O5 closure:
+   (a) wire the launcher + watchdog into the live consumer dispatch path; (b) a full
+   integrated real-agent stall→detect→resume-poke→email repro. See PASS-0005 checklist.
 8. PENDING (NEEDS HUMAN): **PASS-0006** (regression) — the no-proxy real-GitHub-UI
    A3.1 end-to-end via the Chrome debug tab flipping `Queue=Ready` on a
    `QueueDrainTestbed` issue → backend pickup; add REG-007 to `REGRESSION.md`.

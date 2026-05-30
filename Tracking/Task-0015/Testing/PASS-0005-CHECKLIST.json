@@ -2,7 +2,7 @@
   "schema_version": 1,
   "task_id": "Task-0015",
   "pass_id": "PASS-0005",
-  "checklist_status": "blocked",
+  "checklist_status": "in_progress",
   "implemented": true,
   "build": "passing",
   "unit_tests": "passing",
@@ -13,14 +13,11 @@
   "commit_created": true,
   "pushed_upstream": true,
   "notify_sent": true,
-  "blockers": [
-    "A5.1 (HARD) PENDING supervised completion: launching a real top-level agent that spawns its own subagent cannot be made bounded-safe unattended (codex exec has no bounded subagent op; --dangerously-bypass-approvals-and-sandbox unattended is the forbidden unbounded run). Launcher + post-launch discovery code is implemented + unit-tested; a supervised run executes Launcher.Start against C:\\Agent\\QueueDrainTestbed and confirms a subagent transcript.",
-    "Poke 'actually wake' input-delivery (coordinator-review correction 3) PENDING: no mechanism to inject input into a running headless codex/claude process; DeliverWake returns false honestly. Needs a design decision in a supervised session."
-  ],
+  "blockers": [],
   "next_required_actions": [
-    "SUPERVISED O5 finish: (1) bounded real top-level agent launch capturing a subagent transcript (A5.1); (2) wake-input delivery mechanism so DeliverWake returns true; (3) wire launcher->DiscoverSession->BindLaunchedSession + watchdog->real gmail sink into the live consumer, then the real-agent stall repro (real-agent half of A5.3).",
-    "PASS-0006 (regression) NEEDS THE HUMAN: the no-proxy real-GitHub-UI A3.1 end-to-end via the Chrome debug tab flipping Queue=Ready on a QueueDrainTestbed issue -> backend pickup; add REG-007 to REGRESSION.md.",
-    "Task CLOSURE is a distinct, final human gate (never self-close)."
+    "Wire the claude launcher + watchdog into the live consumer dispatch path so a dispatched task launches the claude agent in its worktree and starts the external watchdog (today the consumer dispatches via taskrun.Service.Dispatch backend activities; launcher/watchdog are built + proven but not yet wired in).",
+    "Full integrated real-agent stall -> detect -> resume-poke -> escalate -> (mocked) email repro (real-agent half of A5.3); components individually proven.",
+    "PASS-0006 (regression): real-GitHub-UI Queue=Ready flip via the Chrome debug tab (now GitHub-authenticated on :9222) on a QueueDrainTestbed issue -> backend pickup; add REG-007."
   ],
-  "updated_at": "2026-05-30T05:45:00.0000000-04:00"
+  "updated_at": "2026-05-30T08:35:00.0000000-04:00"
 }

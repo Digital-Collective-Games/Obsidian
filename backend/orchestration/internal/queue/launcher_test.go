@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -15,117 +16,164 @@ func jsonStr(s string) string {
 	return string(b)
 }
 
-// buildAgentCommand must produce a TOP-LEVEL codex exec invocation (not a nested
-// subagent) in the worktree, mirroring the jobexec precedent so the launched agent
-// can spawn its own subagents (A5.1 / D3).
-func TestBuildAgentCommandCodexIsTopLevelExec(t *testing.T) {
+// buildAgentCommand must produce a TOP-LEVEL CLAUDE invocation (not codex, not a
+// nested subagent): `claude --session-id <id> -p <prompt> --permission-mode
+// bypassPermissions --allowedTools Agent --output-format json` so the launched agent
+// can spawn its own subagents via the Agent tool (A5.1 / D3; dispatch-claude-only).
+func TestBuildAgentCommandIsTopLevelClaude(t *testing.T) {
 	exe, args, err := buildAgentCommand(LaunchSpec{
-		Runtime:      RuntimeCodex,
-		Executable:   `C:\codex.exe`,
-		WorktreePath: `C:\Agent\QueueDrainTestbed\.owned\w`,
+		Executable:   `C:\claude.exe`,
+		WorktreePath: `C:\Agent\QueueDrainTestbed`,
+		SessionID:    "11111111-2222-4333-8444-555555555555",
 		Prompt:       "do the bounded task",
 	})
 	if err != nil {
-		t.Fatalf("build codex command: %v", err)
+		t.Fatalf("build claude command: %v", err)
 	}
-	if exe != `C:\codex.exe` {
+	if exe != `C:\claude.exe` {
 		t.Fatalf("executable = %q", exe)
 	}
-	// It must be `codex exec ... -C <worktree> <prompt>` (a top-level process), and
-	// must NOT contain any subagent/nested flag.
-	if args[0] != "exec" {
-		t.Fatalf("expected top-level `exec`, got args %v", args)
-	}
-	foundCwd := false
-	for i, a := range args {
-		if a == "-C" && i+1 < len(args) && args[i+1] == `C:\Agent\QueueDrainTestbed\.owned\w` {
-			foundCwd = true
+	// It must NOT be codex (no `exec` subcommand, no codex-only flags).
+	for _, bad := range []string{"exec", "--dangerously-bypass-approvals-and-sandbox", "--skip-git-repo-check", "-C"} {
+		for _, a := range args {
+			if a == bad {
+				t.Fatalf("claude command must not contain codex flag %q: %v", bad, args)
+			}
 		}
 	}
-	if !foundCwd {
-		t.Fatalf("command did not run in the owned worktree: %v", args)
+	joined := strings.Join(args, " ")
+	for _, want := range []string{
+		"--session-id 11111111-2222-4333-8444-555555555555",
+		"-p do the bounded task",
+		"--permission-mode bypassPermissions",
+		"--allowedTools Agent",
+		"--output-format json",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("claude command missing %q: %v", want, args)
+		}
 	}
-	if args[len(args)-1] != "do the bounded task" {
-		t.Fatalf("prompt not last arg: %v", args)
+	// --allowedTools "Agent" (subagent tool), NOT a nested-subagent launch flag.
+	foundAllowed := false
+	for i, a := range args {
+		if a == "--allowedTools" && i+1 < len(args) && args[i+1] == "Agent" {
+			foundAllowed = true
+		}
+	}
+	if !foundAllowed {
+		t.Fatalf("expected --allowedTools Agent (top-level able to spawn subagents): %v", args)
 	}
 }
 
 func TestBuildAgentCommandValidatesInputs(t *testing.T) {
-	if _, _, err := buildAgentCommand(LaunchSpec{Runtime: RuntimeCodex, WorktreePath: "x"}); err == nil {
+	if _, _, err := buildAgentCommand(LaunchSpec{WorktreePath: "x", SessionID: "s"}); err == nil {
 		t.Fatal("expected error on empty executable")
 	}
-	if _, _, err := buildAgentCommand(LaunchSpec{Runtime: RuntimeCodex, Executable: "x"}); err == nil {
+	if _, _, err := buildAgentCommand(LaunchSpec{Executable: "x", SessionID: "s"}); err == nil {
 		t.Fatal("expected error on empty worktree")
 	}
-	if _, _, err := buildAgentCommand(LaunchSpec{Runtime: "bogus", Executable: "x", WorktreePath: "y"}); err == nil {
-		t.Fatal("expected error on unsupported runtime")
+	if _, _, err := buildAgentCommand(LaunchSpec{Executable: "x", WorktreePath: "y"}); err == nil {
+		t.Fatal("expected error on empty session id")
 	}
 }
 
-// writeCodexRollout writes a synthetic codex rollout-*.jsonl with the given session
-// id + cwd in its session_meta header line, and sets its mtime.
-func writeCodexRollout(t *testing.T, dir, name, sessionID, cwd string, mtime time.Time) string {
-	t.Helper()
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
+// claudeProjectSlug / ClaudeTranscriptPath compute the DETERMINISTIC transcript path
+// from (worktree, session-id): the drive letter is lowercased and ':','\\','/' become
+// '-'. Both examples were verified on this machine.
+func TestClaudeProjectSlugVerifiedExamples(t *testing.T) {
+	cases := []struct {
+		worktree string
+		want     string
+	}{
+		{`C:\Agent\QueueDrainTestbed`, "c--Agent-QueueDrainTestbed"},
+		{`C:\Agent\CodexDashboard`, "c--Agent-CodexDashboard"},
 	}
-	path := filepath.Join(dir, name)
-	body := `{"timestamp":"2026-05-30T04:23:40.147Z","type":"session_meta","payload":{"id":` + jsonStr(sessionID) + `,"cwd":` + jsonStr(cwd) + `,"originator":"codex_exec","source":"exec"}}
-{"timestamp":"2026-05-30T04:23:41.000Z","type":"event_msg","payload":{}}
-`
-	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
-		t.Fatal(err)
+	for _, c := range cases {
+		if got := claudeProjectSlug(c.worktree); got != c.want {
+			t.Fatalf("slug(%q) = %q, want %q", c.worktree, got, c.want)
+		}
 	}
-	if err := os.Chtimes(path, mtime, mtime); err != nil {
-		t.Fatal(err)
-	}
-	return path
 }
 
-// POST-LAUNCH discovery (correction 2): the launched agent's OWN session id +
-// transcript path are discovered from the sessions dir AFTER launch — the newest
-// rollout created at/after the launch instant whose cwd matches the worktree. This
-// is unit-tested against a SYNTHETIC sessions dir (no real agent).
-func TestDiscoverCodexSessionPicksNewestAfterLaunchMatchingWorktree(t *testing.T) {
-	root := t.TempDir()
-	worktree := `C:\Agent\QueueDrainTestbed\.owned\w`
-	launchedAt := time.Date(2026, 5, 30, 8, 0, 0, 0, time.UTC)
-
-	day := filepath.Join(root, "2026", "05", "30")
-
-	// (a) An OLD session in the same worktree, created BEFORE launch -> ignored.
-	writeCodexRollout(t, day, "rollout-old.jsonl", "old-session", worktree, launchedAt.Add(-time.Hour))
-	// (b) A session for a DIFFERENT cwd created after launch -> ignored.
-	writeCodexRollout(t, day, "rollout-other.jsonl", "other-session", `C:\Some\Other\Dir`, launchedAt.Add(2*time.Minute))
-	// (c) The launched agent's session: same worktree, created AFTER launch.
-	wantPath := writeCodexRollout(t, day, "rollout-new.jsonl", "new-session-id", worktree, launchedAt.Add(1*time.Minute))
-	// (d) An even-newer session in the same worktree (re-launch); newest wins.
-	wantPath = writeCodexRollout(t, day, "rollout-newest.jsonl", "newest-session-id", worktree, launchedAt.Add(3*time.Minute))
-
-	got, err := DiscoverSession(RuntimeCodex, root, worktree, launchedAt)
+func TestClaudeTranscriptPathIsDeterministic(t *testing.T) {
+	home, err := os.UserHomeDir()
 	if err != nil {
-		t.Fatalf("discover: %v", err)
+		t.Fatalf("home: %v", err)
 	}
-	if got.SessionID != "newest-session-id" {
-		t.Fatalf("session id = %q, want newest-session-id", got.SessionID)
+	got, err := ClaudeTranscriptPath(`C:\Agent\QueueDrainTestbed`, "session-xyz")
+	if err != nil {
+		t.Fatalf("transcript path: %v", err)
 	}
-	if got.TranscriptPath != wantPath {
-		t.Fatalf("transcript path = %q, want %q", got.TranscriptPath, wantPath)
+	want := filepath.Join(home, ".claude", "projects", "c--Agent-QueueDrainTestbed", "session-xyz.jsonl")
+	if got != want {
+		t.Fatalf("transcript path = %q, want %q", got, want)
 	}
 }
 
-// When no session file appears after launch, discovery returns an error so the
-// caller never binds an empty/placeholder session (it must surface the failure).
-func TestDiscoverCodexSessionErrorsWhenNoneMatch(t *testing.T) {
-	root := t.TempDir()
-	worktree := `C:\Agent\QueueDrainTestbed\.owned\w`
-	launchedAt := time.Date(2026, 5, 30, 8, 0, 0, 0, time.UTC)
+// claudeChildEnv must FORCE CLAUDE_CODE_ENABLE_TASKS=1 (so the dispatched agent keeps
+// the Agent/subagent tool the host disables with =0), UNSET CLAUDE_CODE_SESSION_ID and
+// CLAUDE_CODE_ENTRYPOINT (so the child does not inherit the parent's), and pass the
+// rest of the environment through.
+func TestClaudeChildEnvOverrides(t *testing.T) {
+	parent := []string{
+		"PATH=C:\\bin",
+		"CLAUDE_CODE_ENABLE_TASKS=0",
+		"CLAUDE_CODE_SESSION_ID=parent-session",
+		"CLAUDE_CODE_ENTRYPOINT=cli",
+		"SOME_OTHER=keepme",
+	}
+	got := claudeChildEnv(parent)
 
-	// Only a pre-launch session exists.
-	writeCodexRollout(t, filepath.Join(root, "2026", "05", "30"), "rollout-old.jsonl", "old", worktree, launchedAt.Add(-time.Minute))
+	enableTasks := 0
+	for _, kv := range got {
+		switch {
+		case strings.HasPrefix(kv, "CLAUDE_CODE_ENABLE_TASKS="):
+			enableTasks++
+			if kv != "CLAUDE_CODE_ENABLE_TASKS=1" {
+				t.Fatalf("CLAUDE_CODE_ENABLE_TASKS = %q, want =1", kv)
+			}
+		case strings.HasPrefix(kv, "CLAUDE_CODE_SESSION_ID="):
+			t.Fatalf("CLAUDE_CODE_SESSION_ID must be unset, found %q", kv)
+		case strings.HasPrefix(kv, "CLAUDE_CODE_ENTRYPOINT="):
+			t.Fatalf("CLAUDE_CODE_ENTRYPOINT must be unset, found %q", kv)
+		}
+	}
+	if enableTasks != 1 {
+		t.Fatalf("expected exactly one CLAUDE_CODE_ENABLE_TASKS=1, got %d occurrences", enableTasks)
+	}
+	// Pass-through of unrelated vars.
+	if !containsEnv(got, "PATH=C:\\bin") || !containsEnv(got, "SOME_OTHER=keepme") {
+		t.Fatalf("child env dropped a pass-through var: %v", got)
+	}
+}
 
-	if _, err := DiscoverSession(RuntimeCodex, root, worktree, launchedAt); err == nil {
-		t.Fatal("expected an error when no post-launch session matched")
+func containsEnv(env []string, kv string) bool {
+	for _, e := range env {
+		if e == kv {
+			return true
+		}
+	}
+	return false
+}
+
+// buildWakeCommand must produce the `claude --resume <id> -p <message>` invocation
+// (the real wake-input delivery; resumes the same session/transcript), not codex.
+func TestBuildWakeCommandIsClaudeResume(t *testing.T) {
+	exe, args, err := buildWakeCommand(`C:\claude.exe`, "session-abc", WakeMessage)
+	if err != nil {
+		t.Fatalf("build wake command: %v", err)
+	}
+	if exe != `C:\claude.exe` {
+		t.Fatalf("executable = %q", exe)
+	}
+	if len(args) != 4 || args[0] != "--resume" || args[1] != "session-abc" || args[2] != "-p" || args[3] != WakeMessage {
+		t.Fatalf("wake args = %v, want [--resume session-abc -p <WakeMessage>]", args)
+	}
+	if _, _, err := buildWakeCommand("", "s", "m"); err == nil {
+		t.Fatal("expected error on empty executable")
+	}
+	if _, _, err := buildWakeCommand("x", "", "m"); err == nil {
+		t.Fatal("expected error on empty session id")
 	}
 }
 
@@ -149,9 +197,9 @@ func writeClaudeTranscript(t *testing.T, slugDir, name, sessionID, cwd string, m
 	return path
 }
 
-// The same discovery works for the claude sessions layout (cross-runtime, per
-// LIVENESS-SIGNAL.md), and per-subagent transcripts are skipped so the top-level
-// session is bound (not a child agent's transcript).
+// DiscoverSession is the VERIFICATION FALLBACK: it confirms claude wrote a transcript
+// for the launched run (newest <session>.jsonl created at/after launch whose cwd
+// matches the worktree), skipping per-subagent transcripts under subagents/.
 func TestDiscoverClaudeSessionPicksTopLevelAfterLaunch(t *testing.T) {
 	root := t.TempDir()
 	worktree := `C:\Agent\QueueDrainTestbed\.owned\w`
@@ -162,7 +210,7 @@ func TestDiscoverClaudeSessionPicksTopLevelAfterLaunch(t *testing.T) {
 	// A per-subagent transcript under subagents/ must NOT be picked as the top-level.
 	writeClaudeTranscript(t, filepath.Join(slugDir, "session-abc", "subagents"), "agent-1.jsonl", "subagent-1", worktree, launchedAt.Add(2*time.Minute))
 
-	got, err := DiscoverSession(RuntimeClaude, root, worktree, launchedAt)
+	got, err := DiscoverSession(root, worktree, launchedAt)
 	if err != nil {
 		t.Fatalf("discover: %v", err)
 	}
@@ -171,5 +219,20 @@ func TestDiscoverClaudeSessionPicksTopLevelAfterLaunch(t *testing.T) {
 	}
 	if got.TranscriptPath != wantPath {
 		t.Fatalf("transcript path = %q, want %q", got.TranscriptPath, wantPath)
+	}
+}
+
+// When no session file appears after launch, the verification fallback returns an
+// error so the caller can surface a launch that produced no transcript.
+func TestDiscoverClaudeSessionErrorsWhenNoneMatch(t *testing.T) {
+	root := t.TempDir()
+	worktree := `C:\Agent\QueueDrainTestbed`
+	launchedAt := time.Date(2026, 5, 30, 8, 0, 0, 0, time.UTC)
+
+	// Only a pre-launch session exists.
+	writeClaudeTranscript(t, filepath.Join(root, "c--Agent-QueueDrainTestbed"), "old.jsonl", "old", worktree, launchedAt.Add(-time.Minute))
+
+	if _, err := DiscoverSession(root, worktree, launchedAt); err == nil {
+		t.Fatal("expected an error when no post-launch session matched")
 	}
 }

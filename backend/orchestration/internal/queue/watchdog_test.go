@@ -1,6 +1,8 @@
 package queue
 
 import (
+	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -350,6 +352,71 @@ func TestWatchdogFreshAppendDuringAckWindowCancelsIncident(t *testing.T) {
 	}
 	if poker.PokeCount() != 1 {
 		t.Fatalf("expected exactly one poke (the cancelled first stall), got %d", poker.PokeCount())
+	}
+}
+
+// ClaudeResumePoker.DeliverWake builds the `claude --resume <id> -p <WakeMessage>`
+// command in the run's worktree and reports delivered=true on a fake exit-0 runner —
+// the real wake-input delivery (no real claude process in the test).
+func TestClaudeResumePokerDeliverWakeBuildsResumeAndReportsExit0(t *testing.T) {
+	var gotExe, gotCwd string
+	var gotArgs []string
+	recorded := ""
+	poker := NewClaudeResumePoker(
+		func(runID string) (WakeTarget, error) {
+			return WakeTarget{Executable: `C:\claude.exe`, SessionID: "sess-7", WorktreePath: `C:\Agent\QueueDrainTestbed`}, nil
+		},
+		func(runID string) error { recorded = runID; return nil },
+		func(_ context.Context, exe string, args []string, cwd string) (int, error) {
+			gotExe, gotArgs, gotCwd = exe, args, cwd
+			return 0, nil // fake exit-0
+		},
+	)
+
+	if err := poker.Poke("run-7"); err != nil {
+		t.Fatalf("poke: %v", err)
+	}
+	if recorded != "run-7" {
+		t.Fatalf("poke did not record the run id, got %q", recorded)
+	}
+
+	delivered, err := poker.DeliverWake("run-7")
+	if err != nil {
+		t.Fatalf("deliver wake: %v", err)
+	}
+	if !delivered {
+		t.Fatal("expected delivered=true on a fake exit-0 wake runner")
+	}
+	if gotExe != `C:\claude.exe` || gotCwd != `C:\Agent\QueueDrainTestbed` {
+		t.Fatalf("wake ran exe=%q cwd=%q, want claude in the worktree", gotExe, gotCwd)
+	}
+	if len(gotArgs) != 4 || gotArgs[0] != "--resume" || gotArgs[1] != "sess-7" || gotArgs[2] != "-p" || gotArgs[3] != WakeMessage {
+		t.Fatalf("wake args = %v, want [--resume sess-7 -p <WakeMessage>]", gotArgs)
+	}
+}
+
+// A non-zero wake exit reports delivered=false (the agent was not confirmed woken);
+// a runner error surfaces as an error.
+func TestClaudeResumePokerDeliverWakeNonZeroAndError(t *testing.T) {
+	target := func(string) (WakeTarget, error) {
+		return WakeTarget{Executable: `C:\claude.exe`, SessionID: "s", WorktreePath: `C:\w`}, nil
+	}
+	nonZero := NewClaudeResumePoker(target, nil, func(context.Context, string, []string, string) (int, error) {
+		return 1, nil
+	})
+	delivered, err := nonZero.DeliverWake("run-x")
+	if err != nil {
+		t.Fatalf("non-zero exit should not be a runner error: %v", err)
+	}
+	if delivered {
+		t.Fatal("non-zero wake exit must report delivered=false")
+	}
+
+	failing := NewClaudeResumePoker(target, nil, func(context.Context, string, []string, string) (int, error) {
+		return -1, errors.New("spawn failed")
+	})
+	if _, err := failing.DeliverWake("run-x"); err == nil {
+		t.Fatal("expected an error when the wake runner fails")
 	}
 }
 

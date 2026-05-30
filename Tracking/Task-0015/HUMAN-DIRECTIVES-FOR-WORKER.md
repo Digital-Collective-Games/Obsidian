@@ -302,3 +302,23 @@ coordinator, and agent-auditor preferences.
 - This test repo is the provider AND target for the proof (the issues that carry
   `Queue` and the worktree the dispatched agent works in), mirroring how
   `CodexDashboard` is its own provider+target via the manifest.
+
+## Verbatim Human Directive — dispatch CLAUDE only, not codex (2026-05-30)
+
+> 1 - don't dispatch codex on the tasks, only dispatch claude
+> 2 - get claude working first
+
+### Worker-Safe Normalization (AUTHORITATIVE for O5 — refines D3)
+- The dispatched queue agent (O5/PASS-0005) is **`claude` ONLY** — never `codex`.
+  The O5 launcher must launch a headless TOP-LEVEL `claude` process in the owned
+  worktree (able to spawn its OWN subagents via the Task tool — NOT a nested
+  subagent), and post-launch session discovery resolves the agent's OWN session id
+  + transcript under `~/.claude/projects/<slug>/<session>.jsonl` (with per-subagent
+  transcripts under `.../<session>/subagents/agent-*.jsonl`).
+- This supersedes the PASS-0005 launcher's `codex exec` default. Remove/disable the
+  codex dispatch path for the queue agent; keep claude as the only dispatched
+  runtime. (The watchdog's transcript-append liveness signal already works for the
+  Claude transcript shape per `Research/LIVENESS-SIGNAL.md`.)
+- Priority: get the real claude dispatch working first (prove A5.1 — a real
+  top-level claude spawns ≥1 of its own subagents, discoverable) before the
+  PASS-0006 regression.
