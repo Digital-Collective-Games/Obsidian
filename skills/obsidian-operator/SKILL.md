@@ -22,6 +22,28 @@ Use GitHub Issues through `gh` as the accepted-task provider for this repo.
 - Pull requests can create holes in local task numbering. Do not reuse rejected proposal ids as accepted task ids.
 - Proposal workflow is separate from accepted tasks and belongs to the configured proposal provider, not this repo's accepted-task issue space.
 
+## Issue Type (required for the Fields panel)
+
+GitHub's org-level **issue fields** (`Priority`, `Queue`, `Human Needed`) only
+render in an issue's right-hand **Fields** panel when the issue has an **issue
+type**. A typeless issue shows "No fields configured for issues without a type"
+in the UI, even though the field *values* are still stored and returned by
+`/repos/<repo>/issues/<n>/issue-field-values`. Introducing org issue types
+(`Task`/`Bug`/`Feature`) is what flipped the Fields display to type-gated, so
+issues created before/without a type lose the visible fields until typed.
+
+Therefore every accepted-task issue must carry an issue type. The default is
+`Task`; the org also defines `Bug` and `Feature`. The scripts set it automatically:
+
+- `Sync-TaskToGitHubIssue.ps1` and `Bootstrap-TaskGitHubIssues.ps1` take
+  `-IssueType` (default `Task`). The name must exist in `/orgs/<org>/issue-types`;
+  the sync validates it, sets it on the issue (REST update-issue `type`), and
+  asserts it on readback.
+- Pass `-IssueType Bug` / `-IssueType Feature` for a bug/feature accepted issue.
+
+Setting the field *values* alone does NOT make them visible; the issue type is
+what unlocks the Fields panel.
+
 ## Authority Model
 
 Keep each state owner narrow.

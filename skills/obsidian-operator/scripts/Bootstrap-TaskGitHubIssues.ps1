@@ -10,6 +10,7 @@ param(
     [string]$QueueValue = "Never",
     [string]$PriorityValue = "P2",
     [string]$HumanNeededValue = "No",
+    [string]$IssueType = "Task",
     [switch]$DryRun
 )
 
@@ -170,6 +171,7 @@ foreach ($task in $taskItems) {
         -QueueValue $QueueValue `
         -PriorityValue $PriorityValue `
         -HumanNeededValue $HumanNeededValue `
+        -IssueType $IssueType `
         -DryRun
 
     if ($LASTEXITCODE -ne 0) {
@@ -203,10 +205,16 @@ foreach ($task in $taskItems) {
 
     if ($action -eq "create") {
         [string]$issueBody = Get-Content -Raw -Encoding UTF8 -LiteralPath $bodyPath
-        $payload = [pscustomobject]@{
+        $payloadObj = [ordered]@{
             title = [string]$render.title
             body = $issueBody
-        } | ConvertTo-Json -Depth 6
+        }
+        # Give the new issue its type at creation so GitHub renders the Fields
+        # panel (Priority/Queue/Human Needed) immediately; a typeless issue shows
+        # "No fields configured for issues without a type". The post-create sync
+        # below re-asserts the same type.
+        if ($IssueType) { $payloadObj["type"] = $IssueType }
+        $payload = [pscustomobject]$payloadObj | ConvertTo-Json -Depth 6
 
         $createdJson = $payload | gh api -X POST "/repos/$providerRepo/issues" --input -
         if ($LASTEXITCODE -ne 0) {
@@ -229,7 +237,8 @@ foreach ($task in $taskItems) {
         -ViewOutputPath $viewPath `
         -QueueValue $QueueValue `
         -PriorityValue $PriorityValue `
-        -HumanNeededValue $HumanNeededValue
+        -HumanNeededValue $HumanNeededValue `
+        -IssueType $IssueType
 
     if ($LASTEXITCODE -ne 0) {
         throw "Post-create sync failed for $($task.TaskId)."

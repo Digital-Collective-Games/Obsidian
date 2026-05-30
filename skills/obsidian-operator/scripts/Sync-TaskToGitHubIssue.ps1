@@ -10,6 +10,7 @@ param(
     [string]$QueueValue = "Never",
     [string]$PriorityValue = "P2",
     [string]$HumanNeededValue = "No",
+    [string]$IssueType = "Task",
     [switch]$SkipIssueFieldSync,
     [switch]$RepairMismatchedRemote,
     [switch]$ForceRemoteOverwrite,
@@ -213,13 +214,25 @@ function Set-GitHubIssueTitleAndBody {
         [string]$Title,
 
         [Parameter(Mandatory = $true)]
-        [string]$Body
+        [string]$Body,
+
+        [string]$Type
     )
 
-    $payload = [pscustomobject]@{
+    # GitHub Issue Types gate the issue "Fields" sidebar display: an issue with
+    # NO type renders "No fields configured for issues without a type", so the
+    # Priority/Queue/Human Needed values (set via issue-field-values) are stored
+    # but invisible in the UI. Accepted-task issues must therefore carry a type.
+    # The REST update-issue endpoint takes the type NAME (or null); we deliver it
+    # as JSON on stdin alongside title/body to avoid native-arg quoting.
+    $payloadObj = [ordered]@{
         title = $Title
         body = $Body
-    } | ConvertTo-Json -Depth 6
+    }
+    if ($Type) {
+        $payloadObj["type"] = $Type
+    }
+    $payload = [pscustomobject]$payloadObj | ConvertTo-Json -Depth 6
 
     $payload | gh api -X PATCH "/repos/$ProviderRepo/issues/$IssueNumber" --input - | Out-Null
     if ($LASTEXITCODE -ne 0) {
@@ -440,6 +453,7 @@ if ($DryRun) {
         send_payload_title = $sendPayloadTitle
         send_payload_round_trips = ($sendPayloadTitle -eq $issueTitle)
         send_payload_compares_equal = ((Normalize-TitleForCompare -Title $sendPayloadTitle) -eq (Normalize-TitleForCompare -Title $issueTitle))
+        issue_type = $IssueType
         issue_fields = [ordered]@{
             Queue = $QueueValue
             Priority = $PriorityValue
@@ -493,7 +507,21 @@ if ((-not $bodyMatches -or -not $titleMatches) -and -not $ForceRemoteOverwrite) 
 
 $labelsToRemove = Get-RejectedLabelNames -LabelNames (Get-LabelNames -Labels $existing.labels)
 
-Set-GitHubIssueTitleAndBody -ProviderRepo $providerRepo -IssueNumber $issueNumber -Title $issueTitle -Body $body
+# Validate the requested issue type exists in the org before writing it, so a
+# typo fails loudly instead of producing a typeless issue (whose Fields panel
+# would silently show "No fields configured for issues without a type").
+if ($IssueType) {
+    $typeOwner = $providerRepo.Split("/")[0]
+    $issueTypesJson = gh api "/orgs/$typeOwner/issue-types" 2>$null
+    if ($LASTEXITCODE -eq 0 -and $issueTypesJson) {
+        $issueTypeNames = @(($issueTypesJson | ConvertFrom-Json) | ForEach-Object { [string]$_.name })
+        if ($issueTypeNames -notcontains $IssueType) {
+            throw "Issue type '$IssueType' was not found in organization '$typeOwner' (available: $($issueTypeNames -join ', ')). Create the type or pass -IssueType with an existing name."
+        }
+    }
+}
+
+Set-GitHubIssueTitleAndBody -ProviderRepo $providerRepo -IssueNumber $issueNumber -Title $issueTitle -Body $body -Type $IssueType
 
 foreach ($labelName in $labelsToRemove) {
     gh issue edit $issueNumber --repo $providerRepo --remove-label $labelName | Out-Null
@@ -539,6 +567,15 @@ if ((Normalize-TitleForCompare -Title ([string]$view.title)) -ne (Normalize-Titl
 
 Assert-NoTaskIdMismatch -Body ([string]$view.body) -ExpectedTaskId $taskId -ExpectedTaskPath $relativeTaskPath
 
+if ($IssueType) {
+    $liveType = (gh api "/repos/$providerRepo/issues/$issueNumber" --jq '.type.name' 2>$null)
+    if ($LASTEXITCODE -ne 0) { $liveType = "" }
+    $liveType = ([string]$liveType).Trim()
+    if ($liveType -ne $IssueType) {
+        throw "Issue #$issueNumber type readback '$liveType' does not match requested '$IssueType'."
+    }
+}
+
 if ($ViewOutputPath) {
     $viewOutputFullPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($ViewOutputPath)
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $viewOutputFullPath) | Out-Null
@@ -566,6 +603,7 @@ New-Item -ItemType Directory -Force -Path (Split-Path -Parent $metadataFullPath)
     issue_url = $view.url
     title = $view.title
     labels = @($labelNames)
+    issue_type = $IssueType
     issue_fields = if ($SkipIssueFieldSync) { $null } else { ($issueFieldValuesJson | ConvertFrom-Json) }
     body_path = $outputBodyFullPath
     view_path = $ViewOutputPath
