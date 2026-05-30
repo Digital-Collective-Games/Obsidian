@@ -17,7 +17,7 @@ intentionally **keep the literal name `CodexDashboard`** for data continuity:
 - Startup script: `CodexDashboard.cmd`; launcher: `Start-CodexDashboard.ps1`
 - scheduled task: `CodexDashboard-Orchestration-ServiceLane`
 - Go orchestration runs root literal: `...\CodexDashboard\orchestration-runs`
-- repo manifest id: `CodexDashboard` (`CODEX-REPO-MANIFEST.json`)
+- repo manifest id: `CodexDashboard` (`REPO-MANIFEST.json`)
 
 This is Decision A from `Tracking/Task-0013/PLAN.md`: rename display strings only,
 do not rename these identifiers. Renaming the data root or OS identifiers without
@@ -158,7 +158,7 @@ Current human-lane must-backup set:
 | dashboard config | `%LOCALAPPDATA%\CodexDashboard\config.json` | must backup | Human app settings. |
 | dashboard SQLite DB | `%LOCALAPPDATA%\CodexDashboard\dashboard.db` | must backup | Kept in backup even if parts may be reconstructable from session telemetry. |
 | job specs | `C:\Users\gregs\.codex\Orchestration\Jobs\specs\` | must backup | Durable desired job declarations. |
-| repo binding manifest | `C:\Agent\CodexDashboard\CODEX-REPO-MANIFEST.json` | must backup delta | Tracked manifest for repo-local task, proposal, backlog, and review-surface bindings. Restored with repo state. |
+| repo binding manifest | `C:\Agent\CodexDashboard\REPO-MANIFEST.json` | must backup delta | Tracked manifest for repo-local task, proposal, backlog, and review-surface bindings. Restored with repo state. |
 | repo state delta | `C:\Agent\CodexDashboard` plus upstream git | must backup delta | If upstream is current, record commit/branch and back up only unpushed commits, uncommitted diffs, and important untracked files. |
 
 ## Service Lane
@@ -236,7 +236,7 @@ A CodexDashboard human-lane restore should restore or verify:
 - `%LOCALAPPDATA%\CodexDashboard\config.json`
 - `%LOCALAPPDATA%\CodexDashboard\dashboard.db`
 - `C:\Users\gregs\.codex\Orchestration\Jobs\specs\`
-- `C:\Agent\CodexDashboard\CODEX-REPO-MANIFEST.json`
+- `C:\Agent\CodexDashboard\REPO-MANIFEST.json`
 - scheduled task `CodexDashboard-Orchestration-ServiceLane`, if it is not recreated by the service-lane installer
 
 Validation/temp data should be intentionally discarded unless a task records a

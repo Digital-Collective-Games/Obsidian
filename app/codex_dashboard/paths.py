@@ -49,7 +49,7 @@ def app_data_root() -> Path:
     # Task-0013 rebrand Decision A: the product name is "Obsidian" but this
     # %LOCALAPPDATA%\CodexDashboard data root (and the matching OS identifiers:
     # startup script name, launcher name, scheduled-task name, Go runs root,
-    # CODEX-REPO-MANIFEST.json "id") intentionally stay "CodexDashboard" for
+    # REPO-MANIFEST.json "id") intentionally stay "CodexDashboard" for
     # data continuity. Renaming this path without a flawless migration would
     # orphan the human's existing dashboard.db / config.json / startup entry.
     # See DATA-HANDLING.md and Tracking/Task-0013/PLAN.md.

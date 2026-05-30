@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "task_id": "Task-0015",
+  "pass_id": "PASS-0000",
+  "checklist_status": "closed",
+  "implemented": true,
+  "build": "not_applicable",
+  "unit_tests": "passing",
+  "pass_audit_written": true,
+  "audit_verdict": "ready",
+  "audit_result_ref": "Testing/PASS-0000-AUDIT.md",
+  "handoff_updated": true,
+  "commit_created": true,
+  "pushed_upstream": true,
+  "notify_sent": true,
+  "blockers": [],
+  "next_required_actions": [
+    "PASS-0001 (O2): add a per-repo slot count/semaphore. Coordinator-review correction 1 — the existing active_run_exists gate is per-task (GetActiveTaskRun), not per-repo, so a sibling Task-N would not collide there; O2's real net-new work is per-repo counting that does not exist today.",
+    "Before PASS-0001 proof: stand up the dedicated throwaway test repo under C:\\Agent (confirm the GitHub repo name/org with the human first — outward-facing) and add its repos[] entry (with queue_workers) to REPO-MANIFEST.json."
+  ],
+  "updated_at": "2026-05-30T00:05:00.0000000-04:00"
+}

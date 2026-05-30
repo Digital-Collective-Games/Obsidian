@@ -107,7 +107,7 @@ class _SyncDryRunFixture:
         self.root = Path(self._tmp.name)
 
     def __enter__(self) -> "_SyncDryRunFixture":
-        (self.root / "CODEX-REPO-MANIFEST.json").write_text(
+        (self.root / "REPO-MANIFEST.json").write_text(
             json.dumps(self.MANIFEST), encoding="utf-8"
         )
         task_dir = self.root / "Tracking" / f"Task-{self.task_number:04d}"
@@ -151,7 +151,7 @@ class TitleRoundTripDryRunTests(unittest.TestCase):
                     "-TaskPath",
                     "Tracking/Task-0099/TASK.md",
                     "-ManifestPath",
-                    "CODEX-REPO-MANIFEST.json",
+                    "REPO-MANIFEST.json",
                     "-OutputBodyPath",
                     str(fx.root / "out-body.md"),
                     "-MetadataPath",

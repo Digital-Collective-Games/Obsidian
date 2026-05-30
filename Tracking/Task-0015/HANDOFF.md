@@ -2,11 +2,15 @@
 
 ## Current Baseline (2026-05-29)
 
-- Phase: **planning** — STOPPED at the explicit human PLAN gate. No
-  implementation has started; no product code changed.
+- Phase: **implementation** — PLAN APPROVED by the human on 2026-05-29.
+  Decision 2 settled: the PASS-0006 regression app surface is GitHub, driven via
+  the human's Chrome debug tab on a single test issue in a NEW throwaway test repo
+  under `C:\Agent` (see [HUMAN-DIRECTIVES-FOR-WORKER.md](./HUMAN-DIRECTIVES-FOR-WORKER.md)).
+  Implementation begins at PASS-0000.
 - The TaskDispatch task leader took Task-0015 from creation through Research and
-  Planning. The plan is written and a plan-gate review package is ready for the
-  human.
+  Planning; the coordinator ground-truthed the plan-gate package (see
+  [Design/plan-gate/COORDINATOR-REVIEW.md](./Design/plan-gate/COORDINATOR-REVIEW.md),
+  zero blocking discrepancies) and presented the gate; the human approved.
 - Machine state: [TASK-STATE.json](./TASK-STATE.json) (`phase: planning`,
   `current_gate: planning`, `plan_approved: false`, blocker = awaiting human plan
   approval), schema-valid.
@@ -31,12 +35,21 @@
 
 ## Next Step (explicit)
 
-1. Coordinator verifies the plan-gate review package is complete, then presents
-   the plan gate to the human for EXPLICIT approval.
-2. On approval: begin **PASS-0000** (O1 manifest rename + `queue_workers`), then
-   proceed through the planned passes, each closed with unit tests + pass audit +
-   handoff + commit + push + toast, rotating implementation context per pass.
-3. Closure is a DISTINCT, FINAL explicit human gate — never self-close.
+1. DONE: coordinator verified the plan-gate package and presented the gate; human
+   APPROVED on 2026-05-29.
+2. DONE: **PASS-0000** (O1 manifest rename → `REPO-MANIFEST.json` + per-repo
+   `queue_workers`). Implemented by a clean-context worker, independently verified
+   by a SEPARATE clean-context QA worker (A1.1–A1.4 PASS, F-O1 not falsified — see
+   [Testing/PASS-0000-AUDIT.md](./Testing/PASS-0000-AUDIT.md) /
+   [Testing/PASS-0000-CHECKLIST.json](./Testing/PASS-0000-CHECKLIST.json)),
+   committed + pushed. NEXT: **PASS-0001** (O2 per-repo slots).
+3. Before PASS-0001 proof: stand up the dedicated test repo under `C:\Agent`
+   (confirm the GitHub repo name/org with the human — outward-facing) and add its
+   `REPO-MANIFEST.json` entry.
+4. Fold the COORDINATOR-REVIEW.md corrections into the affected passes (O2
+   per-repo semaphore vs the per-task gate; O5 post-launch session discovery; O5
+   wake-input mechanism).
+5. Closure is a DISTINCT, FINAL explicit human gate — never self-close.
 
 ## Active Watchouts / Blockers
 

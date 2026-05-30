@@ -4,6 +4,7 @@
   "repos": [
     {
       "id": "CodexDashboard",
+      "queue_workers": 4,
       "local_root": "C:\\Agent\\CodexDashboard",
       "source_control_provider": {
         "kind": "git",

@@ -3,7 +3,7 @@ param(
     [string]$TaskPath,
 
     [string]$RepoId = "CodexDashboard",
-    [string]$ManifestPath = "CODEX-REPO-MANIFEST.json",
+    [string]$ManifestPath = "REPO-MANIFEST.json",
     [string]$OutputBodyPath,
     [string]$ViewOutputPath,
     [string]$MetadataPath,

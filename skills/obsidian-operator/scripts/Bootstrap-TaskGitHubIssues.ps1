@@ -1,7 +1,7 @@
 param(
     [string]$TaskRoot = "Tracking",
     [string]$RepoId = "CodexDashboard",
-    [string]$ManifestPath = "CODEX-REPO-MANIFEST.json",
+    [string]$ManifestPath = "REPO-MANIFEST.json",
     [string]$SyncScriptPath = "skills/obsidian-operator/scripts/Sync-TaskToGitHubIssue.ps1",
     [int]$StartTaskNumber = 2,
     [int]$EndTaskNumber = 0,

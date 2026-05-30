@@ -1,13 +1,13 @@
 ---
 name: obsidian-operator
-description: Operate the CodexDashboard/Obsidian repo task-provider workflow safely. Use when Codex is working in this repo on CODEX-REPO-MANIFEST.json, TASK-META.json, GitHub Issues as accepted tasks, issue field state, skills/obsidian-operator/scripts/Sync-TaskToGitHubIssue.ps1, skills/obsidian-operator/scripts/Bootstrap-TaskGitHubIssues.ps1, skills/obsidian-operator/scripts/Reconcile-TaskGitHubState.ps1, task/GitHub text conflicts, or any "drain my tasks" precursor that touches task sync or dispatch state.
+description: Operate the CodexDashboard/Obsidian repo task-provider workflow safely. Use when Codex is working in this repo on REPO-MANIFEST.json, TASK-META.json, GitHub Issues as accepted tasks, issue field state, skills/obsidian-operator/scripts/Sync-TaskToGitHubIssue.ps1, skills/obsidian-operator/scripts/Bootstrap-TaskGitHubIssues.ps1, skills/obsidian-operator/scripts/Reconcile-TaskGitHubState.ps1, task/GitHub text conflicts, or any "drain my tasks" precursor that touches task sync or dispatch state.
 ---
 
 # Obsidian Operator
 
 ## Grounding
 
-Read repo-root `AGENTS.md`, `CODEX-REPO-MANIFEST.json`, and the relevant `Tracking/Task-<id>/TASK.md` before changing task-provider behavior.
+Read repo-root `AGENTS.md`, `REPO-MANIFEST.json`, and the relevant `Tracking/Task-<id>/TASK.md` before changing task-provider behavior.
 
 Human directives in the current session override subagent output, coordinator/auditor preferences, and older task drafts. Preserve older artifacts as history, but do not treat them as active scope when the human has narrowed or corrected the task.
 
