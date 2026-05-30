@@ -47,6 +47,14 @@ type LaunchSpec struct {
 	// SessionsRoot is claude's projects root (~/.claude/projects) used by the
 	// DiscoverSession verification fallback. Optional.
 	SessionsRoot string
+	// AllowedTools is the comma-separated --allowedTools value. Optional: empty
+	// uses DefaultAllowedTools ("Agent") so the existing trivial-proof invocation is
+	// unchanged. The queue dispatcher overrides it with the real tool set a working
+	// task agent needs (Read/Edit/Bash/Agent), kept configurable.
+	AllowedTools string
+	// PermissionMode is the --permission-mode value. Optional: empty uses
+	// DefaultPermissionMode ("bypassPermissions").
+	PermissionMode string
 	// Timeout bounds the launched process. Zero means no enforced timeout (callers
 	// in unattended contexts MUST set one). The launcher always returns once the
 	// process exits or the timeout fires.
@@ -76,16 +84,27 @@ type LaunchResult struct {
 	ExitCode int
 }
 
+// Defaults for the configurable launch knobs. Empty LaunchSpec fields fall back to
+// these, so the validated trivial-proof invocation (--allowedTools Agent,
+// --permission-mode bypassPermissions) is unchanged unless a caller overrides it.
+const (
+	// DefaultAllowedTools is the trivial-proof --allowedTools value.
+	DefaultAllowedTools = "Agent"
+	// DefaultPermissionMode is the --permission-mode value.
+	DefaultPermissionMode = "bypassPermissions"
+)
+
 // buildAgentCommand builds the top-level CLAUDE command (the VALIDATED invocation
 // proven on this machine to run headlessly and spawn its own subagent):
 //
-//	claude --session-id <UUID> -p "<prompt>" --permission-mode bypassPermissions \
-//	       --allowedTools "Agent" --output-format json
+//	claude --session-id <UUID> -p "<prompt>" --permission-mode <mode> \
+//	       --allowedTools "<tools>" --output-format json
 //
 // run with cwd = the owned worktree. It is a top-level OS process (NOT a nested
 // subagent), so the agent is free to spawn its own subagents via the Agent tool
-// (A5.1 / D3). It is split out so the argument shape is unit-testable without
-// launching a process.
+// (A5.1 / D3). --allowedTools and --permission-mode are configurable (LaunchSpec);
+// empty fields fall back to the validated defaults. It is split out so the argument
+// shape is unit-testable without launching a process.
 func buildAgentCommand(spec LaunchSpec) (string, []string, error) {
 	if spec.Executable == "" {
 		return "", nil, fmt.Errorf("launch: executable is empty")
@@ -96,11 +115,19 @@ func buildAgentCommand(spec LaunchSpec) (string, []string, error) {
 	if spec.SessionID == "" {
 		return "", nil, fmt.Errorf("launch: session id is empty")
 	}
+	allowedTools := spec.AllowedTools
+	if allowedTools == "" {
+		allowedTools = DefaultAllowedTools
+	}
+	permissionMode := spec.PermissionMode
+	if permissionMode == "" {
+		permissionMode = DefaultPermissionMode
+	}
 	return spec.Executable, []string{
 		"--session-id", spec.SessionID,
 		"-p", spec.Prompt,
-		"--permission-mode", "bypassPermissions",
-		"--allowedTools", "Agent",
+		"--permission-mode", permissionMode,
+		"--allowedTools", allowedTools,
 		"--output-format", "json",
 	}, nil
 }

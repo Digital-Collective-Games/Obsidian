@@ -33,6 +33,18 @@ type Config struct {
 	// — the workflow is registered but the start endpoint dispatches against nothing
 	// — so this is safe to ship without a configured provider repo.
 	QueueDrainRepo string // CODEX_ORCHESTRATION_QUEUE_DRAIN_REPO
+
+	// LaunchQueueAgent gates the O5 wiring: when a queue dispatch provisions an owned
+	// worktree, launch a top-level claude agent in it, bind its session, and start the
+	// liveness watchdog supervisor. Default FALSE so legacy/manual dispatch paths are
+	// unaffected — the launch fires ONLY when this is explicitly enabled.
+	LaunchQueueAgent bool // CODEX_ORCHESTRATION_QUEUE_LAUNCH_AGENT (default false)
+	// QueueAgentAllowedTools / QueueAgentPermissionMode are the configurable claude
+	// launch knobs for a dispatched queue agent (a working task agent needs real tools
+	// — Read/Edit/Bash/Agent — not just the trivial-proof "Agent"). Empty falls back to
+	// the launcher's validated defaults.
+	QueueAgentAllowedTools   string // CODEX_ORCHESTRATION_QUEUE_AGENT_ALLOWED_TOOLS
+	QueueAgentPermissionMode string // CODEX_ORCHESTRATION_QUEUE_AGENT_PERMISSION_MODE
 }
 
 func Load() (Config, error) {
@@ -53,6 +65,10 @@ func Load() (Config, error) {
 		AlertCommand:    envOrDefault("CODEX_ORCHESTRATION_ALERT_COMMAND", ""),
 		AlertRecipient:  envOrDefault("CODEX_ORCHESTRATION_ALERT_RECIPIENT", ""),
 		QueueDrainRepo:  envOrDefault("CODEX_ORCHESTRATION_QUEUE_DRAIN_REPO", ""),
+
+		LaunchQueueAgent:         envBoolOrDefault("CODEX_ORCHESTRATION_QUEUE_LAUNCH_AGENT", false),
+		QueueAgentAllowedTools:   envOrDefault("CODEX_ORCHESTRATION_QUEUE_AGENT_ALLOWED_TOOLS", "Read,Edit,Bash,Agent"),
+		QueueAgentPermissionMode: envOrDefault("CODEX_ORCHESTRATION_QUEUE_AGENT_PERMISSION_MODE", ""),
 	}
 	cfg.WorktreeRoot = envOrDefault("CODEX_ORCHESTRATION_WORKTREE_ROOT", resolveWorktreeRoot())
 	cfg.TrackingRoot = envOrDefault("CODEX_ORCHESTRATION_TRACKING_ROOT", filepath.Join(cfg.WorktreeRoot, "Tracking"))

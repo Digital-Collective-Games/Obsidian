@@ -141,7 +141,7 @@ func (b *Backend) StartWorker(cfg config.Config, taskService *taskrun.Service) (
 	// (A3.4). The poll activity is wired to a live consumer (gh provider +
 	// taskrun-backed dispatcher) only when a provider repo is configured; otherwise
 	// the workflow is registered but stays dormant.
-	drainActivities, err := newQueueDrainActivities(cfg.QueueDrainRepo, taskService)
+	drainActivities, err := newQueueDrainActivities(cfg, taskService)
 	if err != nil {
 		return nil, err
 	}

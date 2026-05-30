@@ -14,7 +14,7 @@
     "regression": "not_run"
   },
   "blockers": [
-    "PASS-0005 (O5): claude-only launcher committed; A5.1 (HARD) PROVEN with claude + poke-wake real (claude --resume). Remaining for FULL O5 closure: (a) wire launcher+watchdog into the live consumer dispatch path; (b) full integrated real-agent stall->detect->poke->email repro.",
+    "PASS-0005 (O5): claude-only launcher + A5.1 + poke-wake done; launcher+watchdog now WIRED into the consumer dispatch (gated CODEX_ORCHESTRATION_QUEUE_LAUNCH_AGENT, OFF by default; unit-proven + QA'd). Remaining: the live REG-007 end-to-end (real-UI Queue=Ready flip -> consumer dispatches + launches the claude agent), which also serves as the integrated stall/supervision proof.",
     "PASS-0006 (regression) now UNBLOCKED (Chrome debug tab GitHub-authenticated on :9222): real-GitHub-UI Queue=Ready flip on a QueueDrainTestbed issue -> backend pickup; add REG-007.",
     "Task CLOSURE is a distinct, final human gate (never self-close)."
   ],
