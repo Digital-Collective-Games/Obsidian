@@ -1,0 +1,22 @@
+REG-007 park-retains (A4.4): #6 Human Needed=Yes 2026-05-30T11:38:56.4361717-04:00
+t=10s worktrees=2 Task-0006_present=True Task-0006_state=parked_awaiting_closure
+t=20s worktrees=2 Task-0006_present=True Task-0006_state=parked_awaiting_closure
+t=30s worktrees=2 Task-0006_present=True Task-0006_state=parked_awaiting_closure
+t=40s worktrees=2 Task-0006_present=True Task-0006_state=parked_awaiting_closure
+t=50s worktrees=2 Task-0006_present=True Task-0006_state=parked_awaiting_closure
+t=60s worktrees=2 Task-0006_present=True Task-0006_state=parked_awaiting_closure
+=== final: Task-0006 retained + parked (NOT reclaimed)? ===
+[
+  {
+    "task_id": "Task-0006",
+    "run_gate_state": "parked_awaiting_closure"
+  },
+  {
+    "task_id": "Task-0007",
+    "run_gate_state": "running"
+  }
+]
+=== backend parked log ===
+2026/05/30 11:38:57 INFO  queue-drain poll acted Namespace reg007f TaskQueue codex-orchestration WorkerID 67292@agentprime@ WorkflowType codex.queue.drain WorkflowID queue-drain--consumer RunID 019e7984-7c2e-790c-bbb2-da46804f1226 Attempt 1 dispatched [] parked [Task-0006] reclaimed []
+2026/05/30 11:39:20 INFO  queue-drain poll acted Namespace reg007f TaskQueue codex-orchestration WorkerID 67292@agentprime@ WorkflowType codex.queue.drain WorkflowID queue-drain--consumer RunID 019e7984-7c2e-790c-bbb2-da46804f1226 Attempt 1 dispatched [] parked [Task-0006] reclaimed []
+2026/05/30 11:39:41 INFO  queue-drain poll acted Namespace reg007f TaskQueue codex-orchestration WorkerID 67292@agentprime@ WorkflowType codex.queue.drain WorkflowID queue-drain--consumer RunID 019e7984-7c2e-790c-bbb2-da46804f1226 Attempt 1 dispatched [] parked [Task-0006] reclaimed []

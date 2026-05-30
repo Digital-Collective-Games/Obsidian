@@ -217,6 +217,14 @@ Production Obsidian never polled; real cron namespace untouched. See
 closed. Cosmetic follow-ups: drop the unused `StartWorker` taskService param +
 decorative `QueueDrainConfig.Repo`.
 
+**REG-007 coverage extended (2026-05-30):** the regression now also exercises — live,
+registry-driven, `queue_workers=2` — the consumer-driven **concurrency/queuing** (3
+Ready → 2 dispatched, 1 deferred), **worktree release on close + dequeue-next** (close
+#5 → `reclaimed [Task-0005]` + `dispatched [Task-0007]`), and **park-retains** (#6
+`Human Needed=Yes` → `parked [Task-0006]`, worktree retained, not redispatched).
+The `REGRESSION.md` REG-007 case now lists these as required sub-scenarios. Proof:
+[Testing/PASS-0006/REG-007-CONCURRENCY-RELEASE-PROOF.md](./Testing/PASS-0006/REG-007-CONCURRENCY-RELEASE-PROOF.md).
+
 ## Where the unsupervised run stopped (2026-05-30)
 
 5 passes fully done + independently verified + committed/pushed (O1, O2, O6, O4,

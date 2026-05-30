@@ -1,0 +1,34 @@
+REG-007 concurrency/queuing (queue_workers=2, 3 Ready) 2026-05-30T11:35:13.8110542-04:00
+t=10s worktrees=2 tasks=[Task-0005,Task-0006]
+t=20s worktrees=2 tasks=[Task-0005,Task-0006]
+t=30s worktrees=2 tasks=[Task-0005,Task-0006]
+t=40s worktrees=2 tasks=[Task-0005,Task-0006]
+t=50s worktrees=2 tasks=[Task-0005,Task-0006]
+t=60s worktrees=2 tasks=[Task-0005,Task-0006]
+t=70s worktrees=2 tasks=[Task-0005,Task-0006]
+t=80s worktrees=2 tasks=[Task-0005,Task-0006]
+t=90s worktrees=2 tasks=[Task-0005,Task-0006]
+t=100s worktrees=2 tasks=[Task-0005,Task-0006]
+t=110s worktrees=2 tasks=[Task-0005,Task-0006]
+t=120s worktrees=2 tasks=[Task-0005,Task-0006]
+=== final worktree bindings ===
+[
+  {
+    "task_id": "Task-0005",
+    "repo": "QueueDrainTestbed",
+    "run_gate_state": "running",
+    "worktree_path": "C:\\Users\\gregs\\AppData\\Local\\Temp\\cdxow\\Task-0005-731cfb8c-312075958\\w"
+  },
+  {
+    "task_id": "Task-0006",
+    "repo": "QueueDrainTestbed",
+    "run_gate_state": "running",
+    "worktree_path": "C:\\Users\\gregs\\AppData\\Local\\Temp\\cdxow\\Task-0006-b2600048-380119637\\w"
+  }
+]
+=== which of Task-0005/0006/0007 is DEFERRED (Ready but no worktree)? ===
+Task-0005 dispatched=True
+Task-0006 dispatched=True
+Task-0007 dispatched=False
+=== backend acted log ===
+2026/05/30 11:34:43 INFO  queue-drain poll acted Namespace reg007f TaskQueue codex-orchestration WorkerID 67292@agentprime@ WorkflowType codex.queue.drain WorkflowID queue-drain--consumer RunID 019e7984-7c2e-790c-bbb2-da46804f1226 Attempt 1 dispatched [Task-0005 Task-0006] parked [] reclaimed []

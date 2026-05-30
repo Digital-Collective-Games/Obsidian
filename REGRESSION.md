@@ -406,6 +406,23 @@ Interpretation:
   end-to-end via the `github-operator` skill
   ([skills/github-operator/SKILL.md](./skills/github-operator/SKILL.md))
 
+Concurrency + worktree-lifecycle sub-scenarios (required):
+
+- **Concurrency / queuing:** with `queue_workers = N`, flip MORE than N issues to
+  `Queue=Ready` (via the real UI) and confirm the consumer dispatches EXACTLY N
+  concurrently and DEFERS the rest (no over-dispatch); a deferred issue gets no
+  worktree.
+- **Release on close + dequeue:** close one dispatched issue (the human-approved
+  `gh issue close` / obsidian-operator close path) and confirm the consumer
+  RECLAIMS its worktree, frees the slot, and DEQUEUES a deferred Ready issue. A
+  dispatched run holds its worktree until that close (the agent never self-closes).
+- **Park retains:** set a dispatched issue `Human Needed=Yes` and confirm the
+  consumer PARKS it (`run_gate_state = parked_*`): the worktree is RETAINED, the
+  slot stays used, and it is NOT redispatched. Only a CLOSED issue deallocates.
+
+Proof of all three (live, registry-driven, `queue_workers=2`):
+[Tracking/Task-0015/Testing/PASS-0006/REG-007-CONCURRENCY-RELEASE-PROOF.md](./Tracking/Task-0015/Testing/PASS-0006/REG-007-CONCURRENCY-RELEASE-PROOF.md).
+
 ## Supporting Smoke
 
 ### SMOKE-001 Ingest Core

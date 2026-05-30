@@ -1,0 +1,10 @@
+REG-007 close->reclaim->dequeue 2026-05-30T11:37:42.4681903-04:00
+closing #5 (human-approved close)...
+✓ Closed issue Digital-Collective-Games/QueueDrainTestbed#5 (REG-007 queue-drain GitHub-UI regression (Task-0015))
+t=10s worktrees=2 tasks=[Task-0006,Task-0007]
+Task-0007 (deferred) now DISPATCHED after the slot freed
+=== Task-0005 worktree released? ===
+Task-0005 still listed: False  (expect False = released)
+=== backend reclaim/dispatch log ===
+2026/05/30 11:34:43 INFO  queue-drain poll acted Namespace reg007f TaskQueue codex-orchestration WorkerID 67292@agentprime@ WorkflowType codex.queue.drain WorkflowID queue-drain--consumer RunID 019e7984-7c2e-790c-bbb2-da46804f1226 Attempt 1 dispatched [Task-0005 Task-0006] parked [] reclaimed []
+2026/05/30 11:37:48 INFO  queue-drain poll acted Namespace reg007f TaskQueue codex-orchestration WorkerID 67292@agentprime@ WorkflowType codex.queue.drain WorkflowID queue-drain--consumer RunID 019e7984-7c2e-790c-bbb2-da46804f1226 Attempt 1 dispatched [Task-0007] parked [] reclaimed [Task-0005]
