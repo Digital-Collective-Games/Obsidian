@@ -207,6 +207,24 @@ coordinator, and agent-auditor preferences.
   likely-future but said not to complicate matters now. Do NOT build it in this
   task; record it as a deferred Non-Goal.
 
+## Verbatim Human Directive — queue detection = polling (2026-05-29, at plan gate)
+
+> i think you convinced me with the "polling every 2m is cheap and robust" and
+> doing a tunnel does seem like more moving parts than we need right now
+
+### Worker-Safe Normalization (AUTHORITATIVE for O3)
+- O3 detection mechanism = POLLING (pull), not push. The consumer polls GitHub
+  for `Queue == Ready` on a configurable interval, default ~2 minutes.
+- Webhooks / inbound push / any tunnel (smee / cloudflared / ngrok) are OUT OF
+  SCOPE for this task: no public ingress on the localhost backend, org
+  issue-FIELD-change webhook delivery is unverified, and it is not worth the
+  moving parts now.
+- The exact poll QUERY shape — one field-filtered search/GraphQL query IF GitHub
+  supports filtering issues by the org `Queue` field, otherwise enumerate open
+  issues and read each one's `issue-field-values` — is an IMPLEMENTATION DETAIL.
+  Pick the cheaper supported form; observable behavior is fixed by O3 acceptance
+  (A3.1–A3.4). It is not a blocker and not a separate research gate.
+
 ## Scope / Process Notes
 - This is ONE coherent feature ("the Temporal-backed consumer") with internally
   separable sub-objectives. Do not narrow/split on auditor preference; if you
