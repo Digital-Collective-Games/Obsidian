@@ -156,17 +156,21 @@ func (a *codexExecActivity) Execute(ctx context.Context, request controlplane.Jo
 		Command:          append([]string{plan.Executable}, plan.Args...),
 	}
 
+	result.ExitCode = exitCode(runErr)
+
 	if plan.FinalMessagePath != "" {
 		if rawFinalMessage, err := os.ReadFile(plan.FinalMessagePath); err == nil {
 			result.FinalMessage = strings.TrimSpace(string(rawFinalMessage))
 		}
 	}
 
+	// Surface notify-worthy outcomes (a @@JOB-ALERT@@ line in the run's output, or a failed/non-zero run)
+	// to the operator as ONE digest per run. Fully defensive: alerting never alters the job result below.
+	a.maybeSendRunAlert(ctx, request, result, runErr != nil)
+
 	if runErr == nil {
 		return result, nil
 	}
-
-	result.ExitCode = exitCode(runErr)
 	return result, fmt.Errorf("codex exec failed with exit code %d: %w", result.ExitCode, runErr)
 }
 

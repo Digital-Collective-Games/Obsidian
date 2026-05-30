@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strings"
 )
 
 type Config struct {
@@ -18,6 +19,14 @@ type Config struct {
 	TemporalAddress string
 	CodexExecutable string
 	RunsRoot        string
+
+	// Run-alert surfacing (the @@JOB-ALERT@@ "I need an adult" convention). When a job run prints a
+	// sentinel line or fails, the backend invokes AlertCommand with a JSON digest so the operator gets
+	// ONE email per run. Empty AlertCommand (the default) disables alerting — it stays dormant until
+	// configured, so this is safe to ship without breaking existing jobs.
+	EnableRunAlerts bool   // CODEX_ORCHESTRATION_ENABLE_RUN_ALERTS (default true)
+	AlertCommand    string // CODEX_ORCHESTRATION_ALERT_COMMAND  (path to a PowerShell sender script; empty = disabled)
+	AlertRecipient  string // CODEX_ORCHESTRATION_ALERT_RECIPIENT (operator email passed to the sender)
 }
 
 func Load() (Config, error) {
@@ -34,6 +43,9 @@ func Load() (Config, error) {
 		TemporalAddress: envOrDefault("CODEX_ORCHESTRATION_TEMPORAL_ADDRESS", "127.0.0.1:7233"),
 		CodexExecutable: resolveCodexExecutable(home),
 		RunsRoot:        envOrDefault("CODEX_ORCHESTRATION_RUNS_ROOT", defaultRunsRoot(home)),
+		EnableRunAlerts: envBoolOrDefault("CODEX_ORCHESTRATION_ENABLE_RUN_ALERTS", true),
+		AlertCommand:    envOrDefault("CODEX_ORCHESTRATION_ALERT_COMMAND", ""),
+		AlertRecipient:  envOrDefault("CODEX_ORCHESTRATION_ALERT_RECIPIENT", ""),
 	}
 	cfg.WorktreeRoot = envOrDefault("CODEX_ORCHESTRATION_WORKTREE_ROOT", resolveWorktreeRoot())
 	cfg.TrackingRoot = envOrDefault("CODEX_ORCHESTRATION_TRACKING_ROOT", filepath.Join(cfg.WorktreeRoot, "Tracking"))
@@ -56,6 +68,19 @@ func envOrDefault(key string, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func envBoolOrDefault(key string, fallback bool) bool {
+	switch strings.TrimSpace(strings.ToLower(os.Getenv(key))) {
+	case "":
+		return fallback
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return fallback
+	}
 }
 
 func defaultRunsRoot(home string) string {
