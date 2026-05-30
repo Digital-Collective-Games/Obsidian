@@ -1,0 +1,154 @@
+{
+  "run_id": "taskrun--Task-2--active",
+  "task_id": "Task-2",
+  "workflow_id": "taskrun--Task-2--active",
+  "temporal_execution_run_id": "019e771f-dcf6-7083-a561-6310ccc8ec24",
+  "status": "active",
+  "state_envelope": {
+    "state": "running",
+    "reason_code": "workload_step_executed",
+    "state_summary": "Run executed the first backend workload step inside the owned lane.",
+    "next_owner": "backend_worker",
+    "next_expected_event": "Execution worker prepares or executes the next workload step.",
+    "suspicious_after": "2026-05-30T04:38:57.728788027Z",
+    "action_block_reasons": {
+      "dispatch": [
+        {
+          "code": "active_run_exists",
+          "summary": "Dispatch is blocked while this run owns the current live story."
+        }
+      ],
+      "interrupt": null,
+      "poke": [
+        {
+          "code": "run_not_suspicious_yet",
+          "summary": "Poke stays blocked until the run misses its next expected progress deadline."
+        }
+      ]
+    }
+  },
+  "meaning_summary": "A tiny throwaway task used to prove two concurrent per-repo owned-lane worktrees (O2 / A2.1).",
+  "attention": {
+    "attention_level": "watch",
+    "attention_reason": "Run is active.",
+    "attention_sort_key": "50-active"
+  },
+  "actions": {
+    "dispatch": {
+      "allowed": false,
+      "block_reasons": [
+        {
+          "code": "active_run_exists",
+          "summary": "Dispatch is blocked while this run owns the current live story."
+        }
+      ]
+    },
+    "interrupt": {
+      "allowed": true
+    },
+    "poke": {
+      "allowed": false,
+      "block_reasons": [
+        {
+          "code": "run_not_suspicious_yet",
+          "summary": "Poke stays blocked until the run misses its next expected progress deadline."
+        }
+      ]
+    }
+  },
+  "repo_lane": {
+    "owned_repo_root": "C:\\Users\\gregs\\AppData\\Local\\Temp\\cdxow\\Task-2-a469b283-2565943718\\w",
+    "checkout_mode": "git_worktree_detached",
+    "baseline_commit": "9fe901a9a68bb70701109855458ae3c608c1c2e6",
+    "current_commit": "9fe901a9a68bb70701109855458ae3c608c1c2e6",
+    "approved_restore_commit": "9fe901a9a68bb70701109855458ae3c608c1c2e6",
+    "run_artifact_root": "C:\\Users\\gregs\\AppData\\Local\\CodexDashboard\\orchestration-validation-lane\\o2-pass0001-runs\\taskruns\\Task-2\\taskrun--Task-2--active",
+    "bootstrap_artifact_path": "C:\\Users\\gregs\\AppData\\Local\\CodexDashboard\\orchestration-validation-lane\\o2-pass0001-runs\\taskruns\\Task-2\\taskrun--Task-2--active\\owned-lane-bootstrap.json",
+    "preflight_artifact_path": "C:\\Users\\gregs\\AppData\\Local\\CodexDashboard\\orchestration-validation-lane\\o2-pass0001-runs\\taskruns\\Task-2\\taskrun--Task-2--active\\execution-preflight.json",
+    "workload_step_path": "C:\\Users\\gregs\\AppData\\Local\\Temp\\cdxow\\Task-2-a469b283-2565943718\\w\\.codex-taskrun\\taskrun--Task-2--active\\workload-step-0001.json",
+    "workload_result_path": "C:\\Users\\gregs\\AppData\\Local\\Temp\\cdxow\\Task-2-a469b283-2565943718\\w\\.codex-taskrun\\taskrun--Task-2--active\\workload-step-0001.result.json",
+    "reset_status": "not_run",
+    "last_reset_at": "0001-01-01T00:00:00Z"
+  },
+  "last_progress_at": "2026-05-30T04:23:57.728788027Z",
+  "last_progress_summary": "Executed the first backend workload step packet inside the owned lane.",
+  "captured_task_snapshot": {
+    "declared_worktree_root": "C:\\Agent\\QueueDrainTestbed",
+    "declared_task_root": "C:\\Agent\\QueueDrainTestbed\\Tracking\\Task-2",
+    "declared_task_revision": "80bf86fcbd75b618de23c193869c2a4b12fab381b848acc771e18b4e5e17a393",
+    "declared_git_revision": "9fe901a9a68bb70701109855458ae3c608c1c2e6",
+    "captured_at": "2026-05-30T04:23:57.4157862Z",
+    "files": [
+      {
+        "relative_path": "TASK.md",
+        "sha256": "00a8be3cff3173853baab2e38dbb6ac576364a0511363e05254d263ecca1df7b"
+      },
+      {
+        "relative_path": "PLAN.md",
+        "sha256": "dac035defc93d3f6bd39261949e9d35036611dd330f084d8723be155e2ec68bb"
+      },
+      {
+        "relative_path": "TASK-STATE.json",
+        "sha256": "f1bf8440449e19019c773aa908379abe1ab0f2e1934a41c086103e50eb478d57"
+      }
+    ]
+  },
+  "doc_runtime_divergence_status": "in_sync",
+  "doc_runtime_divergence_summary": "Runtime task snapshot matches the declared task docs captured at dispatch.",
+  "deep_context": {
+    "preferred_launch_target": {
+      "kind": "task_artifact",
+      "label": "Task",
+      "uri": "file:///C:/Agent/QueueDrainTestbed/Tracking/Task-2/TASK.md",
+      "command": [
+        "code",
+        "C:\\Agent\\QueueDrainTestbed\\Tracking\\Task-2\\TASK.md"
+      ],
+      "preferred": true
+    },
+    "launch_targets": [
+      {
+        "kind": "task_artifact",
+        "label": "Task",
+        "uri": "file:///C:/Agent/QueueDrainTestbed/Tracking/Task-2/TASK.md",
+        "command": [
+          "code",
+          "C:\\Agent\\QueueDrainTestbed\\Tracking\\Task-2\\TASK.md"
+        ],
+        "preferred": true
+      },
+      {
+        "kind": "task_artifact",
+        "label": "Task plan",
+        "uri": "file:///C:/Agent/QueueDrainTestbed/Tracking/Task-2/PLAN.md",
+        "command": [
+          "code",
+          "C:\\Agent\\QueueDrainTestbed\\Tracking\\Task-2\\PLAN.md"
+        ]
+      },
+      {
+        "kind": "owned_checkout",
+        "label": "Owned checkout",
+        "uri": "file:///C:/Users/gregs/AppData/Local/Temp/cdxow/Task-2-a469b283-2565943718/w",
+        "command": [
+          "code",
+          "C:\\Users\\gregs\\AppData\\Local\\Temp\\cdxow\\Task-2-a469b283-2565943718\\w"
+        ]
+      },
+      {
+        "kind": "run_artifact",
+        "label": "Run artifacts",
+        "uri": "file:///C:/Users/gregs/AppData/Local/CodexDashboard/orchestration-validation-lane/o2-pass0001-runs/taskruns/Task-2/taskrun--Task-2--active",
+        "command": [
+          "code",
+          "C:\\Users\\gregs\\AppData\\Local\\CodexDashboard\\orchestration-validation-lane\\o2-pass0001-runs\\taskruns\\Task-2\\taskrun--Task-2--active"
+        ]
+      },
+      {
+        "kind": "api_resource",
+        "label": "Active run API resource",
+        "uri": "api://api/v1/task-runs/taskrun--Task-2--active"
+      }
+    ]
+  }
+}

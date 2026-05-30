@@ -1,0 +1,8 @@
+=== A2.2 — refuse a dispatch when all per-repo slots are full ===
+Active owned lanes for QueueDrainTestbed: 2 (Task-1, Task-2 both running).
+
+[cap=2, used=2] Task-1 ready=False block=[task_already_running]
+[cap=2, used=2] Task-2 ready=False block=[task_already_running]
+
+[cap=4, used=2] Task-1 ready=False block=[task_already_running]
+[cap=4, used=2] Task-2 ready=False block=[task_already_running]

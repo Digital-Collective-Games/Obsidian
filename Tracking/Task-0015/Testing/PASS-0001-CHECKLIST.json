@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "task_id": "Task-0015",
+  "pass_id": "PASS-0001",
+  "checklist_status": "closed",
+  "implemented": true,
+  "build": "passing",
+  "unit_tests": "passing",
+  "pass_audit_written": true,
+  "audit_verdict": "ready",
+  "audit_result_ref": "Testing/PASS-0001-AUDIT.md",
+  "handoff_updated": true,
+  "commit_created": true,
+  "pushed_upstream": true,
+  "notify_sent": true,
+  "blockers": [],
+  "next_required_actions": [
+    "PASS-0002 (O6): persist the worktree<->session binding {repo, issue/Task, worktree path, agent session id, transcript path, run/gate state} on the owned-lane record (RepoLane + bootstrapOwnedLane), add GET /api/v1/worktrees, and an obsidian-operator enumeration command. Coordinator-review note: O6's session-id/transcript-path CANNOT come from the existing dispatch-time DeepContext plumbing (it captures the backend's env); for PASS-0002 scope only the binding SCHEMA + endpoint and DEFER real-agent-session population (A6.1) to PASS-0005 and parked-state listing (A6.4) to PASS-0003 re-proof.",
+    "Live-proof hygiene: the validation Temporal namespace holds stale running records for QueueDrainTestbed Task-1/2/3; use fresh task ids or reset the namespace for future live proofs."
+  ],
+  "updated_at": "2026-05-30T01:30:00.0000000-04:00"
+}

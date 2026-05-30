@@ -1,0 +1,12 @@
+worktree C:/Agent/QueueDrainTestbed
+HEAD 9fe901a9a68bb70701109855458ae3c608c1c2e6
+branch refs/heads/main
+
+worktree C:/Users/gregs/AppData/Local/Temp/cdxow/Task-1-2bc4a586-3258782417/w
+HEAD 9fe901a9a68bb70701109855458ae3c608c1c2e6
+detached
+
+worktree C:/Users/gregs/AppData/Local/Temp/cdxow/Task-2-a469b283-2565943718/w
+HEAD 9fe901a9a68bb70701109855458ae3c608c1c2e6
+detached
+

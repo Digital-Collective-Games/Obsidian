@@ -38,11 +38,27 @@
 1. DONE: coordinator verified the plan-gate package and presented the gate; human
    APPROVED on 2026-05-29.
 2. DONE: **PASS-0000** (O1 manifest rename → `REPO-MANIFEST.json` + per-repo
-   `queue_workers`). Implemented by a clean-context worker, independently verified
-   by a SEPARATE clean-context QA worker (A1.1–A1.4 PASS, F-O1 not falsified — see
-   [Testing/PASS-0000-AUDIT.md](./Testing/PASS-0000-AUDIT.md) /
-   [Testing/PASS-0000-CHECKLIST.json](./Testing/PASS-0000-CHECKLIST.json)),
-   committed + pushed. NEXT: **PASS-0001** (O2 per-repo slots).
+   `queue_workers`). A1.1–A1.4 PASS, F-O1 not falsified —
+   [Testing/PASS-0000-AUDIT.md](./Testing/PASS-0000-AUDIT.md). Committed + pushed.
+3. DONE: **PASS-0001** (O2 real N>1 per-repo slots). New `internal/queue` per-repo
+   slot semaphore (limit = `queue_workers`, used = live owned-lane worktree count);
+   the per-task `active_run_exists` 1:1 gate replaced by a per-repo slot check;
+   `releasePreviousOwnedLane` untouched (cannot tear down siblings). Independent QA
+   **re-ran the live proof from scratch** on the isolated validation lane against
+   the throwaway `C:\Agent\QueueDrainTestbed` repo: A2.1 (HARD) two/three
+   concurrent worktrees + live runs, A2.2 refuse-when-full + re-admit, A2.3 no
+   `active_run_exists` with a free slot, AX.1 `go test ./...` clean, F-O2 not
+   triggered — [Testing/PASS-0001-AUDIT.md](./Testing/PASS-0001-AUDIT.md) /
+   [Testing/PASS-0001/](./Testing/PASS-0001/). Committed + pushed.
+   NEXT: **PASS-0002** (O6 worktree↔session binding + `GET /api/v1/worktrees` +
+   operator command).
+   - Carry-forward: O6's session-id/transcript-path is NOT sourceable from the
+     existing dispatch-time `DeepContext` (it captures the backend's env) — scope
+     PASS-0002 to the binding SCHEMA + endpoint and defer real-session (A6.1) to
+     PASS-0005 and parked-state (A6.4) to PASS-0003 re-proof.
+   - Live-proof hygiene: the validation Temporal namespace holds stale `running`
+     records for `QueueDrainTestbed` Task-1/2/3; use fresh task ids (or reset the
+     namespace) for future live proofs.
 3. Before PASS-0001 proof: stand up the dedicated test repo under `C:\Agent`
    (confirm the GitHub repo name/org with the human — outward-facing) and add its
    `REPO-MANIFEST.json` entry.

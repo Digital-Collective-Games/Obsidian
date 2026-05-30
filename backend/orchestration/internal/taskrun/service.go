@@ -16,6 +16,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/gregsemple2003/CodexDesktop/backend/orchestration/internal/queue"
 )
 
 type Service struct {
@@ -25,6 +27,14 @@ type Service struct {
 	ownedLaneRoot        string
 	runtime              Runtime
 	now                  func() time.Time
+	// repoSlotLimit resolves the per-repo queue_workers cap (max concurrent owned
+	// lanes). It is a field so tests can pin the cap without an on-disk manifest;
+	// production wiring reads REPO-MANIFEST.json at the declared worktree root.
+	repoSlotLimit func() int
+	// countActiveOwnedLanes reports how many owned-lane worktrees are currently
+	// checked out for the repo. It is a field so tests can drive slot accounting
+	// deterministically; production wiring counts live git worktrees.
+	countActiveOwnedLanes func() (int, error)
 }
 
 type taskStateFile struct {
@@ -63,7 +73,7 @@ type ownedLaneBootstrapRecord struct {
 }
 
 func NewService(declaredWorktreeRoot string, runsRoot string, runtime Runtime) *Service {
-	return &Service{
+	s := &Service{
 		declaredWorktreeRoot: declaredWorktreeRoot,
 		trackingRoot:         filepath.Join(declaredWorktreeRoot, "Tracking"),
 		runArtifactsRoot:     filepath.Join(runsRoot, "taskruns"),
@@ -73,6 +83,53 @@ func NewService(declaredWorktreeRoot string, runsRoot string, runtime Runtime) *
 			return time.Now().UTC()
 		},
 	}
+	s.repoSlotLimit = s.manifestQueueWorkers
+	s.countActiveOwnedLanes = s.countOwnedLaneWorktrees
+	return s
+}
+
+// manifestQueueWorkers resolves the repo's queue_workers cap from
+// REPO-MANIFEST.json at the declared worktree root. A missing or unmatched
+// manifest falls back to the documented default so a fresh checkout still
+// dispatches rather than pinning concurrency to an undefined value.
+func (s *Service) manifestQueueWorkers() int {
+	manifest, err := queue.LoadManifest(s.declaredWorktreeRoot)
+	if err != nil {
+		return queue.DefaultQueueWorkers
+	}
+	workers, _ := manifest.QueueWorkersForRoot(s.declaredWorktreeRoot)
+	return workers
+}
+
+// countOwnedLaneWorktrees counts the live owned-lane checkouts for the repo by
+// listing the declared worktree's git worktrees and keeping those rooted under
+// the backend-owned lane root. Each O2 slot is one such worktree, so this is the
+// durable per-repo used-slot count (siblings included, no per-task filtering).
+func (s *Service) countOwnedLaneWorktrees() (int, error) {
+	argv := []string{}
+	if runtime.GOOS == "windows" {
+		argv = append(argv, "-c", "core.longpaths=true")
+	}
+	argv = append(argv, "-C", s.declaredWorktreeRoot, "worktree", "list", "--porcelain")
+	out, err := exec.Command("git", argv...).Output()
+	if err != nil {
+		return 0, fmt.Errorf("list owned-lane worktrees: %w", err)
+	}
+	count := 0
+	for _, line := range strings.Split(string(out), "\n") {
+		const prefix = "worktree "
+		if !strings.HasPrefix(line, prefix) {
+			continue
+		}
+		path := strings.TrimSpace(strings.TrimPrefix(line, prefix))
+		if path == "" {
+			continue
+		}
+		if pathWithinRoot(path, s.ownedLaneRoot) {
+			count++
+		}
+	}
+	return count, nil
 }
 
 func (s *Service) ListTasks(ctx context.Context) ([]TaskView, error) {
@@ -774,11 +831,8 @@ func (s *Service) deriveDispatchReadiness(metadata parsedTask, activeRunExists b
 			Summary: "Dispatch is unavailable because the task is already terminal.",
 		})
 	}
-	if activeRunExists {
-		readiness.BlockReasons = append(readiness.BlockReasons, ActionBlockReason{
-			Code:    "active_run_exists",
-			Summary: "Dispatch is blocked while another active run owns the current live story.",
-		})
+	if blocked, reason := s.repoSlotBlock(activeRunExists); blocked {
+		readiness.BlockReasons = append(readiness.BlockReasons, reason)
 	}
 	if _, err := os.Stat(filepath.Join(metadata.taskRoot, "PLAN.md")); err != nil {
 		readiness.BlockReasons = append(readiness.BlockReasons, ActionBlockReason{
@@ -806,6 +860,37 @@ func (s *Service) deriveDispatchReadiness(metadata parsedTask, activeRunExists b
 	}
 
 	return readiness
+}
+
+// repoSlotBlock applies the O2 per-repo concurrency gate. It replaces the former
+// hard 1:1 active_run_exists block: a same-repo dispatch is allowed while FEWER
+// than the repo's queue_workers owned lanes are active, and refused only once
+// every slot is occupied. A task that itself already owns the live story is still
+// blocked from a duplicate dispatch (a distinct reason, not the per-repo one).
+func (s *Service) repoSlotBlock(activeRunExists bool) (bool, ActionBlockReason) {
+	if activeRunExists {
+		return true, ActionBlockReason{
+			Code:    "task_already_running",
+			Summary: "Dispatch is blocked while this task already owns an active run.",
+		}
+	}
+	if s.countActiveOwnedLanes == nil || s.repoSlotLimit == nil {
+		return false, ActionBlockReason{}
+	}
+	used, err := s.countActiveOwnedLanes()
+	if err != nil {
+		// Slot accounting is best-effort; if the count is unavailable, fall back to
+		// allowing dispatch rather than wedging the queue on a transient git error.
+		return false, ActionBlockReason{}
+	}
+	decision := queue.EvaluateSlot(s.repoSlotLimit(), used)
+	if decision.Admit {
+		return false, ActionBlockReason{}
+	}
+	return true, ActionBlockReason{
+		Code:    "repo_slots_exhausted",
+		Summary: fmt.Sprintf("Dispatch is blocked while all %d per-repo worktree slots are occupied.", decision.Limit),
+	}
 }
 
 func (s *Service) deriveAttention(state string, dispatchReady bool) AttentionPriority {

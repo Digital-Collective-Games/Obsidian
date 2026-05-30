@@ -1,0 +1,5 @@
+=== A2.2 — same-repo dispatch refused when all per-repo slots full, then admitted after a slot frees ===
+Active owned lanes for QueueDrainTestbed: 2 (Task-1, Task-2 both running). Task-3 owns no run.
+
+[cap=2, used=2 -> FULL] Task-3 ready=False block=[repo_slots_exhausted]
+[cap=4, used=2 -> 2 free] Task-3 ready=True block=[]
