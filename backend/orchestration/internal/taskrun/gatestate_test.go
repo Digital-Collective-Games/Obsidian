@@ -89,6 +89,48 @@ func TestSetRunGateStateParksAndStaysListed(t *testing.T) {
 	}
 }
 
+// O5/O6 (coordinator-review correction 2): BindLaunchedSession replaces the
+// dispatch-time placeholder session fields on the active lane binding with the
+// POST-LAUNCH-discovered agent session id + transcript path, without changing the
+// run/gate state or deallocating. This is what the consumer calls after the
+// launcher discovers the launched agent's OWN session.
+func TestBindLaunchedSessionReplacesPlaceholders(t *testing.T) {
+	worktreeRoot := writeGitTaskTrackingRoot(t, map[string]taskFixture{
+		"Task-0008": {
+			taskMD:    "# Task 0008\n\n## Title\n\nBuild the backend task dispatch layer.\n\n## Summary\n\nDurable contract.\n",
+			taskState: `{"task_id":"Task-0008","status":"in_progress","phase":"implementation","plan_approved":true,"current_pass":"PASS-0001","current_gate":"implementation","blockers":[],"updated_at":"2026-04-24T16:44:31-04:00"}`,
+			planMD:    "# approved plan\n",
+		},
+	})
+	runtime := newFakeRuntime()
+	service := NewService(worktreeRoot, filepath.Join(worktreeRoot, ".runs"), runtime)
+	if _, err := service.Dispatch(context.Background(), "Task-0008"); err != nil {
+		t.Fatalf("dispatch: %v", err)
+	}
+
+	const wantSession = "019e771f-94db-7c22-bd3a-cf13a11df3ff"
+	const wantTranscript = `C:\Users\gregs\.codex\sessions\2026\05\30\rollout-019e771f.jsonl`
+	updated, err := service.BindLaunchedSession("Task-0008", wantSession, wantTranscript)
+	if err != nil {
+		t.Fatalf("bind launched session: %v", err)
+	}
+	if updated.AgentSessionID != wantSession || updated.SessionTranscriptPath != wantTranscript {
+		t.Fatalf("binding not updated with launched session: %#v", updated)
+	}
+	// Run/gate state is untouched (still running) and the worktree is not deallocated.
+	if updated.RunGateState != RunGateStateRunning {
+		t.Fatalf("BindLaunchedSession changed run/gate state to %q", updated.RunGateState)
+	}
+	// The update persisted durably (a fresh list re-reads from disk).
+	worktrees, err := service.ListActiveWorktrees()
+	if err != nil {
+		t.Fatalf("list after bind: %v", err)
+	}
+	if len(worktrees) != 1 || worktrees[0].AgentSessionID != wantSession || worktrees[0].SessionTranscriptPath != wantTranscript {
+		t.Fatalf("launched-session binding did not persist: %#v", worktrees)
+	}
+}
+
 func TestSetRunGateStateRejectsUnknownState(t *testing.T) {
 	worktreeRoot := writeGitTaskTrackingRoot(t, map[string]taskFixture{
 		"Task-0008": {

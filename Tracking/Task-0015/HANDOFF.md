@@ -86,13 +86,35 @@
    Committed + pushed. The live attempt also fixed a real issue-field-values
    parse bug (value is a numeric option id). Honest deferral: the no-proxy
    real-GitHub-UI end-to-end A3.1 → PASS-0006.
-   NEXT: **PASS-0005** (O5 — largest/highest-risk: top-level headless agent
-   launch + POST-LAUNCH session discovery into the O6 binding; external invisible
-   liveness watchdog on transcript-append growth, suspended while parked; one poke
-   that actually wakes the process; incident + MOCKED email. Also closes
-   agent-driven A4.1/A4.2/A4.7). Then **PASS-0006** (regression) NEEDS THE HUMAN
-   (real-UI `Queue=Ready` flip via the Chrome debug tab + REG-007).
+   NEXT: **PASS-0005**.
+7. PARTIAL: **PASS-0005** (O5 — largest/highest-risk). DETERMINISTIC SCOPE DONE +
+   committed: the external liveness watchdog (`internal/queue/watchdog.go`) —
+   signal-anchored detection (transcript size+mtime → `last_active_signal_at`,
+   refreshed on append, never dispatch), FULL parked-suspension (re-anchors on
+   un-park), exactly one poke via an injected seam, incident email (state +
+   transcript) via an injected MOCK sink, configurable thresholds, long-build
+   `ProcessBusy` guard — and the launcher + POST-LAUNCH session discovery
+   (`internal/queue/launcher.go` + `Service.BindLaunchedSession`). Independent QA
+   re-derived the watchdog live against a real transcript: A5.2/A5.4/A5.5 (HARD) +
+   A5.3-watchdog-half PASS, F-O5-signal/parked not triggered, `go test` clean —
+   [Testing/PASS-0005-AUDIT.md](./Testing/PASS-0005-AUDIT.md).
+   **PENDING SUPERVISED (honestly deferred, not faked):** A5.1 (HARD — real
+   top-level agent spawning its own subagent: cannot be made bounded-safe
+   unattended) and the poke "actually wake" input-delivery (no mechanism exists;
+   `DeliverWake`=false). See the PASS-0005 checklist blockers.
+8. PENDING (NEEDS HUMAN): **PASS-0006** (regression) — the no-proxy real-GitHub-UI
+   A3.1 end-to-end via the Chrome debug tab flipping `Queue=Ready` on a
+   `QueueDrainTestbed` issue → backend pickup; add REG-007 to `REGRESSION.md`.
    - Live-proof hygiene: use fresh task ids; override `CODEX_ORCHESTRATION_JOBS_ROOT`.
+
+## Where the unsupervised run stopped (2026-05-30)
+
+5 passes fully done + independently verified + committed/pushed (O1, O2, O6, O4,
+O3). PASS-0005 (O5) deterministic half done + committed; its HARD A5.1 + the
+poke-wake mechanism are PENDING a SUPERVISED session (launching a real autonomous
+agent + designing wake-input delivery — both unsafe/under-specified to run
+unattended). PASS-0006 (regression) and task CLOSURE are human gates. The
+remaining work is human-gated, not time-gated.
 3. Before PASS-0001 proof: stand up the dedicated test repo under `C:\Agent`
    (confirm the GitHub repo name/org with the human — outward-facing) and add its
    `REPO-MANIFEST.json` entry.

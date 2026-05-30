@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "task_id": "Task-0015",
+  "pass_id": "PASS-0005",
+  "checklist_status": "blocked",
+  "implemented": true,
+  "build": "passing",
+  "unit_tests": "passing",
+  "pass_audit_written": true,
+  "audit_verdict": "ready_with_caveats",
+  "audit_result_ref": "Testing/PASS-0005-AUDIT.md",
+  "handoff_updated": true,
+  "commit_created": true,
+  "pushed_upstream": true,
+  "notify_sent": true,
+  "blockers": [
+    "A5.1 (HARD) PENDING supervised completion: launching a real top-level agent that spawns its own subagent cannot be made bounded-safe unattended (codex exec has no bounded subagent op; --dangerously-bypass-approvals-and-sandbox unattended is the forbidden unbounded run). Launcher + post-launch discovery code is implemented + unit-tested; a supervised run executes Launcher.Start against C:\\Agent\\QueueDrainTestbed and confirms a subagent transcript.",
+    "Poke 'actually wake' input-delivery (coordinator-review correction 3) PENDING: no mechanism to inject input into a running headless codex/claude process; DeliverWake returns false honestly. Needs a design decision in a supervised session."
+  ],
+  "next_required_actions": [
+    "SUPERVISED O5 finish: (1) bounded real top-level agent launch capturing a subagent transcript (A5.1); (2) wake-input delivery mechanism so DeliverWake returns true; (3) wire launcher->DiscoverSession->BindLaunchedSession + watchdog->real gmail sink into the live consumer, then the real-agent stall repro (real-agent half of A5.3).",
+    "PASS-0006 (regression) NEEDS THE HUMAN: the no-proxy real-GitHub-UI A3.1 end-to-end via the Chrome debug tab flipping Queue=Ready on a QueueDrainTestbed issue -> backend pickup; add REG-007 to REGRESSION.md.",
+    "Task CLOSURE is a distinct, final human gate (never self-close)."
+  ],
+  "updated_at": "2026-05-30T05:45:00.0000000-04:00"
+}

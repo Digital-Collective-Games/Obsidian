@@ -87,6 +87,7 @@ type QueueDecision struct {
 // taskrun, which already imports queue); a unit test asserts they match the taskrun
 // constants so the two never drift.
 const (
+	runGateStateRunning               = "running"
 	runGateStateParkedAwaitingClosure = "parked_awaiting_closure"
 	runGateStateParkedResearch        = "parked_research"
 	runGateStateParkedPlan            = "parked_plan"

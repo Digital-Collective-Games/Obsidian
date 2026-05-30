@@ -4,18 +4,22 @@
   "status": "in_progress",
   "phase": "implementation",
   "plan_approved": true,
-  "current_pass": null,
+  "current_pass": "PASS-0005",
   "last_completed_pass": "PASS-0004",
   "current_gate": null,
-  "latest_audit_verdict": "ready",
+  "latest_audit_verdict": "ready_with_caveats",
   "validation": {
     "build": "passing",
     "unit_tests": "passing",
     "regression": "not_run"
   },
-  "blockers": [],
-  "next_expected_artifacts": [
-    "Testing/PASS-0005-CHECKLIST.json"
+  "blockers": [
+    "PASS-0005 (O5) PARTIAL: deterministic watchdog + launcher/discovery committed; A5.1 (HARD, real top-level agent spawning a subagent) and the poke 'actually wake' input-delivery are PENDING a SUPERVISED session (unsafe/under-specified to run unattended).",
+    "PASS-0006 (regression) PENDING the human: real-GitHub-UI Queue=Ready flip via the Chrome debug tab on a QueueDrainTestbed issue -> backend pickup; add REG-007.",
+    "Task CLOSURE is a distinct, final human gate (never self-close)."
   ],
-  "updated_at": "2026-05-30T04:40:00-04:00"
+  "next_expected_artifacts": [
+    "Testing/PASS-0006-CHECKLIST.json"
+  ],
+  "updated_at": "2026-05-30T05:45:00-04:00"
 }

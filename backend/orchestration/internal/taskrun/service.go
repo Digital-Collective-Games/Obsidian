@@ -274,6 +274,30 @@ func (s *Service) SetRunGateState(taskID string, state string) (WorktreeBinding,
 	return WorktreeBinding{RunID: activeRecord.RunID, RepoBinding: binding}, nil
 }
 
+// BindLaunchedSession records the POST-LAUNCH-discovered agent session id and
+// transcript path on the task's active owned-lane binding (O5/O6, coordinator-review
+// correction 2). At dispatch the binding's session fields are placeholders sourced
+// from the BACKEND process's env (bindingForLane); they cannot name the launched
+// agent's own session, which does not exist until after launch. After the launcher
+// discovers the agent's session (DiscoverSession), the consumer calls this to
+// replace those placeholders with the real values the O5 watchdog stats and the O6
+// endpoint reports. It never changes the run/gate state and never deallocates.
+func (s *Service) BindLaunchedSession(taskID string, sessionID string, transcriptPath string) (WorktreeBinding, error) {
+	activePath, activeRecord, err := s.findActiveLaneRecord(taskID)
+	if err != nil {
+		return WorktreeBinding{}, err
+	}
+
+	binding := bindingFromRecord(activeRecord)
+	binding.AgentSessionID = sessionID
+	binding.SessionTranscriptPath = transcriptPath
+	activeRecord.Binding = &binding
+	if err := writeJSONFile(activePath, activeRecord); err != nil {
+		return WorktreeBinding{}, fmt.Errorf("persist launched-session binding on owned-lane record: %w", err)
+	}
+	return WorktreeBinding{RunID: activeRecord.RunID, RepoBinding: binding}, nil
+}
+
 // findActiveLaneRecord returns the bootstrap record path and decoded record for a
 // task's active owned lane (the most recently bootstrapped record whose worktree
 // still exists on disk). It returns ErrNoActiveOwnedLane when the task has no

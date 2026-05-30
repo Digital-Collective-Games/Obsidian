@@ -1,0 +1,47 @@
+{
+  "generated_at": "2026-05-30T05:52:15Z",
+  "real_watchdog": true,
+  "real_email_sent": false,
+  "stall_window": "5m0s",
+  "poke_ack_window": "5m0s",
+  "transcript_path": "C:\\Users\\gregs\\AppData\\Local\\Temp\\watchdogrepro-3120934598\\2026\\05\\30\\rollout-repro.jsonl",
+  "active_run_scenario": {
+    "description": "active run goes quiet past the 5m stall window; one poke; ack window elapses; incident email captured",
+    "poke_count": 1,
+    "incident_count": 1,
+    "deadline_anchored_to": "last_observed_activity"
+  },
+  "gate_parked_scenario": {
+    "description": "gate-parked (parked_research) run sits idle 60m (12x the 5m window); watchdog stays silent",
+    "poke_count": 0,
+    "incident_count": 0,
+    "deadline_anchored_to": "n/a (suspended while parked)"
+  },
+  "incident_email": {
+    "EmailTo": "admin@digitalcollective.games",
+    "Subject": "[codex watchdog] agent stalled: Task-0042 (repro-run-active)",
+    "Body": "A dispatched agent stopped emitting transcript activity and did not\nrespond to one wake/poke within the ack window. Observed state:\n\n  run id:               repro-run-active\n  task / issue:         Task-0042\n  repo:                 QueueDrainTestbed\n  worktree:             C:\\Agent\\QueueDrainTestbed\\.owned\\w\n  bound transcript:     C:\\Users\\gregs\\AppData\\Local\\Temp\\watchdogrepro-3120934598\\2026\\05\\30\\rollout-repro.jsonl\n  last_active_signal_at:2026-05-30T08:02:00Z\n  detected_at:          2026-05-30T08:14:00Z\n  stall_window:         5m0s\n  poke_ack_window:      5m0s\n  poked:                true\n  wake_input_delivered: false\n  process_alive:        true\n  escalated_urgent:     false\n\nSession transcript (full file):\n  C:\\Users\\gregs\\AppData\\Local\\Temp\\watchdogrepro-3120934598\\2026\\05\\30\\rollout-repro.jsonl\n\nLast 6 transcript events (inline tail):\n  {\"timestamp\":\"2026-05-30T08:00:00Z\",\"type\":\"event_msg\",\"payload\":{\"n\":0}}\n  {\"timestamp\":\"2026-05-30T08:01:00Z\",\"type\":\"event_msg\",\"payload\":{\"n\":1}}\n  {\"timestamp\":\"2026-05-30T08:02:00Z\",\"type\":\"event_msg\",\"payload\":{\"n\":2}}\n  {\"timestamp\":\"2026-05-30T08:03:00Z\",\"type\":\"event_msg\",\"payload\":{\"n\":3}}\n  {\"timestamp\":\"2026-05-30T08:04:00Z\",\"type\":\"event_msg\",\"payload\":{\"n\":4}}\n  {\"timestamp\":\"2026-05-30T08:05:00Z\",\"type\":\"event_msg\",\"payload\":{\"n\":5}}\n",
+    "RunID": "repro-run-active",
+    "TaskID": "Task-0042",
+    "Repo": "QueueDrainTestbed",
+    "WorktreePath": "C:\\Agent\\QueueDrainTestbed\\.owned\\w",
+    "TranscriptPath": "C:\\Users\\gregs\\AppData\\Local\\Temp\\watchdogrepro-3120934598\\2026\\05\\30\\rollout-repro.jsonl",
+    "LastActiveSignalAt": "2026-05-30T08:02:00Z",
+    "DetectedAt": "2026-05-30T08:14:00Z",
+    "StallWindow": 300000000000,
+    "PokeAckWindow": 300000000000,
+    "Poked": true,
+    "WakeDelivered": false,
+    "ProcessAlive": true,
+    "Escalated": false,
+    "TranscriptTailLines": [
+      "{\"timestamp\":\"2026-05-30T08:00:00Z\",\"type\":\"event_msg\",\"payload\":{\"n\":0}}",
+      "{\"timestamp\":\"2026-05-30T08:01:00Z\",\"type\":\"event_msg\",\"payload\":{\"n\":1}}",
+      "{\"timestamp\":\"2026-05-30T08:02:00Z\",\"type\":\"event_msg\",\"payload\":{\"n\":2}}",
+      "{\"timestamp\":\"2026-05-30T08:03:00Z\",\"type\":\"event_msg\",\"payload\":{\"n\":3}}",
+      "{\"timestamp\":\"2026-05-30T08:04:00Z\",\"type\":\"event_msg\",\"payload\":{\"n\":4}}",
+      "{\"timestamp\":\"2026-05-30T08:05:00Z\",\"type\":\"event_msg\",\"payload\":{\"n\":5}}"
+    ],
+    "TranscriptFullPath": "C:\\Users\\gregs\\AppData\\Local\\Temp\\watchdogrepro-3120934598\\2026\\05\\30\\rollout-repro.jsonl"
+  }
+}

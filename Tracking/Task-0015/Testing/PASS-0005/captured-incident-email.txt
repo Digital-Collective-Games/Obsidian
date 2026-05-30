@@ -1,0 +1,30 @@
+To: admin@digitalcollective.games
+Subject: [codex watchdog] agent stalled: Task-0042 (repro-run-active)
+
+A dispatched agent stopped emitting transcript activity and did not
+respond to one wake/poke within the ack window. Observed state:
+
+  run id:               repro-run-active
+  task / issue:         Task-0042
+  repo:                 QueueDrainTestbed
+  worktree:             C:\Agent\QueueDrainTestbed\.owned\w
+  bound transcript:     C:\Users\gregs\AppData\Local\Temp\watchdogrepro-3120934598\2026\05\30\rollout-repro.jsonl
+  last_active_signal_at:2026-05-30T08:02:00Z
+  detected_at:          2026-05-30T08:14:00Z
+  stall_window:         5m0s
+  poke_ack_window:      5m0s
+  poked:                true
+  wake_input_delivered: false
+  process_alive:        true
+  escalated_urgent:     false
+
+Session transcript (full file):
+  C:\Users\gregs\AppData\Local\Temp\watchdogrepro-3120934598\2026\05\30\rollout-repro.jsonl
+
+Last 6 transcript events (inline tail):
+  {"timestamp":"2026-05-30T08:00:00Z","type":"event_msg","payload":{"n":0}}
+  {"timestamp":"2026-05-30T08:01:00Z","type":"event_msg","payload":{"n":1}}
+  {"timestamp":"2026-05-30T08:02:00Z","type":"event_msg","payload":{"n":2}}
+  {"timestamp":"2026-05-30T08:03:00Z","type":"event_msg","payload":{"n":3}}
+  {"timestamp":"2026-05-30T08:04:00Z","type":"event_msg","payload":{"n":4}}
+  {"timestamp":"2026-05-30T08:05:00Z","type":"event_msg","payload":{"n":5}}
