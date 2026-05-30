@@ -1,0 +1,21 @@
+13:33:02 | api_wt=[1 Task-0001:running] wdirs=1 ran=1 gates:[ Task-0001=closure ] #1=CLOSED #2=OPEN
+13:33:07 | api_wt=[1 Task-0001:running] wdirs=1 ran=1 gates:[ Task-0001=closure ] #1=CLOSED #2=OPEN
+13:33:12 | api_wt=[1 Task-0002:running] wdirs=1 ran=0 gates:[ Task-0002=None ] #1=CLOSED #2=OPEN
+13:33:17 | api_wt=[1 Task-0002:running] wdirs=1 ran=0 gates:[ Task-0002=None ] #1=CLOSED #2=OPEN
+13:33:23 | api_wt=[1 Task-0002:running] wdirs=1 ran=0 gates:[ Task-0002=None ] #1=CLOSED #2=OPEN
+13:33:28 | api_wt=[1 Task-0002:running] wdirs=1 ran=0 gates:[ Task-0002=None ] #1=CLOSED #2=OPEN
+13:33:33 | api_wt=[1 Task-0002:running] wdirs=1 ran=0 gates:[ Task-0002=None ] #1=CLOSED #2=OPEN
+13:33:38 | api_wt=[1 Task-0002:running] wdirs=1 ran=0 gates:[ Task-0002=None ] #1=CLOSED #2=OPEN
+13:33:43 | api_wt=[1 Task-0002:running] wdirs=1 ran=0 gates:[ Task-0002=None ] #1=CLOSED #2=OPEN
+13:33:48 | api_wt=[1 Task-0002:running] wdirs=1 ran=0 gates:[ Task-0002=None ] #1=CLOSED #2=OPEN
+13:33:53 | api_wt=[1 Task-0002:running] wdirs=1 ran=1 gates:[ Task-0002=None ] #1=CLOSED #2=OPEN
+13:33:58 | api_wt=[1 Task-0002:running] wdirs=1 ran=1 gates:[ Task-0002=closure ] #1=CLOSED #2=OPEN
+13:34:04 | api_wt=[1 Task-0002:running] wdirs=1 ran=1 gates:[ Task-0002=closure ] #1=CLOSED #2=OPEN
+13:34:09 | api_wt=[1 Task-0002:running] wdirs=1 ran=1 gates:[ Task-0002=closure ] #1=CLOSED #2=OPEN
+13:34:14 | api_wt=[1 Task-0002:running] wdirs=1 ran=1 gates:[ Task-0002=closure ] #1=CLOSED #2=CLOSED
+13:34:19 | api_wt=[1 Task-0002:running] wdirs=1 ran=1 gates:[ Task-0002=closure ] #1=CLOSED #2=CLOSED
+13:34:24 | api_wt=[1 Task-0002:running] wdirs=1 ran=1 gates:[ Task-0002=closure ] #1=CLOSED #2=CLOSED
+13:34:29 | api_wt=[1 Task-0002:running] wdirs=1 ran=1 gates:[ Task-0002=closure ] #1=CLOSED #2=CLOSED
+13:34:34 | api_wt=[1 Task-0002:running] wdirs=1 ran=1 gates:[ Task-0002=closure ] #1=CLOSED #2=CLOSED
+13:34:39 | api_wt=[0 ] wdirs=0 ran=0 gates:[ ] #1=CLOSED #2=CLOSED
+BOTH CLOSED + 0 worktrees -> lifecycle complete

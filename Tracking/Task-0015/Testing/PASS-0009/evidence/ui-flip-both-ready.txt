@@ -1,0 +1,40 @@
+REG-007 cap=1 serialization: flip BOTH QueueDrainTestbed2 issues #1 & #2 -> Queue=Ready via the real GitHub web UI (CDP)
+Starting state: #1 Queue=Never, #2 Queue=Never (confirmed via API)
+===== FLIP issue #1 -> Ready =====
+
+
+Repo               : Digital-Collective-Games/QueueDrainTestbed2
+IssueNumber        : 1
+IssueUrl           : https://github.com/Digital-Collective-Games/QueueDrainTestbed2/issues/1
+FieldName          : Queue
+RequestedOption    : Ready
+Committed          : True
+ObservedButtonText : QueueReady
+ExpectedButtonText : QueueReady
+TargetId           : 709062213292318EEC39497F5002506C
+ApiVerified        : True
+ApiOptionName      : Ready
+ApiMatches         : True
+
+
+
+
+===== FLIP issue #2 -> Ready =====
+
+
+Repo               : Digital-Collective-Games/QueueDrainTestbed2
+IssueNumber        : 2
+IssueUrl           : https://github.com/Digital-Collective-Games/QueueDrainTestbed2/issues/2
+FieldName          : Queue
+RequestedOption    : Ready
+Committed          : True
+ObservedButtonText : QueueReady
+ExpectedButtonText : QueueReady
+TargetId           : 709062213292318EEC39497F5002506C
+ApiVerified        : True
+ApiOptionName      : Ready
+ApiMatches         : True
+
+
+
+

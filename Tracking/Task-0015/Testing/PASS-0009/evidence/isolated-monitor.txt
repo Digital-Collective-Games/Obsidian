@@ -1,0 +1,45 @@
+13:28:54 | api_wt=[0 ] wdirs=0 ran=0 gates:[ ] #1=OPEN #2=OPEN
+13:28:59 | api_wt=[0 ] wdirs=0 ran=0 gates:[ ] #1=OPEN #2=OPEN
+13:29:04 | api_wt=[0 ] wdirs=0 ran=0 gates:[ ] #1=OPEN #2=OPEN
+13:29:09 | api_wt=[0 ] wdirs=0 ran=0 gates:[ ] #1=OPEN #2=OPEN
+13:29:14 | api_wt=[0 ] wdirs=0 ran=0 gates:[ ] #1=OPEN #2=OPEN
+13:29:19 | api_wt=[0 ] wdirs=0 ran=0 gates:[ ] #1=OPEN #2=OPEN
+13:29:24 | api_wt=[0 ] wdirs=0 ran=0 gates:[ ] #1=OPEN #2=OPEN
+13:29:29 | api_wt=[0 ] wdirs=0 ran=0 gates:[ ] #1=OPEN #2=OPEN
+13:29:34 | api_wt=[0 ] wdirs=0 ran=0 gates:[ ] #1=OPEN #2=OPEN
+13:29:39 | api_wt=[0 ] wdirs=0 ran=0 gates:[ ] #1=OPEN #2=OPEN
+13:29:44 | api_wt=[0 ] wdirs=0 ran=0 gates:[ ] #1=OPEN #2=OPEN
+13:29:49 | api_wt=[0 ] wdirs=0 ran=0 gates:[ ] #1=OPEN #2=OPEN
+13:29:54 | api_wt=[0 ] wdirs=0 ran=0 gates:[ ] #1=OPEN #2=OPEN
+13:29:59 | api_wt=[0 ] wdirs=0 ran=0 gates:[ ] #1=OPEN #2=OPEN
+13:30:04 | api_wt=[0 ] wdirs=0 ran=0 gates:[ ] #1=OPEN #2=OPEN
+13:30:10 | api_wt=[0 ] wdirs=0 ran=0 gates:[ ] #1=OPEN #2=OPEN
+13:30:15 | api_wt=[0 ] wdirs=0 ran=0 gates:[ ] #1=OPEN #2=OPEN
+13:30:20 | api_wt=[0 ] wdirs=0 ran=0 gates:[ ] #1=OPEN #2=OPEN
+13:30:25 | api_wt=[0 ] wdirs=0 ran=0 gates:[ ] #1=OPEN #2=OPEN
+13:30:30 | api_wt=[0 ] wdirs=0 ran=0 gates:[ ] #1=OPEN #2=OPEN
+13:30:35 | api_wt=[0 ] wdirs=0 ran=0 gates:[ ] #1=OPEN #2=OPEN
+13:30:40 | api_wt=[0 ] wdirs=0 ran=0 gates:[ ] #1=OPEN #2=OPEN
+13:30:45 | api_wt=[0 ] wdirs=0 ran=0 gates:[ ] #1=OPEN #2=OPEN
+13:30:50 | api_wt=[0 ] wdirs=0 ran=0 gates:[ ] #1=OPEN #2=OPEN
+13:30:55 | api_wt=[0 ] wdirs=0 ran=0 gates:[ ] #1=OPEN #2=OPEN
+13:31:00 | api_wt=[0 ] wdirs=0 ran=0 gates:[ ] #1=OPEN #2=OPEN
+13:31:05 | api_wt=[0 ] wdirs=0 ran=0 gates:[ ] #1=OPEN #2=OPEN
+13:31:10 | api_wt=[0 ] wdirs=0 ran=0 gates:[ ] #1=OPEN #2=OPEN
+13:31:15 | api_wt=[0 ] wdirs=0 ran=0 gates:[ ] #1=OPEN #2=OPEN
+13:31:20 | api_wt=[0 ] wdirs=0 ran=0 gates:[ ] #1=OPEN #2=OPEN
+13:31:26 | api_wt=[0 ] wdirs=0 ran=0 gates:[ ] #1=OPEN #2=OPEN
+13:31:31 | api_wt=[0 ] wdirs=0 ran=0 gates:[ ] #1=OPEN #2=OPEN
+13:31:36 | api_wt=[0 ] wdirs=0 ran=0 gates:[ ] #1=OPEN #2=OPEN
+13:31:41 | api_wt=[0 ] wdirs=0 ran=0 gates:[ ] #1=OPEN #2=OPEN
+13:31:46 | api_wt=[0 ] wdirs=0 ran=0 gates:[ ] #1=OPEN #2=OPEN
+13:31:51 | api_wt=[0 ] wdirs=0 ran=0 gates:[ ] #1=OPEN #2=OPEN
+13:31:56 | api_wt=[0 ] wdirs=0 ran=0 gates:[ ] #1=OPEN #2=OPEN
+13:32:01 | api_wt=[0 ] wdirs=0 ran=0 gates:[ ] #1=OPEN #2=OPEN
+13:32:06 | api_wt=[1 Task-0001:running] wdirs=1 ran=0 gates:[ Task-0001=None ] #1=OPEN #2=OPEN
+13:32:11 | api_wt=[1 Task-0001:running] wdirs=1 ran=0 gates:[ Task-0001=None ] #1=OPEN #2=OPEN
+13:32:17 | api_wt=[1 Task-0001:running] wdirs=1 ran=0 gates:[ Task-0001=None ] #1=OPEN #2=OPEN
+13:32:22 | api_wt=[1 Task-0001:running] wdirs=1 ran=0 gates:[ Task-0001=None ] #1=OPEN #2=OPEN
+13:32:27 | api_wt=[1 Task-0001:running] wdirs=1 ran=0 gates:[ Task-0001=None ] #1=OPEN #2=OPEN
+13:32:32 | api_wt=[1 Task-0001:running] wdirs=1 ran=0 gates:[ Task-0001=None ] #1=OPEN #2=OPEN
+13:32:37 | api_wt=[1 Task-0001:running] wdirs=1 ran=0 gates:[ Task-0001=None ] #1=OPEN #2=OPEN

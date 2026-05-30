@@ -5,7 +5,7 @@
   "phase": "implementation",
   "plan_approved": true,
   "current_pass": null,
-  "last_completed_pass": "PASS-0008",
+  "last_completed_pass": "PASS-0009",
   "current_gate": "closure",
   "latest_audit_verdict": "ready",
   "validation": {
@@ -18,8 +18,9 @@
     "Task CLOSURE is a distinct, final human gate (the agent never self-closes); awaiting explicit human closure approval. All sub-objectives O1-O6 + cross-cutting (REG-007) implemented + independently QA'd + committed + pushed.",
     "PASS-0008 (2026-05-30): full deallocate/reuse lifecycle proven live + env-gated TEST-ONLY auto-close (OBSIDIAN_AUTO_CLOSE_QUEUED, default OFF; agent announces via TASK-STATE current_gate=closure, never self-closes). BUG-0002 (closed task's worktree never deallocated; consumer wedged on 'is not a working tree') FOUND by the full-cycle regression + FIXED (terminate launched agent before removal + idempotent self-healing cleanupOwnedLane) + verified. The earlier PASS-0006 'release on close' only looked fine because the worktree was hand-pruned. See Testing/PASS-0008/REG-007-FULL-CYCLE-PROOF.md.",
     "O5 hardening follow-up (BUG-0001): launcher launch/error logging still pending. The orphan-agent kill on owned-lane reclaim is now DONE (BUG-0002 fix: reclaim terminates the launched agent before worktree removal).",
-    "O5 A5.3 follow-up: a full real-agent stall -> detect -> resume-poke -> incident-email repro (watchdog logic + resume-poke + launch each proven; integrated real-agent stall not separately reproduced)."
+    "O5 A5.3 follow-up: a full real-agent stall -> detect -> resume-poke -> incident-email repro (watchdog logic + resume-poke + launch each proven; integrated real-agent stall not separately reproduced).",
+    "PASS-0009 (2026-05-30): REG-007 cap=1 serialization PROVEN on a NEW separate 1-slot repo (QueueDrainTestbed2, queue_workers=1): two issues flipped Queue=Ready at the real UI at once -> EXACTLY ONE dispatched (one worktree, never two), the other DEFERRED with no worktree -> first finishes + auto-close + DEALLOCATE -> second dispatched INTO the freed slot (reuse) + finishes -> 0. Live, isolated namespace reg007j. See Testing/PASS-0009/REG-007-CAP1-SERIALIZATION-PROOF.md. ANOMALY (honest): the first attempt on a SHARED default runs-root + multi-repo registry WEDGED (worktree torn down under a healthy running agent -> re-dispatch loop 'already owns an active run'); root cause NOT determined, did NOT reproduce after isolating to a dedicated runs-root + single-repo registry. Candidate follow-up to investigate: per-repo taskrun.Service enumerates a GLOBAL runs-root (ListActiveWorktrees is not repo-scoped), so a shared runs-root / second backend can interfere with lane accounting."
   ],
   "next_expected_artifacts": [],
-  "updated_at": "2026-05-30T12:50:00-04:00"
+  "updated_at": "2026-05-30T13:40:00-04:00"
 }

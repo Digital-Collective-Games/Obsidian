@@ -1,0 +1,45 @@
+FIRST-ATTEMPT ANOMALY (not reproduced after harness isolation) — see backend-drain-log.txt for the raw DEBUG log.
+
+Harness (first attempt): namespace reg007i, SHARED default runs-root
+(%LOCALAPPDATA%\CodexDashboard\orchestration-runs, still carrying PASS-0008
+Task-0005/6/7 records), registry = QueueDrainTestbed (workers=2) + QueueDrainTestbed2
+(workers=1), auto-close ON, launch-agent ON, poll 20s.
+
+Observed timeline (Task-0001, QueueDrainTestbed2 issue #1):
+  13:16:16.700  worktree w created + files captured (owned-lane-bootstrap.json captured_at)
+  13:16:16.718  bootstrap record written (bootstrapped_at)
+  ~13:16:1x     claude agent launched (binding.launched_pid=8468), session bound
+                (agent_session_id=2daf03c8-..., transcript discovered)
+  13:16:34.958  agent ALIVE, last transcript activity (read TASK-META.json) — had NOT yet
+                created AGENT-RAN.txt or set current_gate (transcript truncates here)
+  ~13:16:35-37  worktree w REMOVED + agent (PID 8468) KILLED — by something OTHER than the
+                consumer poll (poll 1 ended ~13:16:17; poll 2 started ~13:16:37). Watchdog
+                interval is DefaultWatchdogPoll=30s, so it had not ticked. No consumer
+                reclaim ran (issue #1 still OPEN, no auto-close logged for it).
+  13:16:42      poll 2: ListActiveWorktrees skips Task-0001 (os.Stat(owned_repo_root) fails,
+                w gone) -> consumer thinks slot free + task not active -> re-dispatches
+                Task-0001 -> service.Dispatch DispatchReadiness guard rejects:
+                "Dispatch is blocked while this task already owns an active run."
+  13:16:42+     every subsequent poll repeats the same error -> consumer WEDGED for the repo.
+
+Post-mortem facts:
+  - git worktree list: .../cdxow/Task-0001-4e982457-661700219/w  (detached HEAD) prunable
+    (parent dir present, working dir w gone).
+  - PID 8468 not running; AGENT-RAN.txt never persisted.
+  - owned-lane-bootstrap.json was fully written and correct (incl. binding + pid).
+
+Root-cause attribution: NOT DETERMINED from logs/code. The dispatch path's only worktree
+remover (releasePreviousOwnedLane -> cleanupOwnedLane) is a no-op for a fresh task on a
+fresh namespace, and the watchdog supervisor only calls watchdog.Observe (no reclaim/remove).
+The teardown happened in a ~2s window with no consumer activity.
+
+Did NOT reproduce after isolation: re-running with a fresh namespace (reg007j), a DEDICATED
+runs-root, and a SINGLE-repo registry (QueueDrainTestbed2 only) — the full cap=1 lifecycle
+passed cleanly (see isolated-monitor-full.txt / isolated-backend-log.txt). The agent ran to
+completion uninterrupted; the worktree was reclaimed only by the consumer on terminal close.
+
+Leading hypothesis: runs-root contamination — the per-repo taskrun.Service enumerates a
+GLOBAL runs-root (ListActiveWorktrees is NOT scoped per repo / per backend instance), so a
+shared runs-root carrying another run's records (or a second backend) can interfere with
+lane accounting and lifecycle. This is a real robustness observation worth a tracked
+investigation, but it is NOT a confirmed product defect on the cap=1 dispatch path itself.

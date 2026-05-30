@@ -290,3 +290,25 @@ remaining work is human-gated, not time-gated.
   - `3440ca3` — research artifacts + task baseline.
   - planning checkpoint — this handoff + PLAN + review package + state (pushed
     with this commit).
+
+## Latest status (post-plan; authoritative state = [TASK-STATE.json](./TASK-STATE.json))
+
+The handoff above reflects the PLANNING gate. Implementation has since landed
+(O1–O6 + cross-cutting REG-007, independently QA'd + committed). The task sits at
+the FINAL human closure gate (the agent never self-closes).
+
+- Last completed pass: **PASS-0009** (2026-05-30) — REG-007 **cap=1 serialization**
+  proven live on a NEW separate 1-slot repo (`QueueDrainTestbed2`,
+  `queue_workers=1`): two issues flipped `Queue=Ready` at the real GitHub UI at
+  once → exactly ONE dispatched (one worktree, never two), the other DEFERRED →
+  first finishes + auto-close + DEALLOCATE → second dispatched INTO the freed slot
+  (reuse) + finishes → 0. Proof:
+  [Testing/PASS-0009/REG-007-CAP1-SERIALIZATION-PROOF.md](./Testing/PASS-0009/REG-007-CAP1-SERIALIZATION-PROOF.md).
+  - ANOMALY (honest): the first attempt on a SHARED runs-root + multi-repo registry
+    WEDGED (worktree torn down under a healthy running agent → re-dispatch loop);
+    root cause not determined, did NOT reproduce after isolating to a dedicated
+    runs-root + single-repo registry. Candidate follow-up: per-repo `taskrun.Service`
+    enumerates a GLOBAL runs-root (`ListActiveWorktrees` is not repo-scoped) — a
+    shared runs-root / second backend can interfere with lane accounting.
+- Prior: [PASS-0008](./Testing/PASS-0008/REG-007-FULL-CYCLE-PROOF.md) (full
+  deallocate/reuse on `queue_workers=2`; resolved [BUG-0002](./BUG-0002.md)).

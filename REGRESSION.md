@@ -435,6 +435,21 @@ Proof of all three (live, registry-driven, `queue_workers=2`):
   (resolves [BUG-0002](./Tracking/Task-0015/BUG-0002.md): reclaim now terminates the
   launched agent + is idempotent/self-healing, so a close ALWAYS deallocates).
 
+- **Cap=1 serialization on a separate 1-slot repo (required):** register a SECOND repo with
+  `queue_workers=1`, flip TWO of its issues to `Queue=Ready` at the real UI at ~the same
+  time (auto-close enabled), and confirm the consumer dispatches EXACTLY ONE (one worktree,
+  never two) and DEFERS the other with NO worktree; the first finishes → auto-close →
+  DEALLOCATE, then the second is dispatched INTO the freed slot (slot REUSE, not a second
+  concurrent slot) and finishes → deallocate → 0. Run on the isolated `reg007` lane against
+  the throwaway `QueueDrainTestbed2` repo; never the production repo or the real `default`
+  namespace. Proof:
+  [Tracking/Task-0015/Testing/PASS-0009/REG-007-CAP1-SERIALIZATION-PROOF.md](./Tracking/Task-0015/Testing/PASS-0009/REG-007-CAP1-SERIALIZATION-PROOF.md).
+  Note: a first attempt on a SHARED runs-root + multi-repo registry wedged (worktree torn
+  down under a running agent → re-dispatch loop); it did not reproduce after isolating to a
+  dedicated runs-root + single-repo registry. Candidate follow-up: per-repo services
+  enumerate a GLOBAL runs-root (`ListActiveWorktrees` is not repo-scoped), so a shared
+  runs-root / second backend can interfere with lane accounting.
+
 ## Supporting Smoke
 
 ### SMOKE-001 Ingest Core
