@@ -1,0 +1,8 @@
+{
+  "startup_enabled": false,
+  "db_path": "C:\\Agent\\CodexDashboard\\Tracking\\Task-0009\\Testing\\Manual-TestDashboard\\dashboard-test.db",
+  "polling_seconds": 5,
+  "hotkey": "Ctrl+Alt+Shift+Space",
+  "weekly_budget_tokens": 4000000000,
+  "codex_root": "C:\\Agent\\CodexDashboard\\Tracking\\Task-0009\\Testing\\Manual-TestDashboard\\codex-fixture"
+}

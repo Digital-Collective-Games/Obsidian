@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "updated_at": "2026-04-27T12:17:38-04:00",
+  "jobs": [
+    {
+      "job_id": "codex-dashboard-startup",
+      "label": "CodexDashboard overlay at sign-in",
+      "kind": "startup_launcher",
+      "desired_state": "enabled",
+      "definition": {
+        "script_path": "C:\\Users\\gregs\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\CodexDashboard.cmd",
+        "command_text": "@echo off\r\n\"C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\" -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"C:\\Users\\gregs\\AppData\\Local\\CodexDashboard\\dashboard-launcher\\Start-CodexDashboard.ps1\"\r\n"
+      }
+    },
+    {
+      "job_id": "codexdashboard-orchestration-servicelane",
+      "label": "CodexDashboard-Orchestration-ServiceLane",
+      "kind": "scheduled_task",
+      "desired_state": "enabled",
+      "definition": {
+        "task_name": "CodexDashboard-Orchestration-ServiceLane",
+        "task_path": "\\",
+        "task_xml": "<?xml version=\"1.0\" encoding=\"UTF-16\"?>\r\n<Task version=\"1.3\" xmlns=\"http://schemas.microsoft.com/windows/2004/02/mit/task\">\r\n  <RegistrationInfo>\r\n    <Description>Keeps the CodexDashboard orchestration service lane running at user logon.</Description>\r\n    <URI>\\CodexDashboard-Orchestration-ServiceLane</URI>\r\n  </RegistrationInfo>\r\n  <Principals>\r\n    <Principal id=\"Author\">\r\n      <UserId>S-1-5-21-2807870856-1456765728-4249455586-1001</UserId>\r\n      <LogonType>InteractiveToken</LogonType>\r\n    </Principal>\r\n  </Principals>\r\n  <Settings>\r\n    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>\r\n    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>\r\n    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>\r\n    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>\r\n    <RestartOnFailure>\r\n      <Count>999</Count>\r\n      <Interval>PT1M</Interval>\r\n    </RestartOnFailure>\r\n    <StartWhenAvailable>true</StartWhenAvailable>\r\n    <IdleSettings>\r\n      <Duration>PT10M</Duration>\r\n      <WaitTimeout>PT1H</WaitTimeout>\r\n      <StopOnIdleEnd>true</StopOnIdleEnd>\r\n      <RestartOnIdle>false</RestartOnIdle>\r\n    </IdleSettings>\r\n    <UseUnifiedSchedulingEngine>true</UseUnifiedSchedulingEngine>\r\n  </Settings>\r\n  <Triggers>\r\n    <LogonTrigger>\r\n      <UserId>AGENTPRIME\\gregs</UserId>\r\n    </LogonTrigger>\r\n  </Triggers>\r\n  <Actions Context=\"Author\">\r\n    <Exec>\r\n      <Command>C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe</Command>\r\n      <Arguments>-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"C:\\Users\\gregs\\AppData\\Local\\CodexDashboard\\orchestration-service-lane\\launcher\\Run-OrchestrationLane.ps1\" -Lane service -Supervise</Arguments>\r\n    </Exec>\r\n  </Actions>\r\n</Task>\r\n"
+      }
+    }
+  ]
+}

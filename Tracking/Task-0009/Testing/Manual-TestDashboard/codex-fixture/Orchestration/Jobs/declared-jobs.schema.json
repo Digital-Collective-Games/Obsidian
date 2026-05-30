@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Declared Codex Jobs",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "updated_at",
+    "jobs"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "updated_at": {
+      "type": "string"
+    },
+    "jobs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": [
+          "job_id",
+          "label",
+          "kind",
+          "desired_state",
+          "definition"
+        ],
+        "properties": {
+          "job_id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "scheduled_task",
+              "startup_launcher"
+            ]
+          },
+          "desired_state": {
+            "enum": [
+              "enabled",
+              "disabled"
+            ]
+          },
+          "definition": {
+            "type": "object"
+          }
+        }
+      }
+    }
+  }
+}
