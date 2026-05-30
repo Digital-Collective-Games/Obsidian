@@ -52,6 +52,6 @@ The goal is to make burst inspection more useful without replacing the existing 
 - GitHub repo: `Digital-Collective-Games/Obsidian`
 - Issue number: `3`
 - Local task path: `Tracking/Task-0003/TASK.md`
-- Source commit: `75177b6dee23399358ee66676791fb41dc01d51e`
+- Source commit: `ed4b29411673c462f5294dabbe0be38df4e13305`
 - Local task SHA-256: `D0178312B7ECCF790DBB5F3A996471C455A8AC09E18AF7F8D7955D0922C113FA`
-- Rendered at: `2026-05-28T23:29:36.8763946-04:00`
+- Rendered at: `2026-05-29T17:24:19.9461985-04:00`

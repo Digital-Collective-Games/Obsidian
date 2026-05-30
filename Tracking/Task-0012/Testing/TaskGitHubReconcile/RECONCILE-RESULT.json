@@ -1,7 +1,7 @@
 {
     "schema_version":  1,
     "mode":  "dry_run",
-    "generated_at":  "2026-05-28T23:29:45.9606932-04:00",
+    "generated_at":  "2026-05-29T17:24:32.9164605-04:00",
     "repo_id":  "CodexDashboard",
     "provider_repo":  "Digital-Collective-Games/Obsidian",
     "policy":  {
@@ -12,8 +12,8 @@
                    "human_needed":  "Codex/local task state is authoritative for GitHub Issue Field \u0027Human Needed\u0027."
                },
     "summary":  {
-                    "local_task_count":  12,
-                    "remote_issue_count":  12,
+                    "local_task_count":  15,
+                    "remote_issue_count":  15,
                     "difference_count":  0,
                     "differences_by_type":  {
 
@@ -26,10 +26,10 @@
     "artifacts":  {
                       "result_path":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0012\\Testing\\TaskGitHubReconcile\\RECONCILE-RESULT.json",
                       "difference_report_path":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0012\\Testing\\TaskGitHubReconcile\\RECONCILE-DIFFERENCES.md",
-                      "dispatch_report_path":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0012\\Testing\\TaskGitHubReconcile\\RECONCILE-DISPATCH-DRYRUN.md"
+                      "dispatch_report_path":  null
                   },
     "dispatch":  {
-                     "requested":  true,
+                     "requested":  false,
                      "mode":  "dry_run",
                      "item_count":  0,
                      "items":  [
@@ -251,6 +251,60 @@
                       "remote_hash_matches_local":  true,
                       "local_task_sha256":  "386941295E7B2D80450A4F233391F22214AE62EE334772A5FAE26377CF53C0A5",
                       "remote_embedded_task_sha256":  "386941295E7B2D80450A4F233391F22214AE62EE334772A5FAE26377CF53C0A5",
+                      "difference_count":  0
+                  },
+                  {
+                      "task_id":  "Task-0013",
+                      "issue_number":  13,
+                      "issue_url":  "https://github.com/Digital-Collective-Games/Obsidian/issues/13",
+                      "task_meta_last_synced_at":  "2026-05-29T13:36:54.1481980-04:00",
+                      "local_status":  "complete",
+                      "expected_issue_state":  "CLOSED",
+                      "remote_state":  "CLOSED",
+                      "queue":  "Never",
+                      "priority":  "P2",
+                      "human_needed_local":  "No",
+                      "human_needed_remote":  "No",
+                      "text_state":  "in_sync",
+                      "remote_hash_matches_local":  true,
+                      "local_task_sha256":  "3B2CC5E05EDB8D9351E100DB525B2D9C0664DEF8B625C8CEDF0A3B4DE1A221F9",
+                      "remote_embedded_task_sha256":  "3B2CC5E05EDB8D9351E100DB525B2D9C0664DEF8B625C8CEDF0A3B4DE1A221F9",
+                      "difference_count":  0
+                  },
+                  {
+                      "task_id":  "Task-0014",
+                      "issue_number":  14,
+                      "issue_url":  "https://github.com/Digital-Collective-Games/Obsidian/issues/14",
+                      "task_meta_last_synced_at":  "2026-05-29T15:00:51.0084540-04:00",
+                      "local_status":  "",
+                      "expected_issue_state":  "UNKNOWN",
+                      "remote_state":  "OPEN",
+                      "queue":  "Never",
+                      "priority":  "P2",
+                      "human_needed_local":  "No",
+                      "human_needed_remote":  "No",
+                      "text_state":  "in_sync",
+                      "remote_hash_matches_local":  true,
+                      "local_task_sha256":  "3A5D7FC8B317DF99D721D346C793E7229A730A0D7E68F0C5075D0BEC3C07DEE1",
+                      "remote_embedded_task_sha256":  "3A5D7FC8B317DF99D721D346C793E7229A730A0D7E68F0C5075D0BEC3C07DEE1",
+                      "difference_count":  0
+                  },
+                  {
+                      "task_id":  "Task-0015",
+                      "issue_number":  15,
+                      "issue_url":  "https://github.com/Digital-Collective-Games/Obsidian/issues/15",
+                      "task_meta_last_synced_at":  "2026-05-29T17:24:05.9429970-04:00",
+                      "local_status":  "",
+                      "expected_issue_state":  "UNKNOWN",
+                      "remote_state":  "OPEN",
+                      "queue":  "Never",
+                      "priority":  "P2",
+                      "human_needed_local":  "No",
+                      "human_needed_remote":  "No",
+                      "text_state":  "in_sync",
+                      "remote_hash_matches_local":  true,
+                      "local_task_sha256":  "586A96E0F7A4AD38A96D2E1D1EFF6C72160533A953A46A561FCC0409CD1DED5C",
+                      "remote_embedded_task_sha256":  "586A96E0F7A4AD38A96D2E1D1EFF6C72160533A953A46A561FCC0409CD1DED5C",
                       "difference_count":  0
                   }
               ],

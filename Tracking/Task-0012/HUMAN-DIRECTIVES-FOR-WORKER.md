@@ -80,3 +80,69 @@ Worker-safe normalization (routing only, not a preferred solution):
   process docs, worktree allocation, concurrency limits, and
   `drain my tasks pls` remain follow-on work and are out of scope unless the
   human explicitly rescopes Task-0012.
+
+## Explicit Rescope (2026-05-28) — Drain Queue Consumer
+
+The human explicitly rescoped after the leader reached the publication-slice
+closure gate. Verbatim directive this turn:
+
+> Its not anywhere near ready, we pushed tasks to github but we need to setup a
+> task queue consumer that allocates worktrees and pulls tasks assigning them to
+> a subagent for completion ("drain my queue pls")
+
+Worker-safe normalization (routing/scope only, not a preferred design):
+
+- The publication/pilot slice is NOT the human's finish line. Do not present or
+  accept Task-0012's closure gate. The required deliverable is the queue-drain
+  consumer.
+- Required capability ("drain my queue pls"): a task queue consumer that
+  (a) pulls accepted tasks from the GitHub-backed queue, (b) allocates a
+  worktree per task, (c) dispatches a subagent to complete each task,
+  (d) respects a configured concurrency limit, and (e) releases worktrees when
+  work finishes.
+- This supersedes the earlier "drain is out of scope" guidance for the
+  task-tracking home the human selects.
+- Open forks being confirmed with the human before research/planning: whether
+  this is tracked as a new task vs an expansion of Task-0012, and the consumer's
+  execution model. Do not guess these; await the captured decision.
+
+## Demonstration Directive (2026-05-28) — Prove It End-To-End
+
+Verbatim follow-up directive this turn:
+
+> Status update? If you can i'd like you to demonstrate the task queue with
+> proof, along with worktrees, just put something in C:\Agent\YourTestRepo with
+> a small repo, and ask it to do minor things to modify some program?
+
+This resolves the execution-model fork: the human wants a Codex-operated
+subagent-dispatch model ("assigns to a subagent", "drain my queue pls"), and a
+working demonstration rather than a plan-only deliverable.
+
+Worker-safe normalization (requirements, not a prescribed design):
+
+- Build a minimal but genuinely working slice of the drain-queue consumer and
+  prove it end-to-end. Design-only or dry-run-only does not satisfy this.
+- Set up a small local git repo at `C:\Agent\YourTestRepo` containing a small
+  program (your choice of a simple, self-contained program).
+- Create a small queue of minor modification tasks against that program (small,
+  low-risk edits — the point is to exercise the pipeline, not the difficulty).
+- Run the consumer so it: pulls each queued task, allocates a git worktree per
+  task, dispatches a subagent to complete that task (make the minor program
+  modification), captures the result, and releases the worktree when done.
+- Respect a configured concurrency limit during the run.
+- Produce durable proof artifacts: the queue contents, worktree
+  allocation/release records, per-task subagent results, the actual code
+  diffs/commits the subagents produced in `C:\Agent\YourTestRepo`, and a
+  consumer run log/summary. Proof must show real modifications, not just that
+  endpoints/objects exist.
+- Worktree allocation must use or extend the existing
+  `C:\Users\gregs\.codex\Orchestration\WORKTREES.md` and
+  `WORKTREE-ALLOCATIONS.json` conventions, not a parallel ad-hoc scheme.
+- Demo queue backing store: prefer the lowest external footprint. A local queue
+  representation is acceptable for the demonstration; the production queue is the
+  already-proven GitHub provider. Do NOT create new outward-facing GitHub
+  repositories without explicit human confirmation.
+- Honesty: clearly label what is a demonstration/spike versus what would be
+  production-ready, and record any limitation (nested-dispatch tooling limits,
+  concurrency simplifications, local-vs-GitHub queue) as a caveat rather than
+  smoothing it over.

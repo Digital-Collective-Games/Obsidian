@@ -118,6 +118,6 @@ That said, do not flatten screenshot-visible mockup distortions into `mere polis
 - GitHub repo: `Digital-Collective-Games/Obsidian`
 - Issue number: `6`
 - Local task path: `Tracking/Task-0006/TASK.md`
-- Source commit: `75177b6dee23399358ee66676791fb41dc01d51e`
+- Source commit: `ed4b29411673c462f5294dabbe0be38df4e13305`
 - Local task SHA-256: `2A9AAB0F86BCFD8959BC49DCBE08BC79AEA54E650AEA6A95C7415AC90D2BEE6E`
-- Rendered at: `2026-05-28T23:29:39.5955110-04:00`
+- Rendered at: `2026-05-29T17:24:22.9845809-04:00`

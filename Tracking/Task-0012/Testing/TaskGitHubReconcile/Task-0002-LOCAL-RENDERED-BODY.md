@@ -51,6 +51,6 @@ The Stitch mockup is the primary composition reference. `Design/GENERAL-DESIGN.m
 - GitHub repo: `Digital-Collective-Games/Obsidian`
 - Issue number: `2`
 - Local task path: `Tracking/Task-0002/TASK.md`
-- Source commit: `75177b6dee23399358ee66676791fb41dc01d51e`
+- Source commit: `ed4b29411673c462f5294dabbe0be38df4e13305`
 - Local task SHA-256: `6A47EAC0B90EF1A16B21EB212EF6AC4D173CEB16FB6D3856603CB48554890D1F`
-- Rendered at: `2026-05-28T23:29:35.9123131-04:00`
+- Rendered at: `2026-05-29T17:24:18.9131671-04:00`

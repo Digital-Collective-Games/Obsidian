@@ -86,6 +86,6 @@ The v1 closure bar is a jobs system with `schedule`, `manual`, and `webhook` tri
 - GitHub repo: `Digital-Collective-Games/Obsidian`
 - Issue number: `5`
 - Local task path: `Tracking/Task-0005/TASK.md`
-- Source commit: `75177b6dee23399358ee66676791fb41dc01d51e`
+- Source commit: `ed4b29411673c462f5294dabbe0be38df4e13305`
 - Local task SHA-256: `0626C9F61EF36454B03DFF873BD316A02178D44D5C39CC1D4875E0736F026D5C`
-- Rendered at: `2026-05-28T23:29:38.7305315-04:00`
+- Rendered at: `2026-05-29T17:24:22.0549012-04:00`

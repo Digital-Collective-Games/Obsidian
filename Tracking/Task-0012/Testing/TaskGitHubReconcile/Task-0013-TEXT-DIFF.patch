@@ -1,0 +1,22 @@
+diff --git "a/C:\\Agent\\CodexDashboard\\Tracking\\Task-0012\\Testing\\TaskGitHubReconcile\\Task-0013-REMOTE-BODY.md" "b/C:\\Agent\\CodexDashboard\\Tracking\\Task-0012\\Testing\\TaskGitHubReconcile\\Task-0013-LOCAL-RENDERED-BODY.md"
+index bef5022..e747fb2 100644
+--- "a/C:\\Agent\\CodexDashboard\\Tracking\\Task-0012\\Testing\\TaskGitHubReconcile\\Task-0013-REMOTE-BODY.md"
++++ "b/C:\\Agent\\CodexDashboard\\Tracking\\Task-0012\\Testing\\TaskGitHubReconcile\\Task-0013-LOCAL-RENDERED-BODY.md"
+@@ -1,6 +1,6 @@
+ <!-- task-sync: repo=CodexDashboard; task_id=Task-0013; task_path=Tracking/Task-0013/TASK.md -->
+ 
+-# Task-0013: Rebrand the desktop overlay to "Obsidian", count Claude Code tokens alongside Codex, and make hotkey activation feel instant.
++# Task-0013: Rebrand the desktop overlay to Obsidian, count Claude Code tokens alongside Codex, and make hotkey activation feel instant.
+ 
+ ## Source Of Truth
+ 
+@@ -139,5 +139,5 @@ glance, triggered by a global hotkey. Three things degrade that purpose today:
+ - Issue number: `13`
+ - Local task path: `Tracking/Task-0013/TASK.md`
+ - Source commit: `8fb77523df224eabf2d833a91a8b4bd230a0796f`
+-- Local task SHA-256: `6C1193989AD2F3E78429153BBCB3C88411042ABB409222784C22CD12C099B5DC`
+-- Rendered at: `2026-05-29T13:34:42.7165539-04:00`
+\ No newline at end of file
++- Local task SHA-256: `3B2CC5E05EDB8D9351E100DB525B2D9C0664DEF8B625C8CEDF0A3B4DE1A221F9`
++- Rendered at: `2026-05-29T13:36:10.6145748-04:00`
+\ No newline at end of file

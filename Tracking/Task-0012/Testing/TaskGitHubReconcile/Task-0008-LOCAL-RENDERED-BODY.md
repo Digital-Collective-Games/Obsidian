@@ -127,6 +127,6 @@ The runtime shape is frozen for this task:
 - GitHub repo: `Digital-Collective-Games/Obsidian`
 - Issue number: `8`
 - Local task path: `Tracking/Task-0008/TASK.md`
-- Source commit: `75177b6dee23399358ee66676791fb41dc01d51e`
+- Source commit: `ed4b29411673c462f5294dabbe0be38df4e13305`
 - Local task SHA-256: `7194889C63E82E15463824041B9DEC13AE59CAC8B22DA699D4BC0434A11BFC85`
-- Rendered at: `2026-05-28T23:29:41.4167252-04:00`
+- Rendered at: `2026-05-29T17:24:24.8902393-04:00`

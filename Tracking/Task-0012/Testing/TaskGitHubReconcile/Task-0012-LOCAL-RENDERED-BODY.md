@@ -143,6 +143,6 @@ replace the one-issue pilot criteria above.
 - GitHub repo: `Digital-Collective-Games/Obsidian`
 - Issue number: `12`
 - Local task path: `Tracking/Task-0012/TASK.md`
-- Source commit: `75177b6dee23399358ee66676791fb41dc01d51e`
+- Source commit: `ed4b29411673c462f5294dabbe0be38df4e13305`
 - Local task SHA-256: `386941295E7B2D80450A4F233391F22214AE62EE334772A5FAE26377CF53C0A5`
-- Rendered at: `2026-05-28T23:29:44.9878310-04:00`
+- Rendered at: `2026-05-29T17:24:28.8913336-04:00`

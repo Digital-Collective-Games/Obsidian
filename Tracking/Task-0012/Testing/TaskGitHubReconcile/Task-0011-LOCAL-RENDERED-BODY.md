@@ -107,6 +107,6 @@ This task does not define a second promotion mechanism.
 - GitHub repo: `Digital-Collective-Games/Obsidian`
 - Issue number: `11`
 - Local task path: `Tracking/Task-0011/TASK.md`
-- Source commit: `75177b6dee23399358ee66676791fb41dc01d51e`
+- Source commit: `ed4b29411673c462f5294dabbe0be38df4e13305`
 - Local task SHA-256: `9F29119EA4E92C6BEA859C1741B836D9E8DD5453EF189973E3D4910C8D06FEDE`
-- Rendered at: `2026-05-28T23:29:44.0286382-04:00`
+- Rendered at: `2026-05-29T17:24:27.9595447-04:00`

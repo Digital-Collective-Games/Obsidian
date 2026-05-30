@@ -1,9 +1,9 @@
 # Task/GitHub Reconcile Differences
 
-- Generated at: `2026-05-28T23:29:45.9606932-04:00`
+- Generated at: `2026-05-29T17:24:32.9164605-04:00`
 - Repo: `Digital-Collective-Games/Obsidian`
-- Local tasks: `12`
-- Remote issues: `12`
+- Local tasks: `15`
+- Remote issues: `15`
 - Difference count: `0`
 - Conflict count: `0`
 

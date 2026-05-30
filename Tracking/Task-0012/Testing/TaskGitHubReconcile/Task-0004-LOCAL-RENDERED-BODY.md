@@ -92,6 +92,6 @@ That forces the user to inspect Startup-folder entries, Task Scheduler, and loca
 - GitHub repo: `Digital-Collective-Games/Obsidian`
 - Issue number: `4`
 - Local task path: `Tracking/Task-0004/TASK.md`
-- Source commit: `75177b6dee23399358ee66676791fb41dc01d51e`
+- Source commit: `ed4b29411673c462f5294dabbe0be38df4e13305`
 - Local task SHA-256: `6D2D5C6ADF52E15BB927B14A3BD47A3F27F989A1BFB0147474CD7787985E0E9F`
-- Rendered at: `2026-05-28T23:29:37.7671611-04:00`
+- Rendered at: `2026-05-29T17:24:20.9368606-04:00`

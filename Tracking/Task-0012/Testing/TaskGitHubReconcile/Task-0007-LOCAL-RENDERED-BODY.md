@@ -64,6 +64,6 @@ The immediate need is not implementation. The immediate need is to preserve the 
 - GitHub repo: `Digital-Collective-Games/Obsidian`
 - Issue number: `7`
 - Local task path: `Tracking/Task-0007/TASK.md`
-- Source commit: `75177b6dee23399358ee66676791fb41dc01d51e`
+- Source commit: `ed4b29411673c462f5294dabbe0be38df4e13305`
 - Local task SHA-256: `D4FCB16684A7EDE6A6D4B4D694AB5DB88E85148735919080DCEFE7A51B33414C`
-- Rendered at: `2026-05-28T23:29:40.5237330-04:00`
+- Rendered at: `2026-05-29T17:24:23.9374979-04:00`

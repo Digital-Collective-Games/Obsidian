@@ -70,6 +70,6 @@ The primary user value is fast situational awareness:
 - GitHub repo: `Digital-Collective-Games/Obsidian`
 - Issue number: `1`
 - Local task path: `Tracking/Task-0001/TASK.md`
-- Source commit: `75177b6dee23399358ee66676791fb41dc01d51e`
+- Source commit: `ed4b29411673c462f5294dabbe0be38df4e13305`
 - Local task SHA-256: `9800D5DF5B67ACB2AE8C39CEE6E207A50323BB6F2313F195BEBEA3C4B7378E73`
-- Rendered at: `2026-05-28T23:29:34.9541294-04:00`
+- Rendered at: `2026-05-29T17:24:17.9343836-04:00`

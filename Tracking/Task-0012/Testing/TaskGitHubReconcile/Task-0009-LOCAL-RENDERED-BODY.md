@@ -126,6 +126,6 @@ This task does not define promotion semantics or intake review.
 - GitHub repo: `Digital-Collective-Games/Obsidian`
 - Issue number: `9`
 - Local task path: `Tracking/Task-0009/TASK.md`
-- Source commit: `75177b6dee23399358ee66676791fb41dc01d51e`
+- Source commit: `ed4b29411673c462f5294dabbe0be38df4e13305`
 - Local task SHA-256: `E6A380E136D885B76A71C6198B43C90016A922A731CB2FEDB8F603744A75C76E`
-- Rendered at: `2026-05-28T23:29:42.2672536-04:00`
+- Rendered at: `2026-05-29T17:24:26.0581562-04:00`
