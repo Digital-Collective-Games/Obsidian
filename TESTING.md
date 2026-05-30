@@ -167,6 +167,30 @@ cd C:\Agent\CodexDashboard\backend\orchestration
 powershell -ExecutionPolicy Bypass -File .\scripts\Stop-ValidationLane.ps1
 ```
 
+## Issue-Provider Integration Testing (GitHub web surface)
+
+Integration tests against an issue PROVIDER (e.g. the GitHub web interface) are
+exercised at the **real human surface** — the GitHub web UI — via the Chrome
+debug session, using the `github-operator` skill
+([skills/github-operator/SKILL.md](./skills/github-operator/SKILL.md)).
+
+The division of labor is fixed: the **human only authenticates** the debug
+Chrome profile (started with
+[Start-ChromeDebugProfile.ps1](../Orchestrator/Scripts/Start-ChromeDebugProfile.ps1)
+on port `9222`), and the **agent drives the UI end-to-end** through the Chrome
+DevTools Protocol.
+
+There is **NO pass or excuse to skip exercising it end-to-end** at that surface.
+API-only or proxy evidence does **not** satisfy these regressions. Reading state
+back through the issue-field-values API is acceptable as verification, but the
+WRITE/flip under test must happen at the real GitHub web UI via the
+`github-operator` scripts (for example flipping an issue's `Queue` field to
+`Ready` with
+[Set-IssueFieldViaUi.ps1](./skills/github-operator/scripts/Set-IssueFieldViaUi.ps1)).
+
+Writes are exercised only against throwaway/test issues (the `QueueDrainTestbed`
+repo), never the human's production issues without explicit authorization.
+
 ## Regression Adapter
 
 Task-level regression for this repo is defined in repo-root `REGRESSION.md`.

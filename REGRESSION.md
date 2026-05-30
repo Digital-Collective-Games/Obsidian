@@ -322,6 +322,90 @@ Interpretation:
   and `scripts/Publish-DashboardRelease.ps1`); that publish + restart is a separate
   human-gated step
 
+### REG-007 Queue-Drain Consumer Dispatch From The GitHub Web Surface
+
+Goal:
+
+Confirm the always-on Temporal queue-drain consumer dispatches the mapped Task
+when an issue's `Queue` field is flipped to `Ready` **at the real GitHub web
+surface**. This case is not satisfied by flipping the field through the API or a
+proxy; the flip under test must be performed by driving the GitHub web UI through
+the Chrome debug session, because the issue PROVIDER is the human surface being
+tested.
+
+Surface:
+
+The GitHub web interface (issue Fields panel) driven via the Chrome debug session
+using the `github-operator` skill, plus the orchestration backend's queue-drain
+consumer on the isolated validation / `reg007` lane.
+
+Steps:
+
+1. Run all queue-drain proof on the isolated validation / `reg007` lane against
+   the throwaway `QueueDrainTestbed` repo. Never use the human's production
+   repo (`Digital-Collective-Games/Obsidian`), the live `CodexDashboard` repo, or
+   the real `default` Temporal namespace where the operator's scheduled cron jobs
+   live. Run the consumer in the isolated `reg007` Temporal namespace only.
+2. Ensure the throwaway test issue already has an issue **type** and an initial
+   `Queue` field **value** so the org field renders in the UI (set those
+   separately; see [TESTING.md](./TESTING.md) and the obsidian-operator sync
+   scripts).
+3. Start the always-on queue-drain consumer on the `reg007` lane with a poll
+   interval `<= 60s` (use ~30s), pointed at the `QueueDrainTestbed` repo, and
+   confirm it is running and reachable without disturbing the always-on service
+   lane or activating any real scheduled cron job.
+4. The **human authenticates** the debug Chrome profile
+   (`C:\Agent\Orchestrator\Scripts\Start-ChromeDebugProfile.ps1`, port `9222`) and
+   logs into GitHub; the human does not click through the test.
+5. Record the starting `Queue` state of the test issue via
+   `skills/github-operator/scripts/Get-IssueQueueState.ps1`.
+6. The **agent flips** the issue's `Queue` field to `Ready` by driving the GitHub
+   web UI with `skills/github-operator/scripts/Set-IssueFieldViaUi.ps1`
+   (`-FieldName Queue -OptionName Ready`), and confirms the surface committed the
+   value (observed control text reads `QueueReady`; optionally re-read via
+   `-VerifyApi`).
+7. Observe that the always-on consumer notices the `Queue=Ready` flip within
+   `<= 1 minute` and dispatches the mapped Task into an owned worktree.
+8. Observe that the dispatch launches the top-level `claude` agent in that
+   worktree (not `codex`), and that the launched agent is discoverable (its
+   session id and transcript resolve under `~/.claude/projects/<slug>/`).
+9. Capture artifacts from the run: the GitHub UI flip result (committed control
+   text), the consumer log/`GET` showing the within-1-minute dispatch, the
+   created worktree, and the launched claude session id/transcript path.
+10. Reset the test issue (`Queue` back to its starting value or `Never`) and tear
+    down the worktree/lane so the proof can be re-run arbitrarily.
+
+Expected result:
+
+- the `Queue=Ready` flip is performed at the real GitHub web UI via the Chrome
+  debug session, and the surface commits the value (`QueueReady`)
+- the always-on consumer notices the flip within `<= 1 minute`
+- the consumer dispatches the mapped Task into an owned worktree
+- the dispatch launches a top-level `claude` agent in that worktree, discoverable
+  by session id and transcript
+- the run is performed on the isolated validation / `reg007` lane and the
+  `QueueDrainTestbed` repo, never the human's production repo/lane and never the
+  real `default` Temporal namespace
+- no real scheduled cron job is triggered by the run
+
+Disqualifiers:
+
+- flipping `Queue` through the API, a proxy, or any path other than the real
+  GitHub web UI via the Chrome debug session does NOT satisfy this case
+- a consumer that dispatches but takes longer than 1 minute to notice the flip
+- dispatching `codex` instead of a top-level `claude` agent
+- running against the production repo, the live `CodexDashboard` repo, or the
+  real `default` Temporal namespace
+
+Interpretation:
+
+- this is the canonical end-to-end regression for the Task-0015 queue-drain
+  consumer measured FROM the GitHub web surface
+- API-only or proxy proof of the flip is a Disqualifier, not supporting evidence
+- the human authenticates the debug Chrome once; the agent drives the UI
+  end-to-end via the `github-operator` skill
+  ([skills/github-operator/SKILL.md](./skills/github-operator/SKILL.md))
+
 ## Supporting Smoke
 
 ### SMOKE-001 Ingest Core
