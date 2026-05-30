@@ -138,11 +138,41 @@ type RepoLane struct {
 	Binding               *RepoBinding `json:"binding,omitempty"`
 }
 
-// RunGateStateRunning is the default run/gate state recorded on a freshly
-// dispatched owned lane (O6). The real parked/needs-human gate enum (which gate
-// a parked run is waiting on) is O4/PASS-0003 work; until park state exists a
-// dispatched lane is simply "running".
-const RunGateStateRunning = "running"
+// RunGateState values recorded on the owned-lane record. A dispatched lane is
+// "running" until the done-contract (O4/PASS-0003) parks it. Every parked state
+// corresponds to GitHub issue Human Needed=Yes and RETAINS the worktree+slot;
+// only a CLOSED issue deallocates (D2 / HUMAN-DIRECTIVES O4). The parked enum
+// distinguishes which gate the run is waiting on so the watchdog (O5) can stay
+// suspended and the enumeration endpoint (O6) can report the gate.
+const (
+	// RunGateStateRunning is the default state of a freshly dispatched owned lane.
+	RunGateStateRunning = "running"
+	// RunGateStateParkedAwaitingClosure is set when the agent perceives the work
+	// complete: it sets Human Needed=Yes and PARKS awaiting an explicit human
+	// closure approval. The agent NEVER self-closes (A4.2/A4.7).
+	RunGateStateParkedAwaitingClosure = "parked_awaiting_closure"
+	// RunGateStateParkedResearch is the research-gate park.
+	RunGateStateParkedResearch = "parked_research"
+	// RunGateStateParkedPlan is the plan-gate park.
+	RunGateStateParkedPlan = "parked_plan"
+	// RunGateStateParkedRegression is the regression-gate park.
+	RunGateStateParkedRegression = "parked_regression"
+)
+
+// IsParkedRunGateState reports whether a run/gate state is one of the parked
+// (Human Needed=Yes) states. A parked run retains its worktree and slot and is
+// never redispatched; the watchdog is suspended while parked.
+func IsParkedRunGateState(state string) bool {
+	switch state {
+	case RunGateStateParkedAwaitingClosure,
+		RunGateStateParkedResearch,
+		RunGateStateParkedPlan,
+		RunGateStateParkedRegression:
+		return true
+	default:
+		return false
+	}
+}
 
 // RepoBinding is the O6 worktree<->session binding recorded on the owned-lane
 // record at dispatch. It supplies the raw fields an operator (or a downstream

@@ -1,0 +1,11 @@
+?   	github.com/gregsemple2003/CodexDesktop/backend/orchestration/cmd/controlplane	[no test files]
+?   	github.com/gregsemple2003/CodexDesktop/backend/orchestration/internal/config	[no test files]
+ok  	github.com/gregsemple2003/CodexDesktop/backend/orchestration/internal/controlplane	0.325s
+ok  	github.com/gregsemple2003/CodexDesktop/backend/orchestration/internal/httpapi	3.632s
+ok  	github.com/gregsemple2003/CodexDesktop/backend/orchestration/internal/jobexec	0.148s
+?   	github.com/gregsemple2003/CodexDesktop/backend/orchestration/internal/jobs	[no test files]
+ok  	github.com/gregsemple2003/CodexDesktop/backend/orchestration/internal/queue	0.317s
+ok  	github.com/gregsemple2003/CodexDesktop/backend/orchestration/internal/taskexec	2.639s
+ok  	github.com/gregsemple2003/CodexDesktop/backend/orchestration/internal/taskrun	11.607s
+ok  	github.com/gregsemple2003/CodexDesktop/backend/orchestration/internal/temporalbackend	0.123s
+?   	github.com/gregsemple2003/CodexDesktop/backend/orchestration/internal/testfixtures/taskrepo	[no test files]

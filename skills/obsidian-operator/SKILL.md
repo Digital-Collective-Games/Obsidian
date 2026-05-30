@@ -55,6 +55,38 @@ Keep each state owner narrow.
 - Local `TASK-STATE.json` status maps to GitHub issue open/closed state.
 - Labels and GitHub Projects are not the queue, priority, human-needed, or identity surface for accepted tasks.
 
+## Queue Done-Contract
+
+This is the durable done-contract the dispatched queue agent follows (O4). It
+governs how an agent signals "done" and how a task reaches its terminal state.
+
+- **The agent NEVER self-closes the issue — for any reason.** Not on abandon and
+  not on perceived successful completion. There is no agent-side `gh issue close`.
+- **Both done outcomes PARK in place by setting `Human Needed=Yes`:**
+  - *Abandon / needs a human* (the agent decides the task should be abandoned, is
+    a bad idea, or it hit the **research / plan / regression** human gate): set
+    `Human Needed=Yes` and stop. The issue stays OPEN.
+  - *Perceived completion* (the agent believes the work is complete): set
+    `Human Needed=Yes` with a run/gate state of **"awaiting closure approval"** and
+    ask for an explicit closure directive. The issue stays OPEN.
+- **`Human Needed=Yes` (including awaiting-closure) is a PARK, not a deallocation.**
+  The owned worktree and its slot are RETAINED; the consumer does NOT redispatch
+  and does NOT reclaim the worktree. The task resumes in the SAME worktree once the
+  human clears the gate. Only a CLOSED issue deallocates.
+- **Closure is a distinct, final human gate.** Approval for a pass, regression run,
+  plan, or research gate is NOT closure approval. The issue is CLOSED only by an
+  explicit human closure directive — performed by the human directly or via the
+  human-gated close builder in `Reconcile-TaskGitHubState.ps1`
+  (`gh issue close --reason completed|not planned`), and ONLY THEN is the worktree
+  reclaimed and the slot freed.
+- **Single GitHub-write path.** The agent's done write goes through the existing
+  field-value write in `Sync-TaskToGitHubIssue.ps1` (`-HumanNeededValue Yes`). Do
+  not add a second/parallel GitHub-write path. All writes are dry-run-first and
+  human-gated per Guardrails.
+
+The done write is executed via `Set-TaskDoneContract.ps1` (see Script Use), which
+sets `Human Needed=Yes` through that single write path and has no close command.
+
 ## TASK-META.json
 
 Keep `TASK-META.json` small provider binding metadata.
@@ -94,6 +126,18 @@ Use the bundled Obsidian operator scripts as the normalized surfaces.
   - Report differences between local tasks and live GitHub issues.
   - Treat text title/body mismatches as `text_conflict`.
   - With `-DispatchActions`, show commands/steps only. Keep it dry-run unless the human explicitly approves actual execution.
+- `skills/obsidian-operator/scripts/Set-TaskDoneContract.ps1`
+  - The dispatched agent's queue done-contract write (O4): set the issue's
+    `Human Needed=Yes` and PARK in place, for BOTH `-Outcome abandon` and
+    `-Outcome completion`. It has NO `gh issue close` path — the agent never
+    self-closes.
+  - Resolves the run/gate state the consumer would record (`parked_awaiting_closure`
+    for completion; `parked_research|parked_plan|parked_regression` for the named
+    gates via `-Gate`).
+  - Writes only through the existing field-value write in
+    `Sync-TaskToGitHubIssue.ps1` (`-HumanNeededValue Yes`), so there is no second
+    GitHub-write path. Run `-DryRun` first; closing the issue is a separate,
+    human-gated action via `Reconcile-TaskGitHubState.ps1`.
 - `skills/obsidian-operator/scripts/Get-ActiveWorktreeSessions.ps1`
   - Enumerate the active owned-lane worktrees the backend has dispatched, by calling its read-only `GET /api/v1/worktrees` endpoint (O6).
   - Prints, per worktree, the worktree path, issue/Task, run/gate state, the agent session id, and the session transcript path the operator would open in VSCodium to kick a parked or slow agent along.

@@ -1,0 +1,20 @@
+{
+    "status":  "dry_run",
+    "task_id":  "Task-9001",
+    "issue_number":  9001,
+    "provider_repo":  "Digital-Collective-Games/QueueDrainTestbed",
+    "title":  "Task-9001: Done-contract dry-run fixture task.",
+    "title_normalized":  "Task-9001: Done-contract dry-run fixture task.",
+    "send_payload_title":  "Task-9001: Done-contract dry-run fixture task.",
+    "send_payload_round_trips":  true,
+    "send_payload_compares_equal":  true,
+    "issue_type":  "Task",
+    "issue_fields":  {
+                         "Queue":  "Never",
+                         "Priority":  "P2",
+                         "Human Needed":  "Yes"
+                     },
+    "body_path":  "C:\\Users\\gregs\\AppData\\Local\\Temp\\codex-task-gh-body-Task-9001.md",
+    "metadata_path":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0015\\Testing\\PASS-0003\\fixture\\Tracking\\Task-9001\\TASK-META.json"
+}
+

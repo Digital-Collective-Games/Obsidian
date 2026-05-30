@@ -153,10 +153,10 @@ type WorktreeBinding struct {
 // Records are deduped by worktree path, keeping the most recently bootstrapped
 // record per path.
 //
-// NOTE (scope): every listed worktree currently reports RunGateStateRunning. The
-// parked-needs-human / which-gate state (A6.4) lands with O4/PASS-0003, which
-// owns the park state; this endpoint already returns whatever run/gate state the
-// record carries, so it will list parked worktrees unchanged once O4 records them.
+// A worktree reports whatever run/gate state its record carries: RunGateStateRunning
+// at dispatch, or a parked state once SetRunGateState (O4/PASS-0003) records the
+// park. A parked worktree is still active (its checkout is retained) and is listed
+// unchanged, which is what lets the operator reach a parked agent's session (A6.4).
 func (s *Service) ListActiveWorktrees() ([]WorktreeBinding, error) {
 	taskEntries, err := os.ReadDir(s.runArtifactsRoot)
 	if err != nil {
@@ -233,6 +233,83 @@ func bindingFromRecord(record ownedLaneBootstrapRecord) RepoBinding {
 		WorktreePath: record.OwnedRepoRoot,
 		RunGateState: RunGateStateRunning,
 	}
+}
+
+// ErrNoActiveOwnedLane is returned by SetRunGateState when the task has no active
+// owned-lane record (no worktree to record a park/running state on).
+var ErrNoActiveOwnedLane = errors.New("no active owned lane for task")
+
+// SetRunGateState records the run/gate state for a task's active owned lane and
+// persists it on the durable owned-lane-bootstrap.json record so the next
+// ListActiveWorktrees / GET /api/v1/worktrees read reflects it (O4/O6). It is the
+// clean transition API the O3 consumer (PASS-0004) calls when it observes a GitHub
+// issue parked Human Needed=Yes (one of the parked states) or back to running.
+//
+// SetRunGateState never deallocates: parking RETAINS the worktree and slot (D2).
+// Only the human-approved CLOSE path (cleanupOwnedLane) frees a slot. The active
+// lane is the most recently bootstrapped record for the task whose worktree still
+// exists on disk.
+func (s *Service) SetRunGateState(taskID string, state string) (WorktreeBinding, error) {
+	switch state {
+	case RunGateStateRunning,
+		RunGateStateParkedAwaitingClosure,
+		RunGateStateParkedResearch,
+		RunGateStateParkedPlan,
+		RunGateStateParkedRegression:
+	default:
+		return WorktreeBinding{}, fmt.Errorf("unknown run/gate state %q", state)
+	}
+
+	taskDir := filepath.Join(s.runArtifactsRoot, sanitizePathSegment(taskID))
+	runEntries, err := os.ReadDir(taskDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return WorktreeBinding{}, fmt.Errorf("%w: %s", ErrNoActiveOwnedLane, taskID)
+		}
+		return WorktreeBinding{}, fmt.Errorf("read task-run dir %s: %w", taskDir, err)
+	}
+
+	var activePath string
+	var activeRecord ownedLaneBootstrapRecord
+	for _, runEntry := range runEntries {
+		if !runEntry.IsDir() {
+			continue
+		}
+		recordPath := filepath.Join(taskDir, runEntry.Name(), "owned-lane-bootstrap.json")
+		raw, err := os.ReadFile(recordPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return WorktreeBinding{}, fmt.Errorf("read owned-lane bootstrap %s: %w", recordPath, err)
+		}
+		var record ownedLaneBootstrapRecord
+		if err := json.Unmarshal(raw, &record); err != nil {
+			return WorktreeBinding{}, fmt.Errorf("decode owned-lane bootstrap %s: %w", recordPath, err)
+		}
+		if record.OwnedRepoRoot == "" {
+			continue
+		}
+		if _, err := os.Stat(record.OwnedRepoRoot); err != nil {
+			// Worktree gone (reclaimed on close) -> not an active lane to park.
+			continue
+		}
+		if activePath == "" || record.BootstrappedAt.After(activeRecord.BootstrappedAt) {
+			activePath = recordPath
+			activeRecord = record
+		}
+	}
+	if activePath == "" {
+		return WorktreeBinding{}, fmt.Errorf("%w: %s", ErrNoActiveOwnedLane, taskID)
+	}
+
+	binding := bindingFromRecord(activeRecord)
+	binding.RunGateState = state
+	activeRecord.Binding = &binding
+	if err := writeJSONFile(activePath, activeRecord); err != nil {
+		return WorktreeBinding{}, fmt.Errorf("persist run/gate state on owned-lane record: %w", err)
+	}
+	return WorktreeBinding{RunID: activeRecord.RunID, RepoBinding: binding}, nil
 }
 
 func (s *Service) ListTasks(ctx context.Context) ([]TaskView, error) {

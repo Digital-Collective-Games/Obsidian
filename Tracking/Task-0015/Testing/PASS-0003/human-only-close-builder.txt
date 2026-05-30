@@ -1,0 +1,14 @@
+        "close_github_issue_to_match_local_task_state" {
+            $localStatus = Get-ActionDetailValue -Action $Action -Name "local_status"
+            if ($localStatus -in @("cancelled", "canceled", "rejected")) {
+                $closeReason = "not planned"
+            } else {
+                $closeReason = "completed"
+            }
+
+            $comment = "Closed by task reconcile: local $taskStatePath status is '$localStatus'."
+            $executor = "gh"
+            $command = Join-CommandLine -Parts @("gh", "issue", "close", ([string]$issueNumber), "--repo", $ProviderRepo, "--reason", $closeReason, "--comment", $comment)
+            $codexStep = "After the command succeeds, read back $ProviderRepo#$issueNumber and refresh Tracking/$taskId/TASK-META.json from the live provider binding readback."
+            $writes = @("github_issue_state", "github_issue_comment", "local_task_meta")
+        }

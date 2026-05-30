@@ -59,13 +59,26 @@
    boundary holds (no `vscodium://` link), AX.1 clean —
    [Testing/PASS-0002-AUDIT.md](./Testing/PASS-0002-AUDIT.md). Committed + pushed.
    Honest deferrals: A6.1 real-agent session → PASS-0005; A6.4 parked-listing → PASS-0003.
-   NEXT: **PASS-0003** (O4 done-contract: park-in-place, human-only closure, agent
-   never self-closes, no second GitHub-write path; records run/gate state on the
-   owned-lane binding — which then unblocks O6 A6.4 re-proof).
-   - Live-proof hygiene: the validation Temporal namespace holds stale `running`
-     records for `QueueDrainTestbed` Task-1/2/3/10/11/12/13 — use fresh task ids
-     for future live proofs, and override `CODEX_ORCHESTRATION_JOBS_ROOT` to a temp
-     dir (the backend `/healthz` read-reconciles the real `.codex` jobs otherwise).
+   NEXT: **PASS-0003**.
+5. DONE: **PASS-0003** (O4 done-contract MECHANISM). `internal/queue/decision.go`
+   `DecideQueueAction` (closed⇒terminal precedence; Human Needed=Yes⇒park, never
+   redispatch; open+Ready+not-parked⇒dispatch) + `EffectiveFreeConcurrency`
+   (limit−parked); parked run/gate enum + `Service.SetRunGateState` (parks without
+   deallocating, persists to the owned-lane binding); agent done-contract
+   `Set-TaskDoneContract.ps1` (sets Human Needed=Yes on abandon AND
+   perceived-completion, NEVER `gh issue close`) + SKILL.md "Queue Done-Contract".
+   Independent QA: A4.5/A4.6 PROVEN, decision/invariants/skill contract genuine,
+   dry-run with a `gh` tripwire (gh never fired), O6 A6.4 re-proven at service +
+   endpoint layers, `go test` clean —
+   [Testing/PASS-0003-AUDIT.md](./Testing/PASS-0003-AUDIT.md). Committed + pushed.
+   DEFERRED (honest, grep-confirmed not built): A4.3/A4.4 in-loop ⇒ PASS-0004 (O3);
+   A4.1/A4.2/A4.7 agent-driven ⇒ PASS-0005 (O5).
+   NEXT: **PASS-0004** (O3 GitHub queue-drain consumer: Temporal workflow + start/stop
+   endpoint + StartWorker registration; polls Queue==Ready ~2min; maps #N→Task-N;
+   dispatches via O2 slots using O4 `DecideQueueAction`). Integrated A3.1–A3.4 +
+   consumer-driven A4.3/A4.4 proven here against the throwaway `QueueDrainTestbed`.
+   - Live-proof hygiene: use fresh task ids (stale records for Task-1/2/3/10/11/12/13);
+     override `CODEX_ORCHESTRATION_JOBS_ROOT` to a temp dir.
 3. Before PASS-0001 proof: stand up the dedicated test repo under `C:\Agent`
    (confirm the GitHub repo name/org with the human — outward-facing) and add its
    `REPO-MANIFEST.json` entry.

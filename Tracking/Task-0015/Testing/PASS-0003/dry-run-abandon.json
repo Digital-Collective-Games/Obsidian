@@ -1,0 +1,15 @@
+{
+    "contract":  "queue_done_contract",
+    "outcome":  "abandon",
+    "gate_hint":  "research",
+    "human_needed":  "Yes",
+    "run_gate_state":  "parked_research",
+    "closes_issue":  false,
+    "self_closes":  false,
+    "write_path":  "Sync-TaskToGitHubIssue.ps1 issue-field-values (single GitHub-write path)",
+    "closure_note":  "Closure is a distinct, final human gate. A pass/regression/plan/research approval is NOT closure approval. The human closes via Reconcile-TaskGitHubState.ps1, never this script.",
+    "dry_run":  true,
+    "sync_command":  "powershell -NoProfile -ExecutionPolicy Bypass -File skills/obsidian-operator/scripts/Sync-TaskToGitHubIssue.ps1 -TaskPath C:\\Agent\\CodexDashboard\\Tracking\\Task-0015\\Testing\\PASS-0003\\fixture\\Tracking\\Task-9001\\TASK.md -RepoId TestRepo -ManifestPath C:\\Agent\\CodexDashboard\\Tracking\\Task-0015\\Testing\\PASS-0003\\fixture\\REPO-MANIFEST.json -HumanNeededValue Yes -DryRun",
+    "status":  "dry_run"
+}
+

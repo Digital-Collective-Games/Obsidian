@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "task_id": "Task-0015",
+  "pass_id": "PASS-0003",
+  "checklist_status": "closed",
+  "implemented": true,
+  "build": "passing",
+  "unit_tests": "passing",
+  "pass_audit_written": true,
+  "audit_verdict": "ready",
+  "audit_result_ref": "Testing/PASS-0003-AUDIT.md",
+  "handoff_updated": true,
+  "commit_created": true,
+  "pushed_upstream": true,
+  "notify_sent": true,
+  "blockers": [],
+  "next_required_actions": [
+    "PASS-0004 (O3): build the Temporal queue-drain consumer (new internal/queue workflow + start/stop HTTP endpoint + StartWorker registration) that polls the provider repo for Queue==Ready on a ~2min default interval (polling per directive; webhooks/tunnels OUT OF SCOPE), maps issue #N -> Tracking/Task-N, checks slots (O2), dispatches via the existing taskrun path, and uses the O4 DecideQueueAction for terminal/park/eligible. This is where the integrated A3.1-A3.4 and the consumer-driven A4.3/A4.4 end-to-end proofs land, exercised against the throwaway QueueDrainTestbed repo's real issues (Queue flips via the obsidian-operator skill / gh for the dev-loop; the no-proxy real-GitHub-UI flip via the Chrome debug tab is reserved for the PASS-0006 regression).",
+    "Carry-forward to PASS-0005 (O5): A4.1 (agent abandon -> Human Needed=Yes, open) and A4.7 (agent never self-closes) need the launched agent calling Set-TaskDoneContract.ps1.",
+    "Live-proof hygiene: use fresh task ids; override CODEX_ORCHESTRATION_JOBS_ROOT to a temp dir."
+  ],
+  "updated_at": "2026-05-30T03:35:00.0000000-04:00"
+}

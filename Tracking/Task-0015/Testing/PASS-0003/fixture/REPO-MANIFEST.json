@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "manifest_type": "codex_repo_registry",
+  "repos": [
+    {
+      "id": "TestRepo",
+      "local_root": "C:/Agent/QueueDrainTestbed",
+      "queue_workers": 4,
+      "source_control_provider": { "kind": "git", "repo": "Digital-Collective-Games/QueueDrainTestbed" },
+      "task_provider": { "kind": "github_issues", "repo": "Digital-Collective-Games/QueueDrainTestbed" }
+    }
+  ]
+}
