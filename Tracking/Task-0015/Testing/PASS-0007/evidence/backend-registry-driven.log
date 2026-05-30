@@ -1,0 +1,6 @@
+2026/05/30 11:20:31 INFO  Started Worker Namespace reg007c TaskQueue codex-orchestration WorkerID 58204@agentprime@
+2026/05/30 11:20:31 codex orchestration control-plane listening on 127.0.0.1:14318
+2026/05/30 11:21:15 DEBUG ExecuteActivity Namespace reg007c TaskQueue codex-orchestration WorkerID 58204@agentprime@ WorkflowType codex.task.run WorkflowID taskrun--Task-0005--active RunID 019e7979-9f22-7b9a-98b1-06d66202de57 Attempt 1 ActivityID 5 ActivityType taskrun.execution_preflight
+2026/05/30 11:21:15 DEBUG ExecuteActivity Namespace reg007c TaskQueue codex-orchestration WorkerID 58204@agentprime@ WorkflowType codex.task.run WorkflowID taskrun--Task-0005--active RunID 019e7979-9f22-7b9a-98b1-06d66202de57 Attempt 1 ActivityID 11 ActivityType taskrun.workload_step
+2026/05/30 11:21:15 DEBUG ExecuteActivity Namespace reg007c TaskQueue codex-orchestration WorkerID 58204@agentprime@ WorkflowType codex.task.run WorkflowID taskrun--Task-0005--active RunID 019e7979-9f22-7b9a-98b1-06d66202de57 Attempt 1 ActivityID 17 ActivityType taskrun.execute_workload_step
+2026/05/30 11:21:15 INFO  queue-drain poll acted Namespace reg007c TaskQueue codex-orchestration WorkerID 58204@agentprime@ WorkflowType codex.queue.drain WorkflowID queue-drain--consumer RunID 019e7979-1e66-71a8-aad1-7f718df61586 Attempt 1 dispatched [Task-0005] parked [] reclaimed []

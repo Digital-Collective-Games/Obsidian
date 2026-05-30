@@ -205,9 +205,17 @@ that entry's `local_root` capped at its `queue_workers` (per-repo slot count via
 production `REPO-MANIFEST.json` untouched; new env uses the `OBSIDIAN_` prefix.
 
 Built + verified via a workflow (1 implementer + 3 independent verifiers, all
-**sound**, zero blocking; `go build/vet/test ./...` green). NEXT: live registry-driven
-REG-007 re-run (point `OBSIDIAN_REGISTRY_PATH` at a testbed-only registry so
-production Obsidian is never polled) to validate end-to-end through the new binding.
+**sound**, zero blocking; `go build/vet/test ./...` green). **Live registry-driven
+REG-007 re-run — PASS** (committed): backend bound to the testbed PURELY via the
+registry (`OBSIDIAN_REGISTRY_PATH` → testbed-only registry; **no `QUEUE_DRAIN_REPO`**),
+isolated `reg007c`; real-UI `Queue=Ready` flip (github-operator skill) →
+`dispatched [Task-0005]` → binding `repo: QueueDrainTestbed` into the registry's
+`local_root` → the launched claude agent ran (transcript 54KB, `AGENT-RAN.txt`).
+Production Obsidian never polled; real cron namespace untouched. See
+[Testing/PASS-0007-AUDIT.md](./Testing/PASS-0007-AUDIT.md) /
+[Testing/PASS-0007/evidence/](./Testing/PASS-0007/evidence/). The repo-binding gap is
+closed. Cosmetic follow-ups: drop the unused `StartWorker` taskService param +
+decorative `QueueDrainConfig.Repo`.
 
 ## Where the unsupervised run stopped (2026-05-30)
 
