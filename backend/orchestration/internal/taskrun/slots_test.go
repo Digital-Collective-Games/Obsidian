@@ -38,6 +38,31 @@ func readyTaskState(taskID string) string {
 }`
 }
 
+// TestNewServiceForRepoBindsRootAndUsesPassedCap proves the repo-parameterized
+// constructor the registry-driven consumer uses: the Service is bound to the
+// passed local_root (declaredWorktreeRoot), and its per-repo slot cap is the
+// queue_workers PASSED IN — NOT a co-located <local_root>/REPO-MANIFEST.json. A
+// decoy manifest with a different queue_workers is written into the local_root to
+// prove the co-located file is no longer consulted for the cap.
+func TestNewServiceForRepoBindsRootAndUsesPassedCap(t *testing.T) {
+	worktreeRoot := twoSiblingFixture(t)
+	// Decoy co-located manifest: if the cap were still read from here, the limit
+	// would be 9 instead of the passed-in 2.
+	decoy := `{"repos":[{"id":"Decoy","local_root":"` +
+		filepath.ToSlash(worktreeRoot) + `","queue_workers":9}]}`
+	if err := os.WriteFile(filepath.Join(worktreeRoot, "REPO-MANIFEST.json"), []byte(decoy), 0o644); err != nil {
+		t.Fatalf("write decoy manifest: %v", err)
+	}
+
+	service := NewServiceForRepo(worktreeRoot, filepath.Join(worktreeRoot, ".runs"), newFakeRuntime(), 2)
+	if service.declaredWorktreeRoot != worktreeRoot {
+		t.Fatalf("declaredWorktreeRoot = %q, want %q (bound to the registry local_root)", service.declaredWorktreeRoot, worktreeRoot)
+	}
+	if got := service.RepoSlotLimit(); got != 2 {
+		t.Fatalf("RepoSlotLimit = %d, want 2 (the passed-in queue_workers, NOT the co-located manifest's 9)", got)
+	}
+}
+
 // TestDispatchGateAdmitsSiblingsWhileSlotsRemainAndRefusesWhenFull table-drives
 // the relaxed per-repo gate over a stub slot count (A2.2/A2.3): with a free slot,
 // no active_run_exists / repo_slots_exhausted block is emitted; once the repo's

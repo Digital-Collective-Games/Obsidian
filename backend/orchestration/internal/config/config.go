@@ -28,11 +28,17 @@ type Config struct {
 	AlertCommand    string // CODEX_ORCHESTRATION_ALERT_COMMAND  (path to a PowerShell sender script; empty = disabled)
 	AlertRecipient  string // CODEX_ORCHESTRATION_ALERT_RECIPIENT (operator email passed to the sender)
 
-	// QueueDrainRepo is the provider repo (owner/name) the O3 queue-drain consumer
-	// polls for Queue==Ready issues. Empty (the default) leaves the consumer dormant
-	// — the workflow is registered but the start endpoint dispatches against nothing
-	// — so this is safe to ship without a configured provider repo.
+	// QueueDrainRepo is retained ONLY for the legacy/manual single-task dispatch
+	// path and the start-endpoint config shape; the registry-driven queue-drain
+	// consumer no longer reads it to pick a provider repo (it enumerates the central
+	// registry instead). Empty is the default.
 	QueueDrainRepo string // CODEX_ORCHESTRATION_QUEUE_DRAIN_REPO
+
+	// RegistryPath is the EXPLICIT path to the central REPO-MANIFEST.json registry
+	// the registry-driven consumer enumerates each poll (single source of truth /
+	// global awareness of all registered repos). It defaults to the backend repo
+	// root's REPO-MANIFEST.json. New env vars use the OBSIDIAN_ prefix.
+	RegistryPath string // OBSIDIAN_REGISTRY_PATH (default <WorktreeRoot>/REPO-MANIFEST.json)
 
 	// LaunchQueueAgent gates the O5 wiring: when a queue dispatch provisions an owned
 	// worktree, launch a top-level claude agent in it, bind its session, and start the
@@ -72,6 +78,7 @@ func Load() (Config, error) {
 	}
 	cfg.WorktreeRoot = envOrDefault("CODEX_ORCHESTRATION_WORKTREE_ROOT", resolveWorktreeRoot())
 	cfg.TrackingRoot = envOrDefault("CODEX_ORCHESTRATION_TRACKING_ROOT", filepath.Join(cfg.WorktreeRoot, "Tracking"))
+	cfg.RegistryPath = envOrDefault("OBSIDIAN_REGISTRY_PATH", filepath.Join(cfg.WorktreeRoot, "REPO-MANIFEST.json"))
 
 	if cfg.JobsRoot == "" {
 		return Config{}, errors.New("jobs root must not be empty")

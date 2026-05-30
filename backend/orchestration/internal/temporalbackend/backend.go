@@ -137,11 +137,13 @@ func (b *Backend) StartWorker(cfg config.Config, taskService *taskrun.Service) (
 	jobexec.Register(w, cfg)
 	taskexec.Register(w)
 
-	// O3: register the queue-drain consumer workflow next to taskexec.Register
-	// (A3.4). The poll activity is wired to a live consumer (gh provider +
-	// taskrun-backed dispatcher) only when a provider repo is configured; otherwise
-	// the workflow is registered but stays dormant.
-	drainActivities, err := newQueueDrainActivities(cfg, taskService)
+	// O3 (registry-driven): register the queue-drain consumer workflow next to
+	// taskexec.Register (A3.4). The poll activity is wired to a live registry-driven
+	// consumer that enumerates ALL registered repos from the central registry
+	// (cfg.RegistryPath) and builds a per-repo provider + taskrun.Service (runtime =
+	// this Backend) for each. It is wired only when a registry path is configured;
+	// otherwise the workflow is registered but stays dormant.
+	drainActivities, err := newQueueDrainActivities(cfg, b)
 	if err != nil {
 		return nil, err
 	}

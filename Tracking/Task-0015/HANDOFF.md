@@ -189,6 +189,26 @@ real-agent stall→incident-email repro — components proven); (b) **task CLOSU
 distinct, final human gate — the agent never self-closes; awaiting explicit human
 closure approval.**
 
+## Reopened O3 — registry-driven binding (2026-05-30)
+
+The human flagged a real gap: the backend bound to a repo via env (`WORKTREE_ROOT` +
+`QUEUE_DRAIN_REPO`) + a co-located/default `queue_workers`, not via the registry.
+Fixed: the queue-drain consumer is now **registry-driven** — it reads the central
+`REPO-MANIFEST.json` at **`OBSIDIAN_REGISTRY_PATH`** (default the backend repo-root
+manifest), enumerates ALL registered repos each poll (global awareness), and per repo
+polls that entry's **`task_provider.repo`** (first-class; `QUEUE_DRAIN_REPO` no longer
+the consumer's source), maps `#N → <local_root>/Tracking/Task-N`, and dispatches into
+that entry's `local_root` capped at its `queue_workers` (per-repo slot count via
+`taskrun.NewServiceForRepo`; `git worktree list` is per-repo). `task_provider` +
+`source_control_provider` are first-class decoded types; `local_root` is arbitrary
+(no location assumption). Legacy manual `/dispatch` (`WORKTREE_ROOT`) path intact;
+production `REPO-MANIFEST.json` untouched; new env uses the `OBSIDIAN_` prefix.
+
+Built + verified via a workflow (1 implementer + 3 independent verifiers, all
+**sound**, zero blocking; `go build/vet/test ./...` green). NEXT: live registry-driven
+REG-007 re-run (point `OBSIDIAN_REGISTRY_PATH` at a testbed-only registry so
+production Obsidian is never polled) to validate end-to-end through the new binding.
+
 ## Where the unsupervised run stopped (2026-05-30)
 
 5 passes fully done + independently verified + committed/pushed (O1, O2, O6, O4,

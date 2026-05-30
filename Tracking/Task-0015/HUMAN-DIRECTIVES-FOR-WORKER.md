@@ -343,3 +343,30 @@ coordinator, and agent-auditor preferences.
   ALL queue-drain proofs in an ISOLATED Temporal namespace (e.g. `reg007`), NEVER the
   `default` namespace where the real jobs live, and never run a worker that would
   pick up the real job workflows. (Temporal setup details are the agent's call.)
+
+## Verbatim Human Directive — registry-driven binding + OBSIDIAN_ env prefix (2026-05-30)
+
+> Yeah this should be registry driven since the backend orchestrator needs global
+> awareness. The registry should make no assumptions about where repos are located.
+> The queue consumer must use the task provider to poll - you'll need to make that a
+> first class citizen. Don't worry about the task proposals, that's coming later. But
+> task provider must define the integration with local source.
+>
+> ... prefer OBSIDIAN_REGISTRY_PATH [for the env var, not a codex-prefixed name]
+
+### Worker-Safe Normalization (AUTHORITATIVE for O3 binding)
+- The central `REPO-MANIFEST.json` registry is the SINGLE SOURCE OF TRUTH; the
+  backend orchestrator has GLOBAL AWARENESS (reads + enumerates ALL registered repos
+  each poll). The registry makes NO assumption about where repos live — each
+  `local_root` is an arbitrary absolute path taken verbatim.
+- Each `repos[]` entry is the first-class binding: `{ id, local_root,
+  source_control_provider, task_provider, queue_workers }`. The queue consumer polls
+  via each entry's **`task_provider`** (FIRST-CLASS) — it is the abstraction that
+  defines the integration with local source (`local_root` + `source_control_provider`).
+  Dispatch lands in that entry's `local_root`, capped at that entry's `queue_workers`,
+  with per-repo slot accounting.
+- `task_proposal_provider` is OUT OF SCOPE for now (coming later).
+- NEW env vars use the **`OBSIDIAN_`** prefix, not `CODEX_` (e.g.
+  `OBSIDIAN_REGISTRY_PATH`). A global rename of the existing `CODEX_ORCHESTRATION_*`
+  vars is a separate, riskier follow-up (it touches the live pinned service lane +
+  LaneHelpers) — not done in this pass.

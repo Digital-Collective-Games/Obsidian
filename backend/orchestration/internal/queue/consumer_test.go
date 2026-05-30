@@ -75,6 +75,26 @@ func (s fixedSizer) RepoSlotLimit() int { return int(s) }
 
 const testRepo = "Digital-Collective-Games/QueueDrainTestbed"
 
+// singleEntryRegistryConsumer wraps one fake provider/dispatcher/sizer in a
+// registry-driven consumer over a single-entry fake registry, so tests that
+// exercise the WORKFLOW poll path (which now drives a RegistryConsumer) can reuse
+// the existing per-repo fakes. The fake registry yields exactly one repo whose
+// task_provider.repo is providerRepo and whose local_root is a synthetic path.
+func singleEntryRegistryConsumer(providerRepo string, provider QueueProvider, dispatcher Dispatcher, sizer SlotSizer) *RegistryConsumer {
+	loadRegistry := func() (RepoManifest, error) {
+		return RepoManifest{Repos: []RepoEntry{{
+			ID:           "TestRepo",
+			LocalRoot:    "C:\\Agent\\TestRepo",
+			QueueWorkers: sizer.RepoSlotLimit(),
+			TaskProvider: &TaskProvider{Kind: "github_issues", Repo: providerRepo},
+		}}}, nil
+	}
+	dispatchFor := func(RegistryRepo) (RepoDispatch, error) {
+		return RepoDispatch{Provider: provider, Dispatcher: dispatcher, Sizer: sizer}, nil
+	}
+	return NewRegistryConsumer(loadRegistry, dispatchFor)
+}
+
 // A3.1: a Queue==Ready issue causes a dispatch through the taskrun dispatch path
 // with NO manual dispatch call — the consumer invokes Dispatch itself. We assert
 // the dispatch seam was invoked exactly for the Ready issue's Task-N.

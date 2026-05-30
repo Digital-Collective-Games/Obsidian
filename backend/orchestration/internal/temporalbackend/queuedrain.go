@@ -109,40 +109,56 @@ func (d taskrunDispatcher) ActiveOwnedLaneTasks() ([]string, error) {
 	return d.service.ActiveOwnedLaneTasks()
 }
 
-// newQueueDrainActivities builds the consumer (gh provider + taskrun-backed
-// dispatcher + the service's manifest slot sizer) for the worker's poll activity.
-// A nil/empty provider repo or an unparsable repo yields nil activities so the
-// workflow can still be registered while the consumer stays dormant.
+// newQueueDrainActivities builds the REGISTRY-DRIVEN consumer for the worker's poll
+// activity. The consumer reads the central registry (cfg.RegistryPath, the explicit
+// OBSIDIAN_REGISTRY_PATH) each poll and iterates ALL registered repos: for each
+// repo it builds a gh provider polling that entry's task_provider.repo and a
+// taskrun.Service bound to that entry's local_root (per-repo slot cap = the entry's
+// queue_workers). The single CODEX_ORCHESTRATION_QUEUE_DRAIN_REPO is NO LONGER the
+// provider source — global awareness comes from iterating the registry.
 //
-// O5: when cfg.LaunchQueueAgent is enabled the dispatcher is wired with a live claude
-// launcher + a goroutine watchdog supervisor (default capture incident sink — NEVER a
-// real email), so a queue dispatch launches a top-level agent in its worktree, binds
-// the session, and supervises it. When disabled the dispatcher uses the legacy
-// dispatch-only path.
-func newQueueDrainActivities(cfg config.Config, service *taskrun.Service) (*queue.QueueDrainActivities, error) {
-	repo := cfg.QueueDrainRepo
-	if repo == "" || service == nil {
+// An empty registry path yields nil activities so the workflow can still be
+// registered while the consumer stays dormant.
+//
+// O5: when cfg.LaunchQueueAgent is enabled each per-repo dispatcher is wired with a
+// live claude launcher + a goroutine watchdog supervisor (default capture incident
+// sink — NEVER a real email), so a queue dispatch launches a top-level agent in its
+// worktree, binds the session, and supervises it. When disabled the dispatcher uses
+// the legacy dispatch-only path.
+func newQueueDrainActivities(cfg config.Config, runtime taskrun.Runtime) (*queue.QueueDrainActivities, error) {
+	if cfg.RegistryPath == "" || runtime == nil {
 		return nil, nil
 	}
-	provider, err := queue.NewGitHubQueueProvider(repo, 0)
-	if err != nil {
-		return nil, fmt.Errorf("build queue provider: %w", err)
+	registryPath := cfg.RegistryPath
+	loadRegistry := func() (queue.RepoManifest, error) {
+		return queue.LoadRegistry(registryPath)
 	}
-	dispatcher := taskrunDispatcher{service: service, repo: repo}
-	if cfg.LaunchQueueAgent {
-		dispatcher.launch = launchConfig{
-			Enabled:        true,
-			AllowedTools:   cfg.QueueAgentAllowedTools,
-			PermissionMode: cfg.QueueAgentPermissionMode,
+	dispatchFor := func(repo queue.RegistryRepo) (queue.RepoDispatch, error) {
+		provider, err := queue.NewGitHubQueueProvider(repo.ProviderRepo, 0)
+		if err != nil {
+			return queue.RepoDispatch{}, fmt.Errorf("build queue provider: %w", err)
 		}
-		dispatcher.launcher = liveLauncher{launcher: queue.NewLauncher(nil)}
-		// The watchdog's incident sink defaults to a capture sink, so a confirmed
-		// stall is recorded but NO real email is ever sent from this default wiring.
-		watchdog := queue.NewWatchdog(queue.WatchdogConfig{}, time.Now, queue.OSStatTranscript, nil, nil, &queue.CaptureSink{})
-		watchdog.SetTailReader(queue.OSTailTranscript)
-		dispatcher.supervisor = newGoroutineSupervisor(watchdog, 0)
+		// One Service per registry local_root: its git-worktree-list owned-lane count
+		// is naturally per-repo, and the slot cap is the entry's queue_workers PASSED
+		// IN (no co-located <local_root>/REPO-MANIFEST.json lookup).
+		service := taskrun.NewServiceForRepo(repo.LocalRoot, cfg.RunsRoot, runtime, repo.QueueWorkers)
+		dispatcher := taskrunDispatcher{service: service, repo: repo.ProviderRepo}
+		if cfg.LaunchQueueAgent {
+			dispatcher.launch = launchConfig{
+				Enabled:        true,
+				AllowedTools:   cfg.QueueAgentAllowedTools,
+				PermissionMode: cfg.QueueAgentPermissionMode,
+			}
+			dispatcher.launcher = liveLauncher{launcher: queue.NewLauncher(nil)}
+			// The watchdog's incident sink defaults to a capture sink, so a confirmed
+			// stall is recorded but NO real email is ever sent from this default wiring.
+			watchdog := queue.NewWatchdog(queue.WatchdogConfig{}, time.Now, queue.OSStatTranscript, nil, nil, &queue.CaptureSink{})
+			watchdog.SetTailReader(queue.OSTailTranscript)
+			dispatcher.supervisor = newGoroutineSupervisor(watchdog, 0)
+		}
+		return queue.RepoDispatch{Provider: provider, Dispatcher: dispatcher, Sizer: service}, nil
 	}
-	consumer := queue.NewConsumer(repo, provider, dispatcher, service)
+	consumer := queue.NewRegistryConsumer(loadRegistry, dispatchFor)
 	return queue.NewQueueDrainActivities(consumer), nil
 }
 

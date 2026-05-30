@@ -23,7 +23,7 @@ func TestQueueDrainWorkflowPollsThenDispatchesAndStops(t *testing.T) {
 		{Number: 7001, State: IssueState{Queue: QueueReady}},
 	}}
 	dispatcher := newFakeDispatcher()
-	consumer := NewConsumer(testRepo, provider, dispatcher, fixedSizer(4))
+	consumer := singleEntryRegistryConsumer(testRepo, provider, dispatcher, fixedSizer(4))
 	activities := NewQueueDrainActivities(consumer)
 
 	env.RegisterWorkflowWithOptions(QueueDrainWorkflow, workflow.RegisterOptions{Name: QueueDrainWorkflowName})
@@ -71,7 +71,7 @@ func (w *registryRecorder) RegisterActivityWithOptions(_ interface{}, _ activity
 func TestRegisterRegistersWorkflowAndActivity(t *testing.T) {
 	provider := &fakeProvider{}
 	dispatcher := newFakeDispatcher()
-	consumer := NewConsumer(testRepo, provider, dispatcher, fixedSizer(4))
+	consumer := singleEntryRegistryConsumer(testRepo, provider, dispatcher, fixedSizer(4))
 	activities := NewQueueDrainActivities(consumer)
 
 	w := &registryRecorder{}

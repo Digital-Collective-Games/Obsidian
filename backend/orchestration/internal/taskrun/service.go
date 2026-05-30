@@ -77,7 +77,32 @@ type ownedLaneBootstrapRecord struct {
 }
 
 func NewService(declaredWorktreeRoot string, runsRoot string, runtime Runtime) *Service {
-	s := &Service{
+	s := newService(declaredWorktreeRoot, runsRoot, runtime)
+	s.repoSlotLimit = s.manifestQueueWorkers
+	s.countActiveOwnedLanes = s.countOwnedLaneWorktrees
+	return s
+}
+
+// NewServiceForRepo builds a Service bound to a SPECIFIC repo local_root with its
+// per-repo slot cap PASSED IN from the central registry's queue_workers (rather
+// than read from a co-located <local_root>/REPO-MANIFEST.json). It is the
+// repo-parameterized constructor the registry-driven queue-drain consumer uses:
+// one Service per registered local_root, so countOwnedLaneWorktrees (git worktree
+// list under that local_root) yields the correct per-repo used-slot count, and the
+// cap is the registry entry's queue_workers. queueWorkers<=0 falls back to the
+// documented default.
+func NewServiceForRepo(localRoot string, runsRoot string, runtime Runtime, queueWorkers int) *Service {
+	s := newService(localRoot, runsRoot, runtime)
+	if queueWorkers <= 0 {
+		queueWorkers = queue.DefaultQueueWorkers
+	}
+	s.repoSlotLimit = func() int { return queueWorkers }
+	s.countActiveOwnedLanes = s.countOwnedLaneWorktrees
+	return s
+}
+
+func newService(declaredWorktreeRoot string, runsRoot string, runtime Runtime) *Service {
+	return &Service{
 		declaredWorktreeRoot: declaredWorktreeRoot,
 		trackingRoot:         filepath.Join(declaredWorktreeRoot, "Tracking"),
 		runArtifactsRoot:     filepath.Join(runsRoot, "taskruns"),
@@ -87,9 +112,6 @@ func NewService(declaredWorktreeRoot string, runsRoot string, runtime Runtime) *
 			return time.Now().UTC()
 		},
 	}
-	s.repoSlotLimit = s.manifestQueueWorkers
-	s.countActiveOwnedLanes = s.countOwnedLaneWorktrees
-	return s
 }
 
 // manifestQueueWorkers resolves the repo's queue_workers cap from

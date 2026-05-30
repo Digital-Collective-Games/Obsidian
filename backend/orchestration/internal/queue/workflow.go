@@ -52,25 +52,33 @@ type QueueDrainConfig struct {
 	PollInterval time.Duration `json:"poll_interval"`
 }
 
-// QueueDrainActivities holds the live consumer the poll activity drives. It is
-// constructed once at worker start (with the gh provider + the taskrun-backed
-// dispatcher) and registered on the worker; the workflow stays deterministic by
-// only scheduling the activity and a timer.
+// QueueDrainActivities holds the live registry-driven consumer the poll activity
+// drives. It is constructed once at worker start (with the registry loader + the
+// per-repo dispatch factory) and registered on the worker; the workflow stays
+// deterministic by only scheduling the activity and a timer. The consumer reads
+// the central registry each poll and iterates ALL registered repos.
 type QueueDrainActivities struct {
-	consumer *Consumer
+	consumer *RegistryConsumer
 }
 
-// NewQueueDrainActivities wires the poll activity to a live consumer.
-func NewQueueDrainActivities(consumer *Consumer) *QueueDrainActivities {
+// NewQueueDrainActivities wires the poll activity to a live registry-driven consumer.
+func NewQueueDrainActivities(consumer *RegistryConsumer) *QueueDrainActivities {
 	return &QueueDrainActivities{consumer: consumer}
 }
 
-// Poll runs exactly one DrainOnce cycle.
+// Poll runs exactly one registry-driven DrainOnce cycle and flattens the per-repo
+// results into a single DrainResult for the workflow's "acted" log.
 func (a *QueueDrainActivities) Poll(ctx context.Context, _ QueueDrainConfig) (DrainResult, error) {
 	if a.consumer == nil {
 		return DrainResult{}, nil
 	}
-	return a.consumer.DrainOnce(ctx)
+	registryResult, err := a.consumer.DrainOnce(ctx)
+	return DrainResult{
+		Dispatched: registryResult.Dispatched,
+		Parked:     registryResult.Parked,
+		Reclaimed:  registryResult.Reclaimed,
+		Skipped:    registryResult.Skipped,
+	}, err
 }
 
 // Register registers the queue-drain workflow and (when activities are provided)

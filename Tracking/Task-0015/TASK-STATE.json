@@ -14,7 +14,8 @@
     "regression": "passing"
   },
   "blockers": [
-    "Task CLOSURE is a distinct, final human gate (the agent never self-closes); awaiting explicit human closure approval. All sub-objectives O1-O6 + cross-cutting (REG-007) are implemented, independently QA'd, committed, and pushed.",
+    "REOPENED O3 - registry-driven binding (2026-05-30): the queue consumer now reads the central REPO-MANIFEST.json at OBSIDIAN_REGISTRY_PATH, enumerates all repos (global awareness), polls each entry's task_provider (first-class), and dispatches into each entry's local_root capped at its queue_workers (per-repo slots via NewServiceForRepo). Built + verified via workflow (1 impl + 3 verifiers, all sound, zero blocking; go build/vet/test green). Committed. IN PROGRESS: live registry-driven REG-007 re-run (OBSIDIAN_REGISTRY_PATH -> testbed-only registry) to validate end-to-end.",
+    "Task CLOSURE is a distinct, final human gate (the agent never self-closes); awaiting explicit human closure approval. All sub-objectives O1-O6 + cross-cutting (REG-007) implemented + independently QA'd + committed + pushed.",
     "O5 hardening follow-up (BUG-0001): kill the launched agent PID on owned-lane reclaim/shutdown (orphan lifecycle) + add launcher launch/error logging.",
     "O5 A5.3 follow-up: a full real-agent stall -> detect -> resume-poke -> incident-email repro (watchdog logic + resume-poke + launch each proven; integrated real-agent stall not separately reproduced)."
   ],
