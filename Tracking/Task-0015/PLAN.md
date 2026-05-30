@@ -248,29 +248,48 @@ the stall threshold — no stall/poke/email (A5.5); `go test ./...`.
 Exit bar / acceptance: A5.1,A5.2,A5.3,A5.5 (HARD), A5.4. Falsifier guard:
 F-O5-toplevel, F-O5-signal, F-O5-detect+email, F-O5-parked.
 
-## PASS-0006 — Cross-cutting: named regression case + task-level regression
+## PASS-0006 — Cross-cutting: GitHub-app-surface regression + task-level regression
 
-Objective: Add a named REGRESSION.md case for the new operator-facing behavior
-(queue-drain end-to-end incl. simulated-stall incident email) and run task-level
-regression on the isolated lane; ensure `go test ./...` builds and passes with
-the new `internal/queue` package + modified `taskrun`/`taskexec`/`httpapi`/
-`temporalbackend`.
+Objective: Add a named REGRESSION.md case proving the queue-drain consumer END
+TO END FROM THE REAL GITHUB APP SURFACE, and ensure `go test ./...` builds and
+passes with the new `internal/queue` package + modified `taskrun`/`taskexec`/
+`httpapi`/`temporalbackend`.
 
-Open human-gate clarification (raised in the review package): this repo's
-canonical regression lane is the DESKTOP APP surface (REGRESSION.md Canonical
-Rule). The new behavior is backend/operator-facing, not a desktop screen.
-PROPOSED: add a new operator-lane regression case class to REGRESSION.md (named
-REG-006 or similar) covering the queue-drain consumer on the isolated lane
-including the incident-email-on-stall, plus updating TESTING.md if a new lane is
-introduced. Need human confirmation that an operator-lane case is acceptable
-rather than forcing this into the app-surface matrix.
+Regression app surface = GitHub (HUMAN DECISION at the plan gate, 2026-05-29 —
+see HUMAN-DIRECTIVES-FOR-WORKER.md "PASS-0006 regression surface" + "dedicated
+test repo"). The human-facing surface for this feature is the GitHub issue, not a
+desktop screen and not a backend-only fixture. The regression MUST be driven from
+the human's Chrome debug session (CDP — see the `chrome-session-scraper` tooling)
+on a SINGLE dedicated test issue in a NEW throwaway test repo under `C:\Agent`:
+- In the real GitHub issue web UI, set that issue's `Queue` field to `Ready`
+  (a manual human browser action — not an API/fixture write).
+- The backend's polling consumer must NOTICE the change and PROCESS it (dispatch
+  the task into a worktree) with NO manual dispatch call.
+- ANY proxy — a fixture issue set, an issue-field-values API write that simulates
+  the flip, or a backend-only test — is UNACCEPTABLE for regression closure.
+  (Per-pass DEV-LOOP proof during O3/PASS-0004 may still use a fixture for speed;
+  that is iteration, NOT regression closure.)
+- Named case: add the next free id (REG-007; REG-006 is taken by Task-0014) as a
+  GitHub-app-surface case in REGRESSION.md; update TESTING.md if a lane note is
+  needed. The O5 simulated-stall incident-email behavior is exercised separately
+  on the isolated lane with the gmail send MOCKED/CAPTURED.
 
-Verification: the named REGRESSION.md case exercised on the isolated lane (AX.2);
-`go test ./...` from `backend/orchestration` passes (AX.1).
+Open isolation sub-question (confirm before this pass runs): which backend polls
+and dispatches during the regression — the isolated validation-lane backend
+pointed at the test repo (default, preferred per REGRESSION.md isolation), or the
+live service-lane backend. The manual `Queue` flip is the human's browser action;
+the agent's only GitHub interaction in this regression is read-only polling.
 
-Exit bar / acceptance: AX.1, AX.2. Falsifier guard: F-X (`go test ./...` fails or
-won't build, OR no named REGRESSION.md case, OR proof ran against the human live
-config/DB or did ungated live GitHub writes).
+Verification: the named GitHub-app-surface REGRESSION.md case exercised via the
+Chrome debug tab → backend pickup (AX.2); `go test ./...` from
+`backend/orchestration` passes (AX.1).
+
+Exit bar / acceptance: AX.1, AX.2 (regression closure requires the real GitHub-UI
+flip → backend pickup; no proxy). Falsifier guard: F-X (`go test ./...` fails or
+won't build, OR no named REGRESSION.md case, OR regression closed on proxy
+evidence instead of the real GitHub app-surface flip, OR proof ran against the
+human live config/DB or did ungated live GitHub writes beyond the single
+authorized test issue).
 
 ---
 
@@ -282,6 +301,12 @@ config/DB or did ungated live GitHub writes).
   (REGRESSION.md:11-19, TESTING.md).
 - GitHub interaction dry-run-first + human-gated (`SKILL.md:96-108,161-168`);
   task-owned fixtures / explicitly gated test issue; never ungated live writes.
+- Mutating queue proofs (flip `Queue=Ready`, park, close, dispatch, agent work)
+  run against a NEW throwaway TEST REPO under `C:\Agent` (+ its GitHub repo) so
+  they can be reset arbitrarily — never the production Obsidian repo or the live
+  CodexDashboard repo. The PASS-0006 regression is driven from the real GitHub UI
+  via the human's Chrome debug tab; proxy/fixture evidence is NOT regression
+  closure. See HUMAN-DIRECTIVES-FOR-WORKER.md.
 - All GitHub state/field writes go through the obsidian-operator skill surface
   (no second write path).
 - Backend builds + passes `go test ./...` from `backend/orchestration`.
@@ -298,10 +323,21 @@ where the runtime supports it; if a clean QA lane cannot be created in this
 single-context runtime, flag it to the coordinator rather than self-reviewing as
 QA.
 
-## Plan Approval Question (for the human)
+## Plan Approval — GRANTED (2026-05-29)
 
-Approve this 7-pass plan (O1→O2→O6→O4→O3→O5→cross-cutting) and the
-provability-driven ordering as safe and specific enough to begin implementation
-at PASS-0000? And: is adding a NEW operator-lane regression case to REGRESSION.md
-(rather than the app-surface matrix) the right home for the new queue-drain
-behavior (PASS-0006)?
+Human APPROVED this 7-pass plan (O1→O2→O6→O4→O3→O5→cross-cutting) and the
+provability-driven ordering to begin implementation at PASS-0000.
+
+PASS-0006 regression home SETTLED: the regression app surface is GitHub, driven
+via the human's Chrome debug tab on a single test issue in a NEW throwaway test
+repo under `C:\Agent` (flip `Queue=Ready` → backend polling picks it up); proxy
+evidence is unacceptable. See HUMAN-DIRECTIVES-FOR-WORKER.md and PASS-0006.
+
+Coordinator-found corrections to fold into the affected passes (verified against
+code, recorded in Design/plan-gate/COORDINATOR-REVIEW.md): (1) O2 must add a
+per-repo slot count/semaphore — the existing `active_run_exists` gate is
+per-task, not per-repo; (2) O5/O6 cannot source the launched agent's session
+id/transcript path from the existing dispatch-time `DeepContext` plumbing (that
+captures the backend's env) — PASS-0005 must add post-launch session discovery;
+(3) the O5 poke "actually wake the process (deliver input)" mechanism is net-new
+and unspecified — A5.3 must not be satisfied by a no-op state poke.

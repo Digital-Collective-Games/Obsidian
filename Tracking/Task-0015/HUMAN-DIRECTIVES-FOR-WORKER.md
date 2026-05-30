@@ -236,3 +236,69 @@ coordinator, and agent-auditor preferences.
   `.codex` session transcripts are durable history and must NOT be rewritten.
 - This is a backend (Go + Temporal) + manifest + operator-skill feature. Reuse the
   existing owned-lane worktree machinery rather than reinventing it.
+
+## Verbatim Human Directive — PASS-0006 regression surface = GitHub app surface (2026-05-29, at plan gate)
+
+> App surface for pass 6 is github, use my chrome debug tab on a single test
+> issue: set queue to Ready, then the backend must notice that and process it.
+> Anything else is proxy evidence and unacceptable.
+
+### Worker-Safe Normalization (AUTHORITATIVE for PASS-0006 / AX.2; settles the plan-gate Decision 2)
+- The regression APP SURFACE for this feature is **GitHub** (the real GitHub
+  issue web UI). The human-facing surface where the operator acts on this feature
+  is the GitHub issue, NOT a desktop screen and NOT a backend-only fixture. This
+  supersedes the earlier "operator-lane backend-only case" proposal AND any
+  reading of TASK.md's Proof Plan that treated a fixture/isolated-lane-only
+  queue-detection check as sufficient for regression closure.
+- MECHANISM: the human's **Chrome debug session** (CDP — see the
+  `chrome-session-scraper` tooling) driving the human's authenticated GitHub tab
+  on a **SINGLE dedicated test issue**.
+- REQUIRED FLOW (regression closure): in the real GitHub issue UI, set that
+  issue's `Queue` field to `Ready` (a manual human browser action) ⇒ the
+  backend's polling consumer must NOTICE the change and PROCESS it (dispatch the
+  task into a worktree) with NO manual dispatch call.
+- PROXY IS UNACCEPTABLE for regression closure: a fixture issue set, an
+  issue-field-values API write that simulates the flip, or any backend-only test
+  does NOT satisfy PASS-0006. (Per-pass DEV-LOOP proof during O3/PASS-0004 may
+  still use a fixture for speed; that is iteration, NOT regression closure.)
+- Named case: add the next free id (**REG-007**; REG-006 is taken by Task-0014)
+  as a GitHub-app-surface case in `REGRESSION.md`; update `TESTING.md` if a lane
+  note is needed. The O5 simulated-stall incident-email behavior is exercised
+  separately on the isolated lane with the gmail send MOCKED/CAPTURED.
+- F-X reconciliation: the manual `Queue=Ready` flip is the HUMAN's browser action
+  (the authorized single-test-issue app-surface step), so it is NOT an agent
+  "ungated live GitHub write." The dispatched agent's only GitHub interaction in
+  this regression is READ-ONLY polling. F-X (no ungated live agent writes; no
+  proof against the human's live config/DB) still holds.
+- OPEN isolation sub-question to confirm BEFORE PASS-0006 runs: which backend
+  instance polls/dispatches during the regression — the isolated validation-lane
+  backend pointed at the test repo (default, preferred per `REGRESSION.md`
+  isolation), vs. the live service-lane backend.
+
+## Verbatim Human Directive — dedicated test repo for proof (2026-05-29, at plan gate)
+
+> For the task you choose, it must be part of a test repo - make something new
+> under C:\Agent so we can iterate on it arbitrarily
+
+### Worker-Safe Normalization (AUTHORITATIVE — proof infrastructure for O2/O3/O4/O5/O6 + PASS-0006)
+- All proof that involves the queue-drain consumer dispatching, flipping the
+  GitHub `Queue` field, parking/closing issues, or an agent working in a worktree
+  MUST target a NEW, throwaway TEST REPO created under `C:\Agent`
+  (e.g. `C:\Agent\<TestRepo>`), with a matching GitHub repo so the org `Queue` /
+  `Human Needed` issue fields can be flipped in the browser. NEVER the production
+  `Digital-Collective-Games/Obsidian` repo/issues, and NEVER the live
+  `CodexDashboard` repo, for these mutating proofs.
+- The dispatched "task you choose" (the `Task-N` the consumer picks up and an
+  agent works on) lives in this test repo, so issues can be created, flipped to
+  `Queue=Ready`, parked, closed, and RESET arbitrarily without polluting any real
+  queue.
+- Setup (a task prerequisite before PASS-0001 proof): (a) create the local git
+  repo under `C:\Agent` with a baseline commit so `git worktree add` works;
+  (b) create the matching GitHub repo in the org (it inherits the org issue
+  fields); (c) add a `repos[]` entry for it (with `queue_workers`) to
+  `REPO-MANIFEST.json` so the consumer polls it. Creating the GitHub repo is
+  OUTWARD-FACING — confirm the repo name/org with the human before creating the
+  GitHub side.
+- This test repo is the provider AND target for the proof (the issues that carry
+  `Queue` and the worktree the dispatched agent works in), mirroring how
+  `CodexDashboard` is its own provider+target via the manifest.
