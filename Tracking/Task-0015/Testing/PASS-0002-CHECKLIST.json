@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "task_id": "Task-0015",
+  "pass_id": "PASS-0002",
+  "checklist_status": "closed",
+  "implemented": true,
+  "build": "passing",
+  "unit_tests": "passing",
+  "pass_audit_written": true,
+  "audit_verdict": "ready",
+  "audit_result_ref": "Testing/PASS-0002-AUDIT.md",
+  "handoff_updated": true,
+  "commit_created": true,
+  "pushed_upstream": true,
+  "notify_sent": true,
+  "blockers": [],
+  "next_required_actions": [
+    "PASS-0003 (O4): done-contract via GitHub issue state. Agent NEVER self-closes; Human Needed=Yes parks in place (retain worktree+slot, no redispatch, no cleanup); only an explicit human CLOSE deallocates; no second GitHub-write path; record the run/gate state (running vs parked + which gate) on the owned-lane record (extends O6's RepoBinding.run_gate_state beyond 'running'). Implement + unit-test the issue-state decision logic + the obsidian-operator done-contract writes + SKILL.md 'Queue Done-Contract'. Full consumer-driven end-to-end park/close proof may entangle with O3 (PASS-0004); scope honestly.",
+    "Re-prove O6 A6.4 (parked worktree listed by GET /api/v1/worktrees) once O4 can set run_gate_state to a parked value.",
+    "Future live proofs: also override CODEX_ORCHESTRATION_JOBS_ROOT to a temp dir (the backend /healthz read-reconciles the real .codex jobs otherwise; read-only, but cleaner)."
+  ],
+  "updated_at": "2026-05-30T02:35:00.0000000-04:00"
+}

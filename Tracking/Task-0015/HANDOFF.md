@@ -50,15 +50,22 @@
    `active_run_exists` with a free slot, AX.1 `go test ./...` clean, F-O2 not
    triggered — [Testing/PASS-0001-AUDIT.md](./Testing/PASS-0001-AUDIT.md) /
    [Testing/PASS-0001/](./Testing/PASS-0001/). Committed + pushed.
-   NEXT: **PASS-0002** (O6 worktree↔session binding + `GET /api/v1/worktrees` +
-   operator command).
-   - Carry-forward: O6's session-id/transcript-path is NOT sourceable from the
-     existing dispatch-time `DeepContext` (it captures the backend's env) — scope
-     PASS-0002 to the binding SCHEMA + endpoint and defer real-session (A6.1) to
-     PASS-0005 and parked-state (A6.4) to PASS-0003 re-proof.
+   NEXT: **PASS-0002**.
+4. DONE: **PASS-0002** (O6 binding schema + `GET /api/v1/worktrees` + operator
+   command). `RepoBinding` {repo, task, worktree path, session id, transcript path,
+   run/gate state} persisted on the owned-lane record; endpoint enumerates active
+   worktrees; `Get-ActiveWorktreeSessions.ps1` surfaces it. Independent QA
+   re-derived live (fresh Task-12/13): A6.1 / A6.2 (HARD) / A6.3 PASS, F-O6
+   boundary holds (no `vscodium://` link), AX.1 clean —
+   [Testing/PASS-0002-AUDIT.md](./Testing/PASS-0002-AUDIT.md). Committed + pushed.
+   Honest deferrals: A6.1 real-agent session → PASS-0005; A6.4 parked-listing → PASS-0003.
+   NEXT: **PASS-0003** (O4 done-contract: park-in-place, human-only closure, agent
+   never self-closes, no second GitHub-write path; records run/gate state on the
+   owned-lane binding — which then unblocks O6 A6.4 re-proof).
    - Live-proof hygiene: the validation Temporal namespace holds stale `running`
-     records for `QueueDrainTestbed` Task-1/2/3; use fresh task ids (or reset the
-     namespace) for future live proofs.
+     records for `QueueDrainTestbed` Task-1/2/3/10/11/12/13 — use fresh task ids
+     for future live proofs, and override `CODEX_ORCHESTRATION_JOBS_ROOT` to a temp
+     dir (the backend `/healthz` read-reconciles the real `.codex` jobs otherwise).
 3. Before PASS-0001 proof: stand up the dedicated test repo under `C:\Agent`
    (confirm the GitHub repo name/org with the human — outward-facing) and add its
    `REPO-MANIFEST.json` entry.

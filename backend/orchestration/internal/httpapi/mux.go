@@ -36,6 +36,9 @@ func NewMux(cfg config.Config, service *controlplane.Service, taskService *taskr
 	mux.HandleFunc("/api/v1/tasks", func(w http.ResponseWriter, r *http.Request) {
 		handleTasksList(w, r, taskService)
 	})
+	mux.HandleFunc("/api/v1/worktrees", func(w http.ResponseWriter, r *http.Request) {
+		handleWorktreesList(w, r, taskService)
+	})
 	mux.HandleFunc("/api/v1/tasks/", func(w http.ResponseWriter, r *http.Request) {
 		handleTaskAPIRoute(w, r, taskService)
 	})
@@ -105,6 +108,28 @@ func handleTasksList(w http.ResponseWriter, r *http.Request, taskService *taskru
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"tasks": tasks})
+}
+
+// handleWorktreesList serves GET /api/v1/worktrees (O6): every active owned-lane
+// worktree with its bound { repo, issue/Task, worktree path, agent session id,
+// session transcript path, run/gate state }. It SUPPLIES the raw fields needed to
+// construct a VSCodium link to the bound session but never emits a vscodium://
+// link itself (the orchestrator boundary).
+func handleWorktreesList(w http.ResponseWriter, r *http.Request, taskService *taskrun.Service) {
+	if r.URL.Path != "/api/v1/worktrees" {
+		http.NotFound(w, r)
+		return
+	}
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	worktrees, err := taskService.ListActiveWorktrees()
+	if err != nil {
+		writeJSONError(w, http.StatusBadGateway, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"worktrees": worktrees})
 }
 
 func handleTaskAPIRoute(w http.ResponseWriter, r *http.Request, taskService *taskrun.Service) {

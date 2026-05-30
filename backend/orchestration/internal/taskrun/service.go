@@ -70,6 +70,10 @@ type ownedLaneBootstrapRecord struct {
 	CapturedAt           time.Time            `json:"captured_at"`
 	BootstrappedAt       time.Time            `json:"bootstrapped_at"`
 	Files                []TaskArtifactDigest `json:"files,omitempty"`
+	// Binding is the O6 worktree<->session binding persisted durably alongside the
+	// rest of the bootstrap record so the GET /api/v1/worktrees endpoint can
+	// enumerate active worktrees and their bound session/transcript/state.
+	Binding *RepoBinding `json:"binding,omitempty"`
 }
 
 func NewService(declaredWorktreeRoot string, runsRoot string, runtime Runtime) *Service {
@@ -130,6 +134,105 @@ func (s *Service) countOwnedLaneWorktrees() (int, error) {
 		}
 	}
 	return count, nil
+}
+
+// WorktreeBinding is one active owned worktree's O6 binding as returned by the
+// GET /api/v1/worktrees endpoint. It carries the run id of the bootstrap record
+// it was read from alongside the durable RepoBinding. It deliberately exposes
+// only the raw fields needed to CONSTRUCT a VSCodium link (worktree path, agent
+// session id, transcript path) and never a vscodium:// link itself (O6 boundary).
+type WorktreeBinding struct {
+	RunID string `json:"run_id,omitempty"`
+	RepoBinding
+}
+
+// ListActiveWorktrees enumerates the active owned-lane worktrees from the durable
+// owned-lane-bootstrap.json records and returns each one's O6 binding. A worktree
+// is "active" when its checkout directory still exists on disk (cleanupOwnedLane
+// removes it on terminal close), so a closed/reclaimed lane drops out naturally.
+// Records are deduped by worktree path, keeping the most recently bootstrapped
+// record per path.
+//
+// NOTE (scope): every listed worktree currently reports RunGateStateRunning. The
+// parked-needs-human / which-gate state (A6.4) lands with O4/PASS-0003, which
+// owns the park state; this endpoint already returns whatever run/gate state the
+// record carries, so it will list parked worktrees unchanged once O4 records them.
+func (s *Service) ListActiveWorktrees() ([]WorktreeBinding, error) {
+	taskEntries, err := os.ReadDir(s.runArtifactsRoot)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []WorktreeBinding{}, nil
+		}
+		return nil, fmt.Errorf("read task-run artifacts root: %w", err)
+	}
+
+	byWorktree := map[string]ownedLaneBootstrapRecord{}
+	for _, taskEntry := range taskEntries {
+		if !taskEntry.IsDir() {
+			continue
+		}
+		taskDir := filepath.Join(s.runArtifactsRoot, taskEntry.Name())
+		runEntries, err := os.ReadDir(taskDir)
+		if err != nil {
+			return nil, fmt.Errorf("read task-run dir %s: %w", taskDir, err)
+		}
+		for _, runEntry := range runEntries {
+			if !runEntry.IsDir() {
+				continue
+			}
+			recordPath := filepath.Join(taskDir, runEntry.Name(), "owned-lane-bootstrap.json")
+			raw, err := os.ReadFile(recordPath)
+			if err != nil {
+				if os.IsNotExist(err) {
+					continue
+				}
+				return nil, fmt.Errorf("read owned-lane bootstrap %s: %w", recordPath, err)
+			}
+			var record ownedLaneBootstrapRecord
+			if err := json.Unmarshal(raw, &record); err != nil {
+				return nil, fmt.Errorf("decode owned-lane bootstrap %s: %w", recordPath, err)
+			}
+			if record.OwnedRepoRoot == "" {
+				continue
+			}
+			if _, err := os.Stat(record.OwnedRepoRoot); err != nil {
+				// Worktree directory is gone (reclaimed on terminal close) -> not active.
+				continue
+			}
+			existing, ok := byWorktree[record.OwnedRepoRoot]
+			if !ok || record.BootstrappedAt.After(existing.BootstrappedAt) {
+				byWorktree[record.OwnedRepoRoot] = record
+			}
+		}
+	}
+
+	bindings := make([]WorktreeBinding, 0, len(byWorktree))
+	for _, record := range byWorktree {
+		binding := bindingFromRecord(record)
+		bindings = append(bindings, WorktreeBinding{RunID: record.RunID, RepoBinding: binding})
+	}
+	sort.Slice(bindings, func(i, j int) bool {
+		if bindings[i].TaskID != bindings[j].TaskID {
+			return bindings[i].TaskID < bindings[j].TaskID
+		}
+		return bindings[i].WorktreePath < bindings[j].WorktreePath
+	})
+	return bindings, nil
+}
+
+// bindingFromRecord returns the binding persisted on the record, reconstructing a
+// minimal binding from the record's own fields for legacy records written before
+// O6 added the binding (so a pre-O6 worktree still enumerates with its task id and
+// worktree path rather than being dropped).
+func bindingFromRecord(record ownedLaneBootstrapRecord) RepoBinding {
+	if record.Binding != nil {
+		return *record.Binding
+	}
+	return RepoBinding{
+		TaskID:       record.TaskID,
+		WorktreePath: record.OwnedRepoRoot,
+		RunGateState: RunGateStateRunning,
+	}
 }
 
 func (s *Service) ListTasks(ctx context.Context) ([]TaskView, error) {
@@ -226,7 +329,7 @@ func (s *Service) dispatchWithDirective(ctx context.Context, taskID string, dire
 		return TaskRunView{}, err
 	}
 	request.CapturedTaskSnapshot = metadata.snapshot
-	request.RepoLane, err = s.bootstrapOwnedLane(request.TaskID, request.RunID, request.CapturedTaskSnapshot, request.RepoLane)
+	request.RepoLane, err = s.bootstrapOwnedLane(request.TaskID, request.RunID, request.CapturedTaskSnapshot, request.RepoLane, request.ContextSnapshot)
 	if err != nil {
 		_ = s.cleanupOwnedLane(repoLane)
 		return TaskRunView{}, err
@@ -444,7 +547,7 @@ func (s *Service) RetryWorkloadRun(ctx context.Context, runID string) (TaskRunVi
 	if err != nil {
 		return TaskRunView{}, err
 	}
-	repoLane, err = s.bootstrapOwnedLane(run.TaskID, run.RunID, metadata.snapshot, repoLane)
+	repoLane, err = s.bootstrapOwnedLane(run.TaskID, run.RunID, metadata.snapshot, repoLane, run.DeepContext)
 	if err != nil {
 		_ = s.cleanupOwnedLane(repoLane)
 		return TaskRunView{}, err
@@ -1070,7 +1173,7 @@ func (s *Service) releasePreviousOwnedLane(ctx context.Context, taskID string) e
 	return nil
 }
 
-func (s *Service) bootstrapOwnedLane(taskID string, runID string, snapshot TaskDefinitionSnapshot, repoLane RepoLane) (RepoLane, error) {
+func (s *Service) bootstrapOwnedLane(taskID string, runID string, snapshot TaskDefinitionSnapshot, repoLane RepoLane, dispatchContext *DeepContext) (RepoLane, error) {
 	if repoLane.OwnedRepoRoot == "" {
 		return RepoLane{}, fmt.Errorf("bootstrap owned lane for %s: owned repo root is missing", taskID)
 	}
@@ -1084,6 +1187,8 @@ func (s *Service) bootstrapOwnedLane(taskID string, runID string, snapshot TaskD
 	if err := os.MkdirAll(artifactRoot, 0o755); err != nil {
 		return RepoLane{}, fmt.Errorf("create task-run artifact root: %w", err)
 	}
+
+	binding := s.bindingForLane(taskID, repoLane.OwnedRepoRoot, dispatchContext)
 
 	bootstrapPath := filepath.Join(artifactRoot, "owned-lane-bootstrap.json")
 	record := ownedLaneBootstrapRecord{
@@ -1099,6 +1204,7 @@ func (s *Service) bootstrapOwnedLane(taskID string, runID string, snapshot TaskD
 		CapturedAt:           snapshot.CapturedAt,
 		BootstrappedAt:       s.now(),
 		Files:                append([]TaskArtifactDigest(nil), snapshot.Files...),
+		Binding:              binding,
 	}
 	if err := writeJSONFile(bootstrapPath, record); err != nil {
 		return RepoLane{}, fmt.Errorf("write owned-lane bootstrap artifact: %w", err)
@@ -1107,7 +1213,43 @@ func (s *Service) bootstrapOwnedLane(taskID string, runID string, snapshot TaskD
 	repoLane.CurrentCommit = currentCommit
 	repoLane.RunArtifactRoot = artifactRoot
 	repoLane.BootstrapArtifactPath = bootstrapPath
+	repoLane.Binding = binding
 	return repoLane, nil
+}
+
+// bindingForLane builds the O6 worktree<->session binding from what is genuinely
+// available at dispatch: the task id, the owned worktree path, the repo id from
+// the manifest, and the dispatch context's session id/transcript path. The
+// session id/transcript path are the BACKEND dispatch process's values
+// (best-available placeholders); real launched-agent session capture is PASS-0005.
+// run/gate state defaults to RunGateStateRunning; the parked-needs-human enum is
+// O4/PASS-0003. No values are invented — placeholder fields are left empty when
+// the dispatch context does not carry them.
+func (s *Service) bindingForLane(taskID string, ownedRepoRoot string, dispatchContext *DeepContext) *RepoBinding {
+	binding := &RepoBinding{
+		Repo:         s.repoIdentity(),
+		TaskID:       taskID,
+		WorktreePath: ownedRepoRoot,
+		RunGateState: RunGateStateRunning,
+	}
+	if dispatchContext != nil {
+		binding.AgentSessionID = dispatchContext.SessionID
+		binding.SessionTranscriptPath = dispatchContext.TranscriptPath
+	}
+	return binding
+}
+
+// repoIdentity resolves the repo id for the declared worktree root from
+// REPO-MANIFEST.json, falling back to the declared worktree root itself when the
+// manifest is missing or has no matching entry (so the binding still names a
+// stable repo identifier rather than an empty string).
+func (s *Service) repoIdentity() string {
+	if manifest, err := queue.LoadManifest(s.declaredWorktreeRoot); err == nil {
+		if id := manifest.RepoIDForRoot(s.declaredWorktreeRoot); id != "" {
+			return id
+		}
+	}
+	return s.declaredWorktreeRoot
 }
 
 func (s *Service) cleanupOwnedLane(repoLane RepoLane) error {

@@ -119,22 +119,57 @@ type StoryOwnership struct {
 }
 
 type RepoLane struct {
-	OwnedRepoRoot         string    `json:"owned_repo_root,omitempty"`
-	CheckoutMode          string    `json:"checkout_mode,omitempty"`
-	BaselineCommit        string    `json:"baseline_commit,omitempty"`
-	CurrentCommit         string    `json:"current_commit,omitempty"`
-	ApprovedRestoreCommit string    `json:"approved_restore_commit,omitempty"`
-	RunArtifactRoot       string    `json:"run_artifact_root,omitempty"`
-	BootstrapArtifactPath string    `json:"bootstrap_artifact_path,omitempty"`
-	PreflightArtifactPath string    `json:"preflight_artifact_path,omitempty"`
-	WorkloadStepPath      string    `json:"workload_step_path,omitempty"`
-	WorkloadResultPath    string    `json:"workload_result_path,omitempty"`
-	WorkloadOutputPath    string    `json:"workload_output_path,omitempty"`
-	WorkloadCodePath      string    `json:"workload_code_path,omitempty"`
-	ResetStatus           string    `json:"reset_status,omitempty"`
-	LastResetTargetCommit string    `json:"last_reset_target_commit,omitempty"`
-	ResetFailureSummary   string    `json:"reset_failure_summary,omitempty"`
-	LastResetAt           time.Time `json:"last_reset_at,omitempty"`
+	OwnedRepoRoot         string       `json:"owned_repo_root,omitempty"`
+	CheckoutMode          string       `json:"checkout_mode,omitempty"`
+	BaselineCommit        string       `json:"baseline_commit,omitempty"`
+	CurrentCommit         string       `json:"current_commit,omitempty"`
+	ApprovedRestoreCommit string       `json:"approved_restore_commit,omitempty"`
+	RunArtifactRoot       string       `json:"run_artifact_root,omitempty"`
+	BootstrapArtifactPath string       `json:"bootstrap_artifact_path,omitempty"`
+	PreflightArtifactPath string       `json:"preflight_artifact_path,omitempty"`
+	WorkloadStepPath      string       `json:"workload_step_path,omitempty"`
+	WorkloadResultPath    string       `json:"workload_result_path,omitempty"`
+	WorkloadOutputPath    string       `json:"workload_output_path,omitempty"`
+	WorkloadCodePath      string       `json:"workload_code_path,omitempty"`
+	ResetStatus           string       `json:"reset_status,omitempty"`
+	LastResetTargetCommit string       `json:"last_reset_target_commit,omitempty"`
+	ResetFailureSummary   string       `json:"reset_failure_summary,omitempty"`
+	LastResetAt           time.Time    `json:"last_reset_at,omitempty"`
+	Binding               *RepoBinding `json:"binding,omitempty"`
+}
+
+// RunGateStateRunning is the default run/gate state recorded on a freshly
+// dispatched owned lane (O6). The real parked/needs-human gate enum (which gate
+// a parked run is waiting on) is O4/PASS-0003 work; until park state exists a
+// dispatched lane is simply "running".
+const RunGateStateRunning = "running"
+
+// RepoBinding is the O6 worktree<->session binding recorded on the owned-lane
+// record at dispatch. It supplies the raw fields an operator (or a downstream
+// review surface) needs to CONSTRUCT a VSCodium link to the bound session — the
+// worktree path, the agent session id, and the session transcript path — but it
+// never itself emits a vscodium:// link (the orchestrator boundary, per O6).
+type RepoBinding struct {
+	// Repo is the declared-repo id/root the owned lane belongs to.
+	Repo string `json:"repo"`
+	// TaskID is the issue #N / Task-N identifier (issue #N maps 1:1 to Task-N).
+	TaskID string `json:"task_id"`
+	// WorktreePath is the owned worktree checkout path (mirrors OwnedRepoRoot).
+	WorktreePath string `json:"worktree_path"`
+	// AgentSessionID is the session id bound to this worktree.
+	//
+	// PASS-0002 PLACEHOLDER: this is currently the BACKEND dispatch process's
+	// session id (captured from its env at dispatch), NOT a launched agent's own
+	// session. Real launched-agent session capture is PASS-0005 (O5) work.
+	AgentSessionID string `json:"agent_session_id,omitempty"`
+	// SessionTranscriptPath is the path to the bound session transcript.
+	//
+	// PASS-0002 PLACEHOLDER: dispatch-context value (see AgentSessionID);
+	// real launched-agent transcript path is PASS-0005 (O5) work.
+	SessionTranscriptPath string `json:"session_transcript_path,omitempty"`
+	// RunGateState is the run/gate state. Defaults to RunGateStateRunning at
+	// dispatch; the parked-needs-human / which-gate enum is O4/PASS-0003 work.
+	RunGateState string `json:"run_gate_state"`
 }
 
 type RunFollowUp struct {

@@ -59,6 +59,19 @@ func (m RepoManifest) QueueWorkersForRoot(worktreeRoot string) (workers int, ok 
 	return DefaultQueueWorkers, false
 }
 
+// RepoIDForRoot returns the configured id for the repos[] entry whose local_root
+// matches worktreeRoot, or "" when no entry matches. O6 uses it to name the repo
+// in the worktree<->session binding.
+func (m RepoManifest) RepoIDForRoot(worktreeRoot string) string {
+	target := normalizeRoot(worktreeRoot)
+	for _, entry := range m.Repos {
+		if normalizeRoot(entry.LocalRoot) == target {
+			return entry.ID
+		}
+	}
+	return ""
+}
+
 // normalizeRoot makes two paths comparable across separator and trailing-slash
 // differences without resolving symlinks (the manifest stores literal roots).
 func normalizeRoot(path string) string {

@@ -1,0 +1,170 @@
+{
+  "run_id": "taskrun--Task-10--active",
+  "task_id": "Task-10",
+  "workflow_id": "taskrun--Task-10--active",
+  "temporal_execution_run_id": "019e7735-e4cf-7b86-a413-f3a22bb5ad1f",
+  "status": "active",
+  "state_envelope": {
+    "state": "running",
+    "reason_code": "owned_lane_bootstrapped",
+    "state_summary": "Run bootstrapped the owned checkout and is ready for backend execution.",
+    "next_owner": "backend_worker",
+    "next_expected_event": "Execution worker records the next progress checkpoint.",
+    "suspicious_after": "2026-05-30T05:03:01.1832878Z",
+    "action_block_reasons": {
+      "dispatch": [
+        {
+          "code": "active_run_exists",
+          "summary": "Dispatch is blocked while this run owns the current live story."
+        }
+      ],
+      "interrupt": null,
+      "poke": [
+        {
+          "code": "run_not_suspicious_yet",
+          "summary": "Poke stays blocked until the run misses its next expected progress deadline."
+        }
+      ]
+    }
+  },
+  "meaning_summary": "A minimal dispatchable fixture task used only to prove the O6 worktree<->session binding endpoint on the isolated validation lane. It does no real work.",
+  "attention": {
+    "attention_level": "watch",
+    "attention_reason": "Run is active after owned-lane bootstrap.",
+    "attention_sort_key": "45-owned_lane_bootstrapped"
+  },
+  "actions": {
+    "dispatch": {
+      "allowed": false,
+      "block_reasons": [
+        {
+          "code": "active_run_exists",
+          "summary": "Dispatch is blocked while this run owns the current live story."
+        }
+      ]
+    },
+    "interrupt": {
+      "allowed": true
+    },
+    "poke": {
+      "allowed": false,
+      "block_reasons": [
+        {
+          "code": "run_not_suspicious_yet",
+          "summary": "Poke stays blocked until the run misses its next expected progress deadline."
+        }
+      ]
+    }
+  },
+  "repo_lane": {
+    "owned_repo_root": "C:\\Users\\gregs\\AppData\\Local\\Temp\\cdxow\\Task-10-bb56a16f-3952328094\\w",
+    "checkout_mode": "git_worktree_detached",
+    "baseline_commit": "3015a7419a5620774972d69bb3dfbc9018ce054f",
+    "current_commit": "3015a7419a5620774972d69bb3dfbc9018ce054f",
+    "approved_restore_commit": "3015a7419a5620774972d69bb3dfbc9018ce054f",
+    "run_artifact_root": "C:\\Users\\gregs\\AppData\\Local\\Temp\\cdx-pass0002-runs\\taskruns\\Task-10\\taskrun--Task-10--active",
+    "bootstrap_artifact_path": "C:\\Users\\gregs\\AppData\\Local\\Temp\\cdx-pass0002-runs\\taskruns\\Task-10\\taskrun--Task-10--active\\owned-lane-bootstrap.json",
+    "reset_status": "not_run",
+    "last_reset_at": "0001-01-01T00:00:00Z",
+    "binding": {
+      "repo": "QueueDrainTestbed",
+      "task_id": "Task-10",
+      "worktree_path": "C:\\Users\\gregs\\AppData\\Local\\Temp\\cdxow\\Task-10-bb56a16f-3952328094\\w",
+      "agent_session_id": "pass0002-dispatch-session",
+      "session_transcript_path": "C:\\Agent\\QueueDrainTestbed\\.proof\\pass0002-transcript.jsonl",
+      "run_gate_state": "running"
+    }
+  },
+  "last_progress_at": "2026-05-30T04:48:01.1832878Z",
+  "last_progress_summary": "Bootstrapped the owned checkout and recorded its current commit.",
+  "captured_task_snapshot": {
+    "declared_worktree_root": "C:\\Agent\\QueueDrainTestbed",
+    "declared_task_root": "C:\\Agent\\QueueDrainTestbed\\Tracking\\Task-10",
+    "declared_task_revision": "033ea76592ca003d012aa75757810a14ef455ba9f1ed23efd9fc1b8aab112705",
+    "declared_git_revision": "3015a7419a5620774972d69bb3dfbc9018ce054f",
+    "captured_at": "2026-05-30T04:48:01.2230137Z",
+    "files": [
+      {
+        "relative_path": "TASK.md",
+        "sha256": "fb88c5a66aa06b9aa685325fcfb6aa448e8f55a0bf39f7f3e712e89cec3ab466"
+      },
+      {
+        "relative_path": "PLAN.md",
+        "sha256": "b3afaf090375d71043265d665903f9d3cc9675fdc0c6860c837313fea8053dee"
+      },
+      {
+        "relative_path": "TASK-STATE.json",
+        "sha256": "6d0051b272d054cd5d714fc49ac02629f2b87eaf0c093d9dff7a6b41d658a33f"
+      }
+    ]
+  },
+  "doc_runtime_divergence_status": "in_sync",
+  "doc_runtime_divergence_summary": "Runtime task snapshot matches the declared task docs captured at dispatch.",
+  "deep_context": {
+    "session_id": "pass0002-dispatch-session",
+    "transcript_path": "C:\\Agent\\QueueDrainTestbed\\.proof\\pass0002-transcript.jsonl",
+    "preferred_launch_target": {
+      "kind": "transcript",
+      "label": "Session transcript",
+      "uri": "file:///C:/Agent/QueueDrainTestbed/.proof/pass0002-transcript.jsonl",
+      "command": [
+        "code",
+        "C:\\Agent\\QueueDrainTestbed\\.proof\\pass0002-transcript.jsonl"
+      ],
+      "preferred": true
+    },
+    "launch_targets": [
+      {
+        "kind": "transcript",
+        "label": "Session transcript",
+        "uri": "file:///C:/Agent/QueueDrainTestbed/.proof/pass0002-transcript.jsonl",
+        "command": [
+          "code",
+          "C:\\Agent\\QueueDrainTestbed\\.proof\\pass0002-transcript.jsonl"
+        ],
+        "preferred": true
+      },
+      {
+        "kind": "task_artifact",
+        "label": "Task",
+        "uri": "file:///C:/Agent/QueueDrainTestbed/Tracking/Task-10/TASK.md",
+        "command": [
+          "code",
+          "C:\\Agent\\QueueDrainTestbed\\Tracking\\Task-10\\TASK.md"
+        ]
+      },
+      {
+        "kind": "task_artifact",
+        "label": "Task plan",
+        "uri": "file:///C:/Agent/QueueDrainTestbed/Tracking/Task-10/PLAN.md",
+        "command": [
+          "code",
+          "C:\\Agent\\QueueDrainTestbed\\Tracking\\Task-10\\PLAN.md"
+        ]
+      },
+      {
+        "kind": "owned_checkout",
+        "label": "Owned checkout",
+        "uri": "file:///C:/Users/gregs/AppData/Local/Temp/cdxow/Task-10-bb56a16f-3952328094/w",
+        "command": [
+          "code",
+          "C:\\Users\\gregs\\AppData\\Local\\Temp\\cdxow\\Task-10-bb56a16f-3952328094\\w"
+        ]
+      },
+      {
+        "kind": "run_artifact",
+        "label": "Run artifacts",
+        "uri": "file:///C:/Users/gregs/AppData/Local/Temp/cdx-pass0002-runs/taskruns/Task-10/taskrun--Task-10--active",
+        "command": [
+          "code",
+          "C:\\Users\\gregs\\AppData\\Local\\Temp\\cdx-pass0002-runs\\taskruns\\Task-10\\taskrun--Task-10--active"
+        ]
+      },
+      {
+        "kind": "api_resource",
+        "label": "Active run API resource",
+        "uri": "api://api/v1/task-runs/taskrun--Task-10--active"
+      }
+    ]
+  }
+}

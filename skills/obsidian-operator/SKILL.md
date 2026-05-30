@@ -94,6 +94,11 @@ Use the bundled Obsidian operator scripts as the normalized surfaces.
   - Report differences between local tasks and live GitHub issues.
   - Treat text title/body mismatches as `text_conflict`.
   - With `-DispatchActions`, show commands/steps only. Keep it dry-run unless the human explicitly approves actual execution.
+- `skills/obsidian-operator/scripts/Get-ActiveWorktreeSessions.ps1`
+  - Enumerate the active owned-lane worktrees the backend has dispatched, by calling its read-only `GET /api/v1/worktrees` endpoint (O6).
+  - Prints, per worktree, the worktree path, issue/Task, run/gate state, the agent session id, and the session transcript path the operator would open in VSCodium to kick a parked or slow agent along.
+  - `-BaseUrl` is configurable (default the local service-lane bind `http://127.0.0.1:4318`); point it at the isolated validation lane (`http://127.0.0.1:14318`) for throwaway-test-repo proofs. `-AsJson` emits the raw binding objects.
+  - Read-only: it surfaces the fields needed to construct a VSCodium link to the session, but it does not emit a `vscodium://` link itself.
 
 Preferred checks before a real write:
 
