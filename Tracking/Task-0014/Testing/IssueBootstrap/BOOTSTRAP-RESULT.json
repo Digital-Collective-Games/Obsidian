@@ -1,0 +1,24 @@
+{
+    "status":  "bootstrapped",
+    "provider_repo":  "Digital-Collective-Games/Obsidian",
+    "task_count":  1,
+    "start_task_number":  14,
+    "end_task_number":  14,
+    "output_dir":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0014\\Testing\\IssueBootstrap",
+    "results":  [
+                    {
+                        "task_id":  "Task-0014",
+                        "expected_issue_number":  14,
+                        "action":  "create",
+                        "provider_repo":  "Digital-Collective-Games/Obsidian",
+                        "issue_url":  "https://github.com/Digital-Collective-Games/Obsidian/issues/14",
+                        "title":  "Task-0014: Make the Obsidian overlay window tab-aware: move it up on every tab, and make the Jobs and Tasks tabs fill the usable height above the taskbar (configurable padding, taskbar never covered).",
+                        "labels":  [
+
+                                   ],
+                        "body_path":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0014\\Testing\\IssueBootstrap\\Task-0014-BODY.md",
+                        "view_path":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0014\\Testing\\IssueBootstrap\\Task-0014-VIEW.json",
+                        "metadata_path":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0014\\TASK-META.json"
+                    }
+                ]
+}
