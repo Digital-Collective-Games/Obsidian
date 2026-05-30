@@ -1,0 +1,25 @@
+REG-007 re-run (BUG-0001 fix) 2026-05-30T10:13:00.3662501-04:00
+t=10s DISPATCHED task=Task-0005 state=running session=bcd2a9b2-21f2-4f37-b118-26e2c3299de7 AGENT-RAN=False transcript=True
+t=20s DISPATCHED task=Task-0005 state=running session=bcd2a9b2-21f2-4f37-b118-26e2c3299de7 AGENT-RAN=False transcript=True
+t=30s DISPATCHED task=Task-0005 state=running session=bcd2a9b2-21f2-4f37-b118-26e2c3299de7 AGENT-RAN=True transcript=True
+=== END-TO-END OK ===
+{
+  "run_id": "taskrun--Task-0005--active",
+  "repo": "QueueDrainTestbed",
+  "task_id": "Task-0005",
+  "worktree_path": "C:\\Users\\gregs\\AppData\\Local\\Temp\\cdxow\\Task-0005-731cfb8c-1658051126\\w",
+  "agent_session_id": "bcd2a9b2-21f2-4f37-b118-26e2c3299de7",
+  "session_transcript_path": "C:\\Users\\gregs\\.claude\\projects\\c--Users-gregs-AppData-Local-Temp-cdxow-Task-0005-731cfb8c-1658051126-w\\bcd2a9b2-21f2-4f37-b118-26e2c3299de7.jsonl",
+  "run_gate_state": "running"
+}
+AGENT-RAN.txt: reg-007 agent launched ok
+transcript=C:\Users\gregs\.claude\projects\c--Users-gregs-AppData-Local-Temp-cdxow-Task-0005-731cfb8c-1658051126-w\bcd2a9b2-21f2-4f37-b118-26e2c3299de7.jsonl (46381 bytes); subagents=False
+=== log tail ===
+2026/05/30 10:12:30 DEBUG ExecuteActivity Namespace reg007b TaskQueue codex-orchestration WorkerID 51552@agentprime@ WorkflowType codex.queue.drain WorkflowID queue-drain--consumer RunID 019e7939-b055-794e-8014-23729c0399e3 Attempt 1 ActivityID 27 ActivityType queue.drain.poll
+2026/05/30 10:12:32 DEBUG NewTimer Namespace reg007b TaskQueue codex-orchestration WorkerID 51552@agentprime@ WorkflowType codex.queue.drain WorkflowID queue-drain--consumer RunID 019e7939-b055-794e-8014-23729c0399e3 Attempt 1 TimerID 33 Duration 30s
+2026/05/30 10:13:02 DEBUG ExecuteActivity Namespace reg007b TaskQueue codex-orchestration WorkerID 51552@agentprime@ WorkflowType codex.queue.drain WorkflowID queue-drain--consumer RunID 019e7939-b055-794e-8014-23729c0399e3 Attempt 1 ActivityID 38 ActivityType queue.drain.poll
+2026/05/30 10:13:05 DEBUG ExecuteActivity Namespace reg007b TaskQueue codex-orchestration WorkerID 51552@agentprime@ WorkflowType codex.task.run WorkflowID taskrun--Task-0005--active RunID 019e793b-3748-71a3-87a6-ddb96eee0aff Attempt 1 ActivityID 5 ActivityType taskrun.execution_preflight
+2026/05/30 10:13:05 DEBUG ExecuteActivity Namespace reg007b TaskQueue codex-orchestration WorkerID 51552@agentprime@ WorkflowType codex.task.run WorkflowID taskrun--Task-0005--active RunID 019e793b-3748-71a3-87a6-ddb96eee0aff Attempt 1 ActivityID 11 ActivityType taskrun.workload_step
+2026/05/30 10:13:05 INFO  queue-drain poll acted Namespace reg007b TaskQueue codex-orchestration WorkerID 51552@agentprime@ WorkflowType codex.queue.drain WorkflowID queue-drain--consumer RunID 019e7939-b055-794e-8014-23729c0399e3 Attempt 1 dispatched [Task-0005] parked [] reclaimed []
+2026/05/30 10:13:05 DEBUG NewTimer Namespace reg007b TaskQueue codex-orchestration WorkerID 51552@agentprime@ WorkflowType codex.queue.drain WorkflowID queue-drain--consumer RunID 019e7939-b055-794e-8014-23729c0399e3 Attempt 1 TimerID 44 Duration 30s
+2026/05/30 10:13:05 DEBUG ExecuteActivity Namespace reg007b TaskQueue codex-orchestration WorkerID 51552@agentprime@ WorkflowType codex.task.run WorkflowID taskrun--Task-0005--active RunID 019e793b-3748-71a3-87a6-ddb96eee0aff Attempt 1 ActivityID 17 ActivityType taskrun.execute_workload_step

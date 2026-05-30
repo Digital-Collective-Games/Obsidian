@@ -4,22 +4,20 @@
   "status": "in_progress",
   "phase": "implementation",
   "plan_approved": true,
-  "current_pass": "PASS-0005",
-  "last_completed_pass": "PASS-0004",
-  "current_gate": null,
-  "latest_audit_verdict": "ready_with_caveats",
+  "current_pass": null,
+  "last_completed_pass": "PASS-0006",
+  "current_gate": "closure",
+  "latest_audit_verdict": "ready",
   "validation": {
     "build": "passing",
     "unit_tests": "passing",
-    "regression": "not_run"
+    "regression": "passing"
   },
   "blockers": [
-    "PASS-0005 (O5): claude-only launcher + A5.1 + poke-wake done; launcher+watchdog now WIRED into the consumer dispatch (gated CODEX_ORCHESTRATION_QUEUE_LAUNCH_AGENT, OFF by default; unit-proven + QA'd). Remaining: the live REG-007 end-to-end (real-UI Queue=Ready flip -> consumer dispatches + launches the claude agent), which also serves as the integrated stall/supervision proof.",
-    "PASS-0006 (regression) now UNBLOCKED (Chrome debug tab GitHub-authenticated on :9222): real-GitHub-UI Queue=Ready flip on a QueueDrainTestbed issue -> backend pickup; add REG-007.",
-    "Task CLOSURE is a distinct, final human gate (never self-close)."
+    "Task CLOSURE is a distinct, final human gate (the agent never self-closes); awaiting explicit human closure approval. All sub-objectives O1-O6 + cross-cutting (REG-007) are implemented, independently QA'd, committed, and pushed.",
+    "O5 hardening follow-up (BUG-0001): kill the launched agent PID on owned-lane reclaim/shutdown (orphan lifecycle) + add launcher launch/error logging.",
+    "O5 A5.3 follow-up: a full real-agent stall -> detect -> resume-poke -> incident-email repro (watchdog logic + resume-poke + launch each proven; integrated real-agent stall not separately reproduced)."
   ],
-  "next_expected_artifacts": [
-    "Testing/PASS-0006-CHECKLIST.json"
-  ],
-  "updated_at": "2026-05-30T08:35:00-04:00"
+  "next_expected_artifacts": [],
+  "updated_at": "2026-05-30T10:40:00-04:00"
 }

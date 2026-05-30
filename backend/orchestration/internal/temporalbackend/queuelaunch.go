@@ -76,7 +76,15 @@ type liveLauncher struct {
 func (l liveLauncher) Launch(ctx context.Context, spec queue.LaunchSpec) (queue.LaunchResult, error) {
 	// wait=false: the queue agent runs unattended and is supervised externally by the
 	// watchdog; the launcher returns once the process has started.
-	return l.launcher.Start(ctx, spec, false)
+	//
+	// BUG-0001: the launched process MUST outlive the dispatch activity. The consumer
+	// dispatches inside the Temporal queue.drain.poll activity, so passing that ctx to
+	// exec.CommandContext would kill the agent the instant the poll activity returns
+	// (binding recorded, but the process dies before it appends a transcript). The
+	// agent's lifecycle is owned by the watchdog + worktree reclaim, not the activity,
+	// so launch under a detached context. (The activity ctx is intentionally ignored.)
+	_ = ctx
+	return l.launcher.Start(context.Background(), spec, false)
 }
 
 // goroutineSupervisor is the production watchdogSupervisor: it runs one goroutine per

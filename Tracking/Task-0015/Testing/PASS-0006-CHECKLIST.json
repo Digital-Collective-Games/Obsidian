@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "task_id": "Task-0015",
+  "pass_id": "PASS-0006",
+  "checklist_status": "closed",
+  "implemented": true,
+  "build": "passing",
+  "unit_tests": "passing",
+  "pass_audit_written": true,
+  "audit_verdict": "ready",
+  "audit_result_ref": "Testing/PASS-0006-AUDIT.md",
+  "handoff_updated": true,
+  "commit_created": true,
+  "pushed_upstream": true,
+  "notify_sent": true,
+  "blockers": [],
+  "next_required_actions": [
+    "Task CLOSURE is a distinct, final human gate (the agent never self-closes); awaiting explicit human closure approval.",
+    "O5 hardening follow-up (BUG-0001): kill the launched agent PID on owned-lane reclaim/shutdown (orphan lifecycle) + add launcher launch/error logging.",
+    "O5 A5.3 follow-up: a full real-agent stall -> detect -> resume-poke -> incident-email repro (watchdog logic + resume-poke + launch each proven; integrated real-agent stall not separately reproduced)."
+  ],
+  "updated_at": "2026-05-30T10:35:00.0000000-04:00"
+}

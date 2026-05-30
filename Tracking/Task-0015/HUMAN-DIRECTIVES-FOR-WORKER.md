@@ -322,3 +322,24 @@ coordinator, and agent-auditor preferences.
 - Priority: get the real claude dispatch working first (prove A5.1 — a real
   top-level claude spawns ≥1 of its own subagents, discoverable) before the
   PASS-0006 regression.
+
+## Verbatim Human Directive — consumer cadence + don't touch real cron jobs (2026-05-30)
+
+> i want the queue consumer to run all the time, and take no more than 1 min to
+> notice an issue has been flagged for the queue
+>
+> I don't want you running things to activate jobs that are scheduled to run at 4am
+> say though.
+>
+> i don't understand how temporal works; so take what i say with a grain of salt as
+> far as how to set it up
+
+### Worker-Safe Normalization (AUTHORITATIVE for O3 + all Temporal proofs)
+- The queue-drain consumer runs ALWAYS-ON (continuous) and must NOTICE a
+  `Queue=Ready` flip within **≤ 1 minute**. Set the default poll interval to **≤60s
+  (use ~30s)**. This supersedes the earlier "~2 min default".
+- NEVER trigger/activate the operator's REAL scheduled Temporal cron jobs (the
+  daily/4am automations) — they are critical to the operator's daily pipeline. Run
+  ALL queue-drain proofs in an ISOLATED Temporal namespace (e.g. `reg007`), NEVER the
+  `default` namespace where the real jobs live, and never run a worker that would
+  pick up the real job workflows. (Temporal setup details are the agent's call.)

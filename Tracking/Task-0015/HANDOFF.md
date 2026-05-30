@@ -107,10 +107,87 @@
    same transcript. Independent QA re-derived both. Remaining for FULL O5 closure:
    (a) wire the launcher + watchdog into the live consumer dispatch path; (b) a full
    integrated real-agent stall→detect→resume-poke→email repro. See PASS-0005 checklist.
-8. PENDING (NEEDS HUMAN): **PASS-0006** (regression) — the no-proxy real-GitHub-UI
-   A3.1 end-to-end via the Chrome debug tab flipping `Queue=Ready` on a
-   `QueueDrainTestbed` issue → backend pickup; add REG-007 to `REGRESSION.md`.
-   - Live-proof hygiene: use fresh task ids; override `CODEX_ORCHESTRATION_JOBS_ROOT`.
+8. PARTIAL / BLOCKED: **PASS-0006 (REG-007)** — the no-proxy real-GitHub-UI A3.1
+   end-to-end. The backend half is BUILT + VALIDATED and reproducible (see the
+   REG-007 status section below); the real-UI flip is BLOCKED on a workflow/config
+   question (the `Queue` org field has no editable control in the testbed issue UI).
+
+## REG-007 status (2026-05-30, supervised) — backend READY, real-UI flip BLOCKED
+
+Human decisions this session: dispatch CLAUDE only (done, committed); REG-007 =
+full chain (notice → dispatch → **launch the claude agent**); the human chose
+"I (agent) drive the Queue→Ready flip via CDP".
+
+Backend harness VALIDATED + reproducible (all isolated, no live lane / no real jobs):
+- Built `cp-reg007.exe` from `cmd/controlplane`; ran it launch-enabled
+  (`CODEX_ORCHESTRATION_QUEUE_LAUNCH_AGENT=true`,
+  `QUEUE_AGENT_ALLOWED_TOOLS=Read,Write,Edit`,
+  `CLAUDE_BIN=...vscode-oss...claude.exe`) bound `127.0.0.1:14318`.
+- Temporal isolation: the validation `default` namespace on `:17233` is
+  CONTAMINATED with orphan REAL job executions (a prior proof reconciled the real
+  `.codex` jobs in) — a worker there would execute real digests. Worked around by
+  creating + running in a FRESH `reg007` Temporal namespace (`temporal operator
+  namespace create -n reg007 --retention 24h --address 127.0.0.1:17233`). `/healthz`
+  ok, `job_count:0`. (Flag for the human: the validation `default` namespace should
+  be cleaned of orphan real-job runs.)
+- Consumer started: `POST /api/v1/queue/consumer/start` {repo:QueueDrainTestbed,
+  poll_interval_seconds:20} → `workflow_id queue-drain--consumer`, status started.
+  `GET /api/v1/worktrees` empty (no dispatch; #5 Queue unset) — correct pre-state.
+- Test issue: QueueDrainTestbed **#5** (type set to Task via REST JSON body) +
+  `Tracking/Task-0005/TASK.md` (trivial bounded "create AGENT-RAN.txt") committed to
+  the testbed; #1/#2 closed so #5 is the only active issue.
+
+BLOCKER (needs human): the org `Queue` field (`visibility: all`, options Never/Ready)
+is settable via the `issue-field-values` API but renders **no editable control in
+the testbed issue UI** (CDP nav shows only a ~1.9KB skeleton; the human confirmed
+"there is no Queue field for #5"). GitHub org issue-fields appear API/Project-
+surfaced here, not an issue-page sidebar control. So a real-UI flip on the testbed
+issue is not possible as assumed. OPEN QUESTION for the human: in the real workflow,
+how is `Queue=Ready` set — (a) an issue-sidebar field (then enable/repair it for the
+testbed repo), (b) a GitHub Project board field (then REG-007's "UI" = the Project,
+add #5 to it), or (c) the `obsidian-operator` skill (the operator's normalized
+write surface — if so the skill-driven flip is the legitimate operator action, not a
+"proxy")? This determines REG-007's real app surface.
+
+Background backend STOPPED at compaction (restartable with the env above); fresh
+task ids + `JOBS_ROOT` override + the `reg007` namespace are the live-proof hygiene.
+
+## REG-007 RESOLVED — PASS (2026-05-30, supervised)
+
+The Queue-field-UI blocker was resolved: the org `Queue` field renders in the issue
+sidebar once the issue has a TYPE **and an initial field VALUE** (the
+obsidian-operator Sync sets both; I had only set the type). The flip is driven at
+the real GitHub web UI via the Chrome debug session (CDP) — centralized in the new
+**`github-operator` skill** (`Set-IssueFieldViaUi.ps1` clicks the `Edit <Field>`
+control + the option; `Get-IssueQueueState.ps1` reads state). Policy codified in
+`TESTING.md` ("Issue-Provider Integration Testing"): the agent drives the provider
+UI end-to-end (human only authenticates); no pass/excuse to skip end-to-end.
+
+**REG-007 end-to-end PASS** (isolated `reg007b` namespace, throwaway
+`QueueDrainTestbed`, launch-enabled consumer @30s poll): agent-driven real-UI
+`Queue=Ready` flip → consumer `dispatched [Task-0005]` (≤30s) → worktree + O6
+binding → the launched top-level **claude** agent ran (transcript at the bound
+path, `AGENT-RAN.txt`). See [Testing/PASS-0006/REG-007-PROOF.md](./Testing/PASS-0006/REG-007-PROOF.md),
+[Testing/PASS-0006-AUDIT.md](./Testing/PASS-0006-AUDIT.md), [Testing/PASS-0006-CHECKLIST.json](./Testing/PASS-0006-CHECKLIST.json).
+
+**Defect found + fixed by the live regression — [BUG-0001](./BUG-0001.md):** the
+launcher used `exec.CommandContext(<dispatch-activity ctx>)`, so the agent was
+killed when the poll activity returned. Fixed: launch under a detached context.
+Consumer poll default set to 30s (always-on, ≤1-min notice). Independently QA'd.
+
+## Task status (2026-05-30)
+
+ALL sub-objectives O1–O6 + cross-cutting are implemented + proven, each
+independently QA'd, committed + pushed: O1 (PASS-0000), O2 (PASS-0001), O6
+(PASS-0002), O4 (PASS-0003), O3 (PASS-0004), O5 (PASS-0005: claude-only launcher,
+A5.1, real `claude --resume` poke-wake, launcher+watchdog wired into dispatch),
+cross-cutting REG-007 (PASS-0006, real-GitHub-UI end-to-end). BUG-0001 fixed.
+
+Remaining: (a) O5 hardening follow-ups (orphan-agent lifecycle: kill on
+reclaim/shutdown + launcher logging — BUG-0001 follow-up; and a full integrated
+real-agent stall→incident-email repro — components proven); (b) **task CLOSURE is a
+distinct, final human gate — the agent never self-closes; awaiting explicit human
+closure approval.**
 
 ## Where the unsupervised run stopped (2026-05-30)
 

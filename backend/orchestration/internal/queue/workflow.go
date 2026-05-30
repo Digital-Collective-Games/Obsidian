@@ -36,9 +36,11 @@ const (
 	DrainPollActivityName = "queue.drain.poll"
 )
 
-// DefaultPollInterval is the consumer's poll cadence. The human confirmed polling
-// (pull) at ~2 minutes at the plan gate; webhooks/tunnels are out of scope.
-const DefaultPollInterval = 2 * time.Minute
+// DefaultPollInterval is the consumer's poll cadence. The consumer runs always-on
+// and must NOTICE a Queue=Ready flip within <= 1 minute (human directive,
+// 2026-05-30), so the default poll is 30s; webhooks/tunnels remain out of scope.
+// Callers may override via QueueDrainConfig.PollInterval / the start endpoint.
+const DefaultPollInterval = 30 * time.Second
 
 // QueueDrainConfig is the start argument for the consumer workflow. PollInterval
 // and the provider repo are configurable (HUMAN-DIRECTIVES O3); a non-positive
