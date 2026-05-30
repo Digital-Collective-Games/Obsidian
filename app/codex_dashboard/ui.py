@@ -301,6 +301,70 @@ $bitmap.Dispose()
     )
 
 
+def query_primary_work_area() -> tuple[int, int, int, int]:
+    """Return the primary monitor's work area as (left, top, right, bottom).
+
+    The work area excludes the Windows taskbar (on whichever edge it is docked),
+    unlike Tk's ``winfo_screenwidth``/``winfo_screenheight``. Raises ``OSError`` if
+    the query fails so the caller can fall back to full-screen dimensions.
+    """
+    SPI_GETWORKAREA = 0x0030
+
+    class _RECT(ctypes.Structure):
+        _fields_ = [
+            ("left", ctypes.c_long),
+            ("top", ctypes.c_long),
+            ("right", ctypes.c_long),
+            ("bottom", ctypes.c_long),
+        ]
+
+    rect = _RECT()
+    if not ctypes.windll.user32.SystemParametersInfoW(
+        SPI_GETWORKAREA, 0, ctypes.byref(rect), 0
+    ):
+        raise OSError("SystemParametersInfo(SPI_GETWORKAREA) failed")
+    return (int(rect.left), int(rect.top), int(rect.right), int(rect.bottom))
+
+
+def compute_overlay_geometry(
+    screen_width: int,
+    screen_height: int,
+    work_area: tuple[int, int, int, int],
+    tab_id: str,
+    pad_fraction: float,
+) -> str:
+    """Pure, tab-aware overlay geometry. Returns a Tk ``"WxH+X+Y"`` string.
+
+    Task-0014: every tab is repositioned into the usable work area (taskbar
+    excluded) with its top one ``pad`` below the work-area top; the Jobs and Tasks
+    tabs additionally grow to fill the usable height minus ``pad`` at top and
+    bottom, so the taskbar is never covered. The Usage (default) tab keeps its
+    current size. Width stays the current 980 clamp (never widened) and is
+    right-aligned within the work area. ``pad = round(pad_fraction * screen_height)``.
+    Takes no Tk calls and reads no global state, so it is unit-testable with mocked
+    inputs.
+    """
+    wa_left, wa_top, wa_right, wa_bottom = work_area
+    pad = round(pad_fraction * screen_height)
+    usable_width = wa_right - wa_left
+    usable_height = wa_bottom - wa_top
+    margin_x = 40
+
+    width = min(980, max(860, usable_width - 80))
+    if tab_id in ("jobs", "tasks"):
+        # Tall layout: fill the usable height minus top/bottom pad. The 620 floor
+        # only triggers for a misconfigured (degenerate) pad_fraction; for any sane
+        # value the canonical usable_height - 2*pad applies and bottom == wa_bottom
+        # - pad, keeping a gap above the taskbar.
+        height = max(620, usable_height - 2 * pad)
+    else:
+        height = min(660, max(620, usable_height - 80))
+
+    x = max(wa_left, wa_right - width - margin_x)
+    y = wa_top + pad
+    return f"{width}x{height}+{x}+{y}"
+
+
 class DashboardApp:
     def __init__(
         self,
@@ -407,17 +471,24 @@ class DashboardApp:
             self.root.after(1200, self._run_smoke_capture)
 
     def _overlay_geometry(self) -> str:
-        desired_width = 980
-        desired_height = 660
-        margin_x = 40
-        margin_y = 40
         screen_width = self.root.winfo_screenwidth()
         screen_height = self.root.winfo_screenheight()
-        width = min(desired_width, max(860, screen_width - (margin_x * 2)))
-        height = min(desired_height, max(620, screen_height - (margin_y * 2)))
-        x = min(940, max(20, screen_width - width - margin_x))
-        y = min(100, max(20, screen_height - height - margin_y))
-        return f"{width}x{height}+{x}+{y}"
+        try:
+            work_area = query_primary_work_area()
+        except OSError:
+            work_area = (0, 0, screen_width, screen_height)
+        return compute_overlay_geometry(
+            screen_width,
+            screen_height,
+            work_area,
+            self.active_tab,
+            self.config.pad_fraction,
+        )
+
+    def _apply_overlay_geometry(self) -> None:
+        # Task-0014: cheap geometry-only re-apply (no data rebuild). Safe whether
+        # or not the overlay is currently visible.
+        self.overlay.geometry(self._overlay_geometry())
 
     def _configure_style(self) -> None:
         style = ttk.Style()
@@ -1084,6 +1155,10 @@ class DashboardApp:
             self._prime_jobs_snapshot()
         if tab_id == "tasks":
             self._prime_tasks_snapshot()
+        # Task-0014: re-apply the tab-aware geometry on every tab change. This is a
+        # cheap geometry-only call and must NOT rebuild, re-aggregate, or re-fetch
+        # tab data (Task-0013 cheap show/hide behavior is preserved).
+        self._apply_overlay_geometry()
         self._render_active_tab()
 
     def _render_active_tab(self) -> None:

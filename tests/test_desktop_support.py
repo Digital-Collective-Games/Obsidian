@@ -210,6 +210,7 @@ class DesktopSupportTests(unittest.TestCase):
             _prime_jobs_snapshot=mock.Mock(),
             _prime_tasks_snapshot=mock.Mock(),
             _render_active_tab=mock.Mock(),
+            _apply_overlay_geometry=mock.Mock(),
             refresh_jobs_data=mock.Mock(),
         )
 
@@ -226,6 +227,7 @@ class DesktopSupportTests(unittest.TestCase):
             _prime_jobs_snapshot=mock.Mock(),
             _prime_tasks_snapshot=mock.Mock(),
             _render_active_tab=mock.Mock(),
+            _apply_overlay_geometry=mock.Mock(),
         )
 
         DashboardApp.select_tab(app, "tasks")

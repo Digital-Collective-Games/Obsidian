@@ -27,6 +27,9 @@ class DashboardConfig:
     # Task-0013 Objective 2: second ingest source. Empty string means "no Claude
     # source" and ingest skips it cleanly.
     claude_root: str = ""
+    # Task-0014: vertical padding fraction (of full screen height) used to position
+    # the tab-aware overlay inside the work area. Configurable; default 5%.
+    pad_fraction: float = 0.05
 
     @classmethod
     def defaults(cls) -> "DashboardConfig":
@@ -83,6 +86,7 @@ def load_config(path: Path | None = None) -> DashboardConfig:
         startup_enabled=bool(payload.get("startup_enabled", defaults.startup_enabled)),
         hotkey=str(payload.get("hotkey", defaults.hotkey)),
         claude_root=str(payload.get("claude_root", defaults.claude_root)),
+        pad_fraction=float(payload.get("pad_fraction", defaults.pad_fraction)),
     )
 
 

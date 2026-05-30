@@ -261,6 +261,67 @@ Interpretation:
   `tests/test_task0013_obsidian.py`; that unit proof supports but does not
   replace this app-surface case
 
+### REG-006 Tab-Aware Overlay Resize And Reposition
+
+Goal:
+
+Confirm the real desktop overlay repositions toward the top of the monitor on
+every tab and grows to fill the usable height (the work area, taskbar excluded) on
+the `Jobs` and `Tasks` tabs, with a configurable top/bottom padding, while never
+covering the Windows taskbar, never widening past 980px, and never resizing the
+`Usage` tab.
+
+Steps:
+
+1. Launch the real app from repo root on an isolated lane.
+2. Point it at a task-owned fixture tree with real-shaped `token_count` events. Do
+   not use `C:\Users\gregs\.codex` unless the human explicitly authorizes that run.
+3. Use an isolated config and isolated SQLite database as documented in
+   [TESTING.md](./TESTING.md). Optionally set a non-default `pad_fraction` in the
+   task-owned config to verify configurability.
+4. Trigger the real overlay path on the default `Usage` tab.
+5. Observe the overlay opens near the top of the monitor (its top edge one `pad`
+   below the top of the usable work area) at the current `980x660` size.
+6. Click the `Tasks` tab, then the `Jobs` tab.
+7. Observe that on each of `Jobs` and `Tasks` the same window grows tall — filling
+   the usable height minus the top/bottom padding — at width 980, right-aligned, so
+   many more rows are visible at once.
+8. Observe a visible gap remains above the Windows taskbar on every tab.
+9. Click back to `Usage` and observe the window returns to `980x660` at the same
+   top position.
+10. Verify the tab switches are immediate and do not trigger a data refresh,
+    re-aggregation, or full re-render (the Task-0013 cheap show/hide behavior is
+    preserved).
+11. Capture an artifact from the running app surface (for example via
+    `write_overlay_capture`) showing the tall `Jobs`/`Tasks` layout and the gap
+    above the taskbar.
+12. Exit cleanly.
+
+Expected result:
+
+- on every tab the overlay top edge sits one `pad` below the usable work-area top
+- the `Jobs` and `Tasks` tabs fill the usable height minus top/bottom padding at
+  width 980, right-aligned
+- a positive `pad` gap always remains above the taskbar; the taskbar is never
+  covered on any tab
+- the `Usage` tab keeps its `980x660` size and is only repositioned
+- a different `pad_fraction` visibly changes how far the window sits from the
+  top/bottom edges after a restart
+- switching tabs does not rebuild or refetch tab data and does not spawn extra
+  windows
+
+Interpretation:
+
+- this is the canonical regression for the Task-0014 tab-aware overlay
+  resize/reposition interaction
+- unit coverage of the pure geometry math lives in
+  `tests/test_overlay_geometry.py`; that unit proof supports but does not replace
+  this app-surface case
+- source edits plus passing unit tests do not change the live overlay until a new
+  pinned release is published and the overlay restarted (see [TESTING.md](./TESTING.md)
+  and `scripts/Publish-DashboardRelease.ps1`); that publish + restart is a separate
+  human-gated step
+
 ## Supporting Smoke
 
 ### SMOKE-001 Ingest Core
