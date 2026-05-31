@@ -1,9 +1,11 @@
 # Queue-drain durable-state redesign (fixes BUG-0003 + the Temporal-bypass audit)
 
-Owner: Task-0015. Status: **Landing 1 COMPLETE** (Steps 1–5, build/vet/test green + live
-verified — [Testing/PASS-0010](../Testing/PASS-0010/REG-007-BUG-0003-FIX-PROOF.md)); Landing 2
-pending. This is the durable design contract for moving the queue-drain consumer off its
-filesystem-glob authority.
+Owner: Task-0015. Status: **Landing 1 COMPLETE** (build/vet/test green + live verified —
+[Testing/PASS-0010](../Testing/PASS-0010/REG-007-BUG-0003-FIX-PROOF.md)). **Landing 2 code
+COMPLETE** (Steps 1–8, build/vet/test green; live verification pending) — gate/binding now
+live in the per-run workflow, JSON demoted to a recovery breadcrumb, durable per-repo
+supervision, and safe startup reconciliation. This is the durable design contract for
+moving the queue-drain consumer off its filesystem-glob authority.
 Drivers: [BUG-0003](../BUG-0003.md) (cross-repo Task-ID collision reclaims a live
 agent) and the Temporal-bypass audit (run/working state kept outside Temporal).
 
@@ -107,6 +109,41 @@ binding the JSON used to hold, keyed by the same run id.
 The watchdog's live gate read (`gateStateForTaskFn`) is unchanged in wiring — it reads
 `ListActiveWorktrees`, which is now workflow-backed, so the watchdog suspends on a live
 park. Cost: a per-poll global query fan-out (the stated reconciliation/load residual).
+
+**Step 7 (committed).** `newQueueDrainActivities` now caches one watchdog supervisor per
+repo id ACROSS polls (the dispatch binding is still rebuilt each poll so a registry edit is
+picked up). Previously a fresh supervisor was built every poll, so a run's `Start` (the
+dispatching poll) and `Stop` (a later poll's `Reclaim`) hit different supervisors — leaking
+the watchdog goroutine and making `Stop` a no-op. On first build per repo (backend restart)
+`reconstructSupervision` re-establishes supervision for already-active lanes
+(`ListActiveWorktreesForRepo`), skipping lanes with no bound transcript.
+
+**Step 8 (committed) — `ReconcileOwnedLanes` is prune-only; autonomous worktree-reclaim is
+DELIBERATELY EXCLUDED.** The design's Step 8 wording was "git worktree prune + reclaim
+orphan lanes (worktree gone OR workflow terminal/absent)." During implementation the
+reclaim half was found to CONFLICT with the paramount human-only-closure / park-in-place
+contract (HUMAN-DIRECTIVES O4: the agent NEVER self-closes), so it was not built:
+
+- A queue-drain `TaskRunWorkflow` sets `StateRunning`/`StateBlocked` after its owned-lane
+  execution (both → `Status:"active"`, non-terminal) and loops in the select forever;
+  parking only updates `Binding.RunGateState`, never `Status`. So a **live, parked, or
+  blocked** lane has a non-terminal, queryable workflow — `GetActiveTaskRun` finds it.
+- The workflow becomes **absent** only via Temporal history expiry or external termination.
+  A lane **parked awaiting human closure** can legitimately outlive its workflow history →
+  `GetActiveTaskRun` → `ErrRunNotFound`. Reclaiming on that signal would **self-close a
+  lane the human never approved** — a direct contract violation. Neither `ErrRunNotFound`
+  nor a terminal status proves a *human* closed the work; only the GitHub-issue-closed
+  signal does, and that is already the consumer's authoritative reclaim path.
+
+`ReconcileOwnedLanes` therefore does **`git worktree prune` only** (safe hygiene: it touches
+only worktrees whose directory is already gone, with git's built-in grace period). It is
+wired once per repo at startup, before `reconstructSupervision`. The "worktree gone" half of
+the original wording IS covered (prune clears its stale git metadata); the "worktree still
+exists + workflow gone" half is intentionally NOT auto-reclaimed.
+
+> Open question for the human (raised, not silently decided): do you want ANY autonomous
+> worktree-reclaim in reconcile, and if so under what definitive signal? As-built, the
+> answer is "no — reclaim stays human-gated via the closed GitHub issue."
 
 > Honesty note: Landing 1 alone does NOT satisfy the full approved architecture — it
 > leaves gate/binding in the JSON file (repo-correct, but still a side-store). That gap is

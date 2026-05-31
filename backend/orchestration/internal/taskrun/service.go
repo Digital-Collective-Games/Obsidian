@@ -1647,6 +1647,31 @@ func (s *Service) cleanupOwnedLane(repoLane RepoLane) error {
 	return removeOwnedLaneWorktree(s.declaredWorktreeRoot, s.ownedLaneRoot, repoLane.OwnedRepoRoot)
 }
 
+// ReconcileOwnedLanes performs startup reconciliation of the irreducible on-disk facts
+// for THIS Service's repo: it runs `git worktree prune` to clear administrative metadata
+// for owned-lane worktrees whose checkout directory is already gone (a crashed or partial
+// removal), complementing countOwnedLaneWorktrees' prunable-exclusion so a stale entry can
+// never wedge slot accounting (the earlier "all per-repo slots are occupied" failure).
+//
+// It DELIBERATELY does NOT autonomously reclaim a worktree that still EXISTS on disk.
+// Under the human-only-closure / park-in-place contract (HUMAN-DIRECTIVES O4: the agent
+// NEVER self-closes), neither an absent/expired Temporal workflow NOR a terminal run
+// status is sufficient evidence that a HUMAN approved closure — a lane parked awaiting
+// closure can legitimately outlive its workflow history, and reclaiming it would be a
+// self-close. The authoritative reclaim stays the consumer's GitHub-issue-closed path,
+// the only signal that proves a human closed the work.
+func (s *Service) ReconcileOwnedLanes() error {
+	argv := []string{}
+	if runtime.GOOS == "windows" {
+		argv = append(argv, "-c", "core.longpaths=true")
+	}
+	argv = append(argv, "-C", s.declaredWorktreeRoot, "worktree", "prune")
+	if output, err := exec.Command("git", argv...).CombinedOutput(); err != nil {
+		return fmt.Errorf("prune owned-lane worktrees for %s: %w: %s", s.declaredWorktreeRoot, err, strings.TrimSpace(string(output)))
+	}
+	return nil
+}
+
 // removeOwnedLaneWorktree removes an owned-lane worktree idempotently and
 // self-heals a residual checkout (BUG-0002). It first runs git worktree remove
 // --force. On success it also best-effort removes any residual directory left by a
