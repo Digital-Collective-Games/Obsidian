@@ -1,0 +1,27 @@
+21:59:34 | wt=[1 Task-0001:running] ran=0 #1=OPEN #2=OPEN
+21:59:39 | wt=[1 Task-0001:running] ran=0 #1=OPEN #2=OPEN
+21:59:44 | wt=[1 Task-0001:running] ran=0 #1=OPEN #2=OPEN
+21:59:49 | wt=[1 Task-0001:running] ran=0 #1=OPEN #2=OPEN
+21:59:54 | wt=[1 Task-0001:running] ran=0 #1=OPEN #2=OPEN
+21:59:59 | wt=[1 Task-0001:running] ran=1 #1=OPEN #2=OPEN
+22:00:04 | wt=[1 Task-0001:running] ran=1 #1=OPEN #2=OPEN
+22:00:09 | wt=[1 Task-0001:running] ran=1 #1=CLOSED #2=OPEN
+22:00:13 | wt=[1 Task-0001:running] ran=1 #1=CLOSED #2=OPEN
+22:00:18 | wt=[1 Task-0001:running] ran=1 #1=CLOSED #2=OPEN
+22:00:23 | wt=[1 Task-0001:running] ran=1 #1=CLOSED #2=OPEN
+22:00:28 | wt=[1 Task-0001:running] ran=1 #1=CLOSED #2=OPEN
+22:00:33 | wt=[1 Task-0002:running] ran=0 #1=CLOSED #2=OPEN
+22:00:38 | wt=[1 Task-0002:running] ran=0 #1=CLOSED #2=OPEN
+22:00:43 | wt=[1 Task-0002:running] ran=0 #1=CLOSED #2=OPEN
+22:00:48 | wt=[1 Task-0002:running] ran=0 #1=CLOSED #2=OPEN
+22:00:53 | wt=[1 Task-0002:running] ran=0 #1=CLOSED #2=OPEN
+22:00:58 | wt=[1 Task-0002:running] ran=0 #1=CLOSED #2=OPEN
+22:01:03 | wt=[1 Task-0002:running] ran=0 #1=CLOSED #2=OPEN
+22:01:08 | wt=[1 Task-0002:running] ran=1 #1=CLOSED #2=OPEN
+22:01:13 | wt=[1 Task-0002:running] ran=1 #1=CLOSED #2=CLOSED
+22:01:18 | wt=[1 Task-0002:running] ran=1 #1=CLOSED #2=CLOSED
+22:01:23 | wt=[1 Task-0002:running] ran=1 #1=CLOSED #2=CLOSED
+22:01:28 | wt=[1 Task-0002:running] ran=1 #1=CLOSED #2=CLOSED
+22:01:33 | wt=[1 Task-0002:running] ran=1 #1=CLOSED #2=CLOSED
+22:01:38 | wt=[0 ] ran=0 #1=CLOSED #2=CLOSED
+BOTH CLOSED + 0 worktrees -> full cap=1 lifecycle complete on FIXED binary

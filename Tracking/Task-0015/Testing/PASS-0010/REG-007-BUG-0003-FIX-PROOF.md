@@ -54,17 +54,37 @@ Trigger present: `QueueDrainTestbed` issue **#1 CLOSED** (maps `Task-0001`) +
   reclaim. No `already owns an active run` wedge, no `is not a working tree`, no reclaim of
   Task-0001 by the other repo.
 
-### Honest caveat (does NOT affect the fix verdict)
+### First-run caveat (resolved by the regression re-run below)
 
-In this run the launched agent produced **zero assistant turns** in 6 minutes (transcript:
-prompt received, no response) — so it never created `AGENT-RAN.txt`/announced completion,
-and the auto-close→reclaim→reuse tail did not run here. Cause: **agent starvation under
-heavy concurrent load** (6 live `claude.exe` from this session's audit + design workflows),
-an environmental issue — NOT a consumer or fix defect (the consumer dispatched correctly,
-namespaced the id, and kept the agent alive). The full cap=1 **deallocate/reuse lifecycle**
-is independently proven in [PASS-0009](../PASS-0009/REG-007-CAP1-SERIALIZATION-PROOF.md)
-(isolated single-repo). The BUG-0003 fix proof here depends only on the dispatch identity +
-the absence of cross-repo reclaim, both of which are confirmed.
+In the FIRST verification run the launched agent produced **zero assistant turns** in 6
+minutes (transcript: prompt received, no response) — agent **starvation under heavy
+concurrent load** (6 live `claude.exe` from this session's audit + design workflows), an
+environmental issue, NOT a consumer/fix defect (the consumer dispatched correctly,
+namespaced the id, kept the agent alive). So that run proved Fix A + Fix B but not the
+completion tail. The regression re-run below (lower load) completed the full lifecycle.
+
+## Regression on the fixed binary (no-regression confirmation, full cap=1 lifecycle)
+
+Isolated single-repo (`reg007p`, dedicated runs-root, `QueueDrainTestbed2` only, auto-close
+ON) on the FIXED binary — the PASS-0009 scenario re-run post-fix. Evidence:
+[evidence/regression-fixed-binary-monitor.txt](./evidence/regression-fixed-binary-monitor.txt),
+[evidence/regression-fixed-binary-log.txt](./evidence/regression-fixed-binary-log.txt).
+
+```
+dispatched [Task-0001]                          cap=1 (one worktree; #2 deferred)
+agent ran (AGENT-RAN.txt) -> auto-close #1
+dispatched [Task-0002] ... reclaimed [Task-0001]   slot freed + REUSED
+agent ran -> auto-close #2
+reclaimed [Task-0002] -> 0 worktrees
+namespaced ids: taskrun--QueueDrainTestbed2--Task-0001--active, ...--Task-0002--active
+```
+
+Exactly one worktree throughout; the full dispatch→complete→auto-close→reclaim→reuse cycle
+ran clean under repo-namespaced workflow-ids. **The namespacing fix did not regress the
+happy path** (PASS-0009 behavior preserved). One harness note: the first re-run attempt was
+blocked by a STALE prunable worktree left registered in `QueueDrainTestbed2`'s git (a test
+hygiene miss — `git worktree prune` clears it); `countOwnedLaneWorktrees` counts prunable
+git entries, so reconciliation/pruning of stale entries is a Landing-2 robustness item.
 
 ## Net
 
