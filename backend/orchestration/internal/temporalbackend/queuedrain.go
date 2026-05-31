@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -126,6 +127,33 @@ func (d taskrunDispatcher) ClosureRequested(taskID string) (bool, error) {
 	return d.service.ClosureRequested(taskID)
 }
 
+// reconstructSupervision re-establishes watchdog supervision for a repo's already-active
+// owned lanes. It runs once per backend lifetime per repo (on the first poll that builds
+// the repo's cached supervisor), so a backend restart that loses the in-memory supervisor
+// does not silently leave an in-flight run unwatched. Each active lane with a bound
+// transcript is re-supervised; a lane without one (never launched/bound) has nothing to
+// watch and is skipped. Best-effort: an enumeration failure leaves the repo unsupervised
+// this cycle rather than aborting the dispatch build.
+func reconstructSupervision(sup watchdogSupervisor, service *taskrun.Service, providerRepo string) {
+	bindings, err := service.ListActiveWorktreesForRepo()
+	if err != nil {
+		return
+	}
+	for _, b := range bindings {
+		if b.SessionTranscriptPath == "" {
+			continue
+		}
+		sup.Start(supervisedRun{
+			RunID:          b.RunID,
+			TaskID:         b.TaskID,
+			Repo:           providerRepo,
+			WorktreePath:   b.WorktreePath,
+			TranscriptPath: b.SessionTranscriptPath,
+			gateStateFn:    gateStateForTaskFn(service, b.TaskID),
+		})
+	}
+}
+
 // newQueueDrainActivities builds the REGISTRY-DRIVEN consumer for the worker's poll
 // activity. The consumer reads the central registry (cfg.RegistryPath, the explicit
 // OBSIDIAN_REGISTRY_PATH) each poll and iterates ALL registered repos: for each
@@ -150,6 +178,13 @@ func newQueueDrainActivities(cfg config.Config, runtime taskrun.Runtime) (*queue
 	loadRegistry := func() (queue.RepoManifest, error) {
 		return queue.LoadRegistry(registryPath)
 	}
+	// supervisors caches one durable watchdog supervisor per repo id ACROSS polls. The
+	// dispatch binding (provider + Service) is rebuilt each poll so a registry edit is
+	// picked up, but the supervisor must persist: a run's Start (the dispatching poll) and
+	// Stop (a later poll's Reclaim) have to hit the SAME supervisor, or each poll's fresh
+	// supervisor leaks the prior poll's watchdog goroutine and Stop becomes a no-op.
+	supervisors := map[string]*goroutineSupervisor{}
+	var supervisorsMu sync.Mutex
 	dispatchFor := func(repo queue.RegistryRepo) (queue.RepoDispatch, error) {
 		provider, err := queue.NewGitHubQueueProvider(repo.ProviderRepo, 0)
 		if err != nil {
@@ -171,11 +206,23 @@ func newQueueDrainActivities(cfg config.Config, runtime taskrun.Runtime) (*queue
 				PermissionMode: cfg.QueueAgentPermissionMode,
 			}
 			dispatcher.launcher = liveLauncher{launcher: queue.NewLauncher(nil)}
-			// The watchdog's incident sink defaults to a capture sink, so a confirmed
-			// stall is recorded but NO real email is ever sent from this default wiring.
-			watchdog := queue.NewWatchdog(queue.WatchdogConfig{}, time.Now, queue.OSStatTranscript, nil, nil, &queue.CaptureSink{})
-			watchdog.SetTailReader(queue.OSTailTranscript)
-			dispatcher.supervisor = newGoroutineSupervisor(watchdog, 0)
+			// Get-or-create the repo's durable supervisor. On FIRST build (e.g. after a
+			// backend restart, when the in-memory map is empty but worktrees + their runs
+			// are still live) reconstruct supervision for already-active lanes so an
+			// in-flight run is not left unwatched.
+			supervisorsMu.Lock()
+			sup, ok := supervisors[repo.ID]
+			if !ok {
+				// The watchdog's incident sink defaults to a capture sink, so a confirmed
+				// stall is recorded but NO real email is ever sent from this default wiring.
+				watchdog := queue.NewWatchdog(queue.WatchdogConfig{}, time.Now, queue.OSStatTranscript, nil, nil, &queue.CaptureSink{})
+				watchdog.SetTailReader(queue.OSTailTranscript)
+				sup = newGoroutineSupervisor(watchdog, 0)
+				supervisors[repo.ID] = sup
+				reconstructSupervision(sup, service, repo.ProviderRepo)
+			}
+			supervisorsMu.Unlock()
+			dispatcher.supervisor = sup
 		}
 		return queue.RepoDispatch{Provider: provider, Dispatcher: dispatcher, Sizer: service}, nil
 	}

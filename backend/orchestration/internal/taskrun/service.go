@@ -229,6 +229,26 @@ func (s *Service) ListActiveWorktrees() ([]WorktreeBinding, error) {
 	if err != nil {
 		return nil, err
 	}
+	return s.bindingsFromRecords(byWorktree), nil
+}
+
+// ListActiveWorktreesForRepo is the REPO-SCOPED counterpart of ListActiveWorktrees: it
+// returns only THIS Service's repo's active owned-lane bindings (collectActiveLaneRecords
+// repoScoped=true), each read LIVE from its per-run workflow with breadcrumb fallback. The
+// queue-drain consumer uses it to RECONSTRUCT watchdog supervision on a backend restart,
+// so an in-flight run is not left unwatched after the in-memory supervisor is lost.
+func (s *Service) ListActiveWorktreesForRepo() ([]WorktreeBinding, error) {
+	byWorktree, err := s.collectActiveLaneRecords(true)
+	if err != nil {
+		return nil, err
+	}
+	return s.bindingsFromRecords(byWorktree), nil
+}
+
+// bindingsFromRecords projects a worktree-keyed record set into the sorted WorktreeBinding
+// slice both ListActiveWorktrees views return, reading each one's LIVE binding from its
+// per-run workflow (liveBindingForRecord).
+func (s *Service) bindingsFromRecords(byWorktree map[string]ownedLaneBootstrapRecord) []WorktreeBinding {
 	bindings := make([]WorktreeBinding, 0, len(byWorktree))
 	for _, record := range byWorktree {
 		bindings = append(bindings, WorktreeBinding{RunID: record.RunID, RepoBinding: s.liveBindingForRecord(record)})
@@ -239,7 +259,7 @@ func (s *Service) ListActiveWorktrees() ([]WorktreeBinding, error) {
 		}
 		return bindings[i].WorktreePath < bindings[j].WorktreePath
 	})
-	return bindings, nil
+	return bindings
 }
 
 // collectActiveLaneRecords scans the runs-root for the most-recent owned-lane bootstrap
