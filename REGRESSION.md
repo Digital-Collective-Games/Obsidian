@@ -446,9 +446,14 @@ Proof of all three (live, registry-driven, `queue_workers=2`):
   [Tracking/Task-0015/Testing/PASS-0009/REG-007-CAP1-SERIALIZATION-PROOF.md](./Tracking/Task-0015/Testing/PASS-0009/REG-007-CAP1-SERIALIZATION-PROOF.md).
   Note: a first attempt on a SHARED runs-root + multi-repo registry wedged (worktree torn
   down under a running agent → re-dispatch loop); it did not reproduce after isolating to a
-  dedicated runs-root + single-repo registry. Candidate follow-up: per-repo services
-  enumerate a GLOBAL runs-root (`ListActiveWorktrees` is not repo-scoped), so a shared
-  runs-root / second backend can interfere with lane accounting.
+  dedicated runs-root + single-repo registry. That candidate follow-up — a GLOBAL,
+  non-repo-scoped runs-root scan letting one repo clobber another's lane — WAS the
+  [BUG-0003](./Tracking/Task-0015/BUG-0003.md) root cause, fixed (repo-namespaced run ids +
+  repo-scoped accounting) and re-validated by REG-009 below.
+  **Re-run on the Landing-2 code (PASS):**
+  [Tracking/Task-0015/Testing/PASS-0012/REG-007-008-009-LANDING2-LIVE.md](./Tracking/Task-0015/Testing/PASS-0012/REG-007-008-009-LANDING2-LIVE.md)
+  — UI Ready-flip → dispatch → launched agent ran; `wt<=1` throughout; autoclose → reclaim →
+  slot reuse → 0, all on a multi-repo registry with the BUG-0003 fix in place.
 
 ### REG-008 Queue-Drain Durable State In Temporal + Backend-Restart Survival
 
@@ -494,11 +499,16 @@ Disqualifiers:
 
 Status:
 
-DEFINED this session (Landing 2). The MECHANISM is proven by a gated real-Temporal unit smoke
-(signal round-trip) + a manual binary dispatch/CLI-signal/restart sequence
-([PASS-0011](./Tracking/Task-0015/Testing/PASS-0011/REG-007-LANDING2-LIVE-PROOF.md)). The
-in-app, consumer-driven + restart regression has **NOT been run on the Landing-2 code** — not
-yet PASSED as a regression.
+**PASSED on the Landing-2 code, live, in-app**
+([PASS-0012](./Tracking/Task-0015/Testing/PASS-0012/REG-007-008-009-LANDING2-LIVE.md)): the
+consumer parked on `Human Needed=Yes` (`parked [Task-0001]`), `/worktrees` reported
+`parked_awaiting_closure` from the workflow while the on-disk breadcrumb stayed `running`
+(demotion), a backend kill+restart reconstructed the parked lane from durable Temporal, and a
+close reclaimed it. Mechanism also proven earlier by the gated real-Temporal smoke + manual
+binary sequence ([PASS-0011](./Tracking/Task-0015/Testing/PASS-0011/REG-007-LANDING2-LIVE-PROOF.md)).
+FOLLOW-UP (observed once, non-fatal): the FIRST poll after a restart can exceed the 2-minute poll
+`StartToClose` timeout (self-corrects next tick); candidate cause is the first-build
+`reconstructSupervision` + per-record workflow query on a cold worker. Tracked as a latency item.
 
 ### REG-009 Cross-Repo Registry Isolation (No Shared-#N Reclaim) [BUG-0003]
 
@@ -533,11 +543,15 @@ Disqualifiers:
 
 Status:
 
-Proven live on the **Landing-1** code
+**PASSED on the Landing-2 code, live, in-app**
+([PASS-0012](./Tracking/Task-0015/Testing/PASS-0012/REG-007-008-009-LANDING2-LIVE.md)): with both
+repos holding an open `#1 -> Task-0001`, both dispatched under DISTINCT repo-namespaced run ids
+(`taskrun--QueueDrainTestbed--Task-0001--active` vs `taskrun--QueueDrainTestbed2--Task-0001--active`);
+closing `QueueDrainTestbed#1` reclaimed ONLY its lane (`reclaimed [Task-0001]`, worktree gone) while
+`QueueDrainTestbed2`'s live `Task-0001` lane SURVIVED (worktree intact, still listed). Also proven
+on the Landing-1 code earlier
 ([PASS-0010](./Tracking/Task-0015/Testing/PASS-0010/REG-007-BUG-0003-FIX-PROOF.md), the
-[BUG-0003](./Tracking/Task-0015/BUG-0003.md) fix). NOT re-run on the Landing-2 code, whose
-global `ListActiveWorktrees` workflow-query fan-out changed the read path — not yet PASSED on
-Landing 2.
+[BUG-0003](./Tracking/Task-0015/BUG-0003.md) fix).
 
 ## Supporting Smoke
 
