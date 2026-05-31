@@ -288,7 +288,10 @@ type TaskView struct {
 type Runtime interface {
 	StartTaskRun(ctx context.Context, request StartTaskRunRequest) (TaskRunView, error)
 	GetTaskRun(ctx context.Context, runID string) (TaskRunView, error)
-	GetActiveTaskRun(ctx context.Context, taskID string) (TaskRunView, error)
+	// GetActiveTaskRun returns the run for an already-constructed (repo-namespaced)
+	// active run id. The Service owns namespace construction (s.runID) so dispatch
+	// and lookup never diverge; the runtime is a dumb id-keyed query.
+	GetActiveTaskRun(ctx context.Context, runID string) (TaskRunView, error)
 	ReconcileTaskSnapshot(ctx context.Context, runID string, snapshot TaskDefinitionSnapshot) (TaskRunView, error)
 	UpdateTaskRun(ctx context.Context, runID string, update TaskRunUpdate) (TaskRunView, error)
 	RetryTaskRunWorkload(ctx context.Context, runID string, request WorkloadRetryRequest) (TaskRunView, error)

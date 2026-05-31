@@ -100,12 +100,13 @@ func (f *fakeRuntime) GetTaskRun(_ context.Context, runID string) (TaskRunView, 
 	return run, nil
 }
 
-func (f *fakeRuntime) GetActiveTaskRun(_ context.Context, taskID string) (TaskRunView, error) {
-	run, ok := f.activeByTask[taskID]
-	if !ok {
-		return TaskRunView{}, ErrRunNotFound
+func (f *fakeRuntime) GetActiveTaskRun(_ context.Context, runID string) (TaskRunView, error) {
+	for taskID, run := range f.activeByTask {
+		if ActiveRunID(taskID) == runID {
+			return run, nil
+		}
 	}
-	return run, nil
+	return TaskRunView{}, ErrRunNotFound
 }
 
 func (f *fakeRuntime) ReconcileTaskSnapshot(_ context.Context, runID string, snapshot TaskDefinitionSnapshot) (TaskRunView, error) {

@@ -1,0 +1,6 @@
+BUG-0003 fix verification (fixed binary, reg007m, 2-repo registry, shared default runs-root)
+Trigger: QueueDrainTestbed #1 CLOSED (maps Task-0001) + QueueDrainTestbed2 #1 OPEN/Ready (maps Task-0001).
+--- dispatch workflow-id (namespaced = Fix B) ---
+taskrun--QueueDrainTestbed2--Task-0001--active
+--- poll acted (no cross-repo reclaim of Task-0001 = Fix A; no wedge) ---
+2026/05/30 21:39:24 INFO  queue-drain poll acted Namespace reg007m TaskQueue codex-orchestration WorkerID 49768@agentprime@ WorkflowType codex.queue.drain WorkflowID queue-drain--consumer RunID 019e7baf-82b4-79be-9240-817d92822bba dispatched [Task-0001] parked [] reclaimed []

@@ -25,8 +25,16 @@ type Service struct {
 	trackingRoot         string
 	runArtifactsRoot     string
 	ownedLaneRoot        string
-	runtime              Runtime
-	now                  func() time.Time
+	// repoNamespace disambiguates the Temporal run identity (workflow id) and the
+	// runs-root artifact path across repos in the central registry. Two repos each
+	// have an issue #1 -> both map to Task-0001; without a per-repo namespace they
+	// collide on the workflow id + runs-root path (BUG-0003). Empty = legacy
+	// behavior (single-repo control plane / manual dispatch): runID is byte-identical
+	// to the historical ActiveRunID(taskID). Set to the registry repo id by
+	// NewServiceForRepo at the cutover.
+	repoNamespace string
+	runtime       Runtime
+	now           func() time.Time
 	// repoSlotLimit resolves the per-repo queue_workers cap (max concurrent owned
 	// lanes). It is a field so tests can pin the cap without an on-disk manifest;
 	// production wiring reads REPO-MANIFEST.json at the declared worktree root.
@@ -99,6 +107,16 @@ func NewServiceForRepo(localRoot string, runsRoot string, runtime Runtime, queue
 	s.repoSlotLimit = func() int { return queueWorkers }
 	s.countActiveOwnedLanes = s.countOwnedLaneWorktrees
 	return s
+}
+
+// SetRepoNamespace sets the per-repo discriminator that namespaces this Service's
+// Temporal run ids (and runs-root artifact paths) so the same issue number in two
+// registry repos does not collide (BUG-0003). It is the single production cutover
+// point (called by the registry-driven dispatch wiring with the registry repo id);
+// the empty default keeps the single-repo control plane byte-identical to the legacy
+// id. Set it before the Service dispatches.
+func (s *Service) SetRepoNamespace(repoNamespace string) {
+	s.repoNamespace = repoNamespace
 }
 
 func newService(declaredWorktreeRoot string, runsRoot string, runtime Runtime) *Service {
@@ -180,10 +198,39 @@ type WorktreeBinding struct {
 // park. A parked worktree is still active (its checkout is retained) and is listed
 // unchanged, which is what lets the operator reach a parked agent's session (A6.4).
 func (s *Service) ListActiveWorktrees() ([]WorktreeBinding, error) {
+	// GLOBAL view (repoScoped=false): GET /api/v1/worktrees reports active lanes
+	// across ALL repos. Per-repo slot/active accounting must NOT use this — it uses
+	// the repo-scoped path (ActiveOwnedLaneTasks) so one repo never sees another
+	// repo's lane (BUG-0003).
+	byWorktree, err := s.collectActiveLaneRecords(false)
+	if err != nil {
+		return nil, err
+	}
+	bindings := make([]WorktreeBinding, 0, len(byWorktree))
+	for _, record := range byWorktree {
+		binding := bindingFromRecord(record)
+		bindings = append(bindings, WorktreeBinding{RunID: record.RunID, RepoBinding: binding})
+	}
+	sort.Slice(bindings, func(i, j int) bool {
+		if bindings[i].TaskID != bindings[j].TaskID {
+			return bindings[i].TaskID < bindings[j].TaskID
+		}
+		return bindings[i].WorktreePath < bindings[j].WorktreePath
+	})
+	return bindings, nil
+}
+
+// collectActiveLaneRecords scans the runs-root for the most-recent owned-lane bootstrap
+// record per LIVE worktree (the worktree dir must still exist on disk), keyed by owned
+// repo root. When repoScoped is true it keeps ONLY records whose DeclaredWorktreeRoot
+// matches this Service's repo, so per-repo accounting never sees another repo's lane
+// (BUG-0003 fix A). A record with an empty DeclaredWorktreeRoot is kept either way
+// (legacy/backward-compatible: it does not assert a different repo).
+func (s *Service) collectActiveLaneRecords(repoScoped bool) (map[string]ownedLaneBootstrapRecord, error) {
 	taskEntries, err := os.ReadDir(s.runArtifactsRoot)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return []WorktreeBinding{}, nil
+			return map[string]ownedLaneBootstrapRecord{}, nil
 		}
 		return nil, fmt.Errorf("read task-run artifacts root: %w", err)
 	}
@@ -217,6 +264,10 @@ func (s *Service) ListActiveWorktrees() ([]WorktreeBinding, error) {
 			if record.OwnedRepoRoot == "" {
 				continue
 			}
+			if repoScoped && record.DeclaredWorktreeRoot != "" && !sameRepoRoot(record.DeclaredWorktreeRoot, s.declaredWorktreeRoot) {
+				// Another repo's lane: invisible to THIS repo's accounting.
+				continue
+			}
 			if _, err := os.Stat(record.OwnedRepoRoot); err != nil {
 				// Worktree directory is gone (reclaimed on terminal close) -> not active.
 				continue
@@ -227,19 +278,7 @@ func (s *Service) ListActiveWorktrees() ([]WorktreeBinding, error) {
 			}
 		}
 	}
-
-	bindings := make([]WorktreeBinding, 0, len(byWorktree))
-	for _, record := range byWorktree {
-		binding := bindingFromRecord(record)
-		bindings = append(bindings, WorktreeBinding{RunID: record.RunID, RepoBinding: binding})
-	}
-	sort.Slice(bindings, func(i, j int) bool {
-		if bindings[i].TaskID != bindings[j].TaskID {
-			return bindings[i].TaskID < bindings[j].TaskID
-		}
-		return bindings[i].WorktreePath < bindings[j].WorktreePath
-	})
-	return bindings, nil
+	return byWorktree, nil
 }
 
 // bindingFromRecord returns the binding persisted on the record, reconstructing a
@@ -356,6 +395,12 @@ func (s *Service) findActiveLaneRecord(taskID string) (string, ownedLaneBootstra
 		if record.OwnedRepoRoot == "" {
 			continue
 		}
+		if record.DeclaredWorktreeRoot != "" && !sameRepoRoot(record.DeclaredWorktreeRoot, s.declaredWorktreeRoot) {
+			// Another repo's lane sharing the Task-NNNN runs-root dir: never resolve
+			// it as THIS repo's active lane (BUG-0003 residual: Set/Bind/Reclaim/
+			// ClosureRequested must be repo-scoped too, not just slot accounting).
+			continue
+		}
 		if _, err := os.Stat(record.OwnedRepoRoot); err != nil {
 			// Worktree gone (reclaimed on close) -> not an active lane.
 			continue
@@ -463,18 +508,22 @@ func closureRequestedAtRoot(ownedRepoRoot string, taskID string) (bool, error) {
 // for slot accounting (EvaluateSlot / effective free concurrency) and to know which
 // issues already own a worktree to park or reclaim rather than redispatch.
 func (s *Service) ActiveOwnedLaneTasks() ([]string, error) {
-	bindings, err := s.ListActiveWorktrees()
+	// REPO-SCOPED (repoScoped=true): the consumer's slot/active accounting must only
+	// see THIS repo's lanes, never another registry repo's (BUG-0003: a global view
+	// let repo A's closed #1 reclaim repo B's live Task-0001).
+	byWorktree, err := s.collectActiveLaneRecords(true)
 	if err != nil {
 		return nil, err
 	}
 	seen := map[string]bool{}
-	tasks := make([]string, 0, len(bindings))
-	for _, binding := range bindings {
-		if binding.TaskID == "" || seen[binding.TaskID] {
+	tasks := make([]string, 0, len(byWorktree))
+	for _, record := range byWorktree {
+		taskID := bindingFromRecord(record).TaskID
+		if taskID == "" || seen[taskID] {
 			continue
 		}
-		seen[binding.TaskID] = true
-		tasks = append(tasks, binding.TaskID)
+		seen[taskID] = true
+		tasks = append(tasks, taskID)
 	}
 	sort.Strings(tasks)
 	return tasks, nil
@@ -560,7 +609,7 @@ func (s *Service) dispatchWithDirective(ctx context.Context, taskID string, dire
 	}
 
 	request := StartTaskRunRequest{
-		RunID:          ActiveRunID(task.TaskID),
+		RunID:          s.runID(task.TaskID),
 		TaskID:         task.TaskID,
 		Title:          task.Title,
 		MeaningSummary: task.MeaningSummary,
@@ -975,7 +1024,7 @@ func (s *Service) readTask(ctx context.Context, taskRoot string) (TaskView, erro
 		return view, nil
 	}
 
-	run, err := s.runtime.GetActiveTaskRun(ctx, metadata.state.TaskID)
+	run, err := s.runtime.GetActiveTaskRun(ctx, s.runID(metadata.state.TaskID))
 	if err != nil {
 		if errors.Is(err, ErrRunNotFound) {
 			return view, nil
@@ -1412,7 +1461,7 @@ func (s *Service) releasePreviousOwnedLane(ctx context.Context, taskID string) e
 	if s.runtime == nil {
 		return nil
 	}
-	previousRun, err := s.runtime.GetActiveTaskRun(ctx, taskID)
+	previousRun, err := s.runtime.GetActiveTaskRun(ctx, s.runID(taskID))
 	if err != nil {
 		if errors.Is(err, ErrRunNotFound) {
 			return nil
@@ -1944,8 +1993,31 @@ func summarizeBlockReasons(reasons []ActionBlockReason) string {
 	return strings.Join(summaries, "; ")
 }
 
+// ActiveRunID is the historical (repo-unaware) active run id for a task. It is the
+// empty-namespace case of ActiveRunIDForRepo and is retained as a shim so the
+// single-repo control plane and existing call sites/tests stay byte-identical.
 func ActiveRunID(taskID string) string {
-	return "taskrun--" + sanitizePathSegment(taskID) + "--active"
+	return ActiveRunIDForRepo("", taskID)
+}
+
+// ActiveRunIDForRepo builds the active Temporal run id (workflow id) for a task,
+// namespaced by repo so the same issue number in two different registry repos does
+// not collide on the workflow id (BUG-0003). An empty repoNamespace returns the
+// historical id verbatim ("taskrun--<taskID>--active"); a non-empty namespace yields
+// "taskrun--<repo>--<taskID>--active". The result is also the per-run runs-root
+// segment, so the same namespacing separates the on-disk artifact paths.
+func ActiveRunIDForRepo(repoNamespace string, taskID string) string {
+	if repoNamespace == "" {
+		return "taskrun--" + sanitizePathSegment(taskID) + "--active"
+	}
+	return "taskrun--" + sanitizePathSegment(repoNamespace) + "--" + sanitizePathSegment(taskID) + "--active"
+}
+
+// runID is the Service's single construction path for a task's active run id,
+// applying this Service's repoNamespace. Every Service-internal start/read of a run
+// goes through this so dispatch and lookup never diverge on the id.
+func (s *Service) runID(taskID string) string {
+	return ActiveRunIDForRepo(s.repoNamespace, taskID)
 }
 
 func taskRootForID(trackingRoot string, taskID string) string {
@@ -2203,6 +2275,27 @@ func shortTaskSegment(taskID string) string {
 
 func runOwnsLiveStory(run TaskRunView) bool {
 	return run.Status != "completed" && run.Status != "failed" && run.Status != "interrupted"
+}
+
+// sameRepoRoot reports whether two declared worktree roots name the same repo
+// checkout, normalized to absolute + Clean and case-insensitive on Windows. It
+// repo-scopes owned-lane accounting (BUG-0003) so one registry repo's consumer never
+// counts/resolves another repo's lane that happens to share a Task-NNNN id.
+func sameRepoRoot(a string, b string) bool {
+	na, err := filepath.Abs(a)
+	if err != nil {
+		return false
+	}
+	nb, err := filepath.Abs(b)
+	if err != nil {
+		return false
+	}
+	na = filepath.Clean(na)
+	nb = filepath.Clean(nb)
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(na, nb)
+	}
+	return na == nb
 }
 
 func pathWithinRoot(path string, root string) bool {

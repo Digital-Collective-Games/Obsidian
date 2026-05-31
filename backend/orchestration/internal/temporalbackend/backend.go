@@ -185,8 +185,8 @@ func (b *Backend) GetTaskRun(ctx context.Context, runID string) (taskrun.TaskRun
 	return view, nil
 }
 
-func (b *Backend) GetActiveTaskRun(ctx context.Context, taskID string) (taskrun.TaskRunView, error) {
-	return b.GetTaskRun(ctx, taskrun.ActiveRunID(taskID))
+func (b *Backend) GetActiveTaskRun(ctx context.Context, runID string) (taskrun.TaskRunView, error) {
+	return b.GetTaskRun(ctx, runID)
 }
 
 func (b *Backend) ReconcileTaskSnapshot(ctx context.Context, runID string, snapshot taskrun.TaskDefinitionSnapshot) (taskrun.TaskRunView, error) {

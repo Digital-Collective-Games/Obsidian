@@ -29,11 +29,22 @@ import (
 // legacy dispatch-only path runs unchanged. The launcher + supervisor are injected
 // seams, so unit tests use fakes (no real claude process, no real email).
 type taskrunDispatcher struct {
-	service    dispatchBinder
-	repo       string
-	launch     launchConfig
-	launcher   agentLauncher
-	supervisor watchdogSupervisor
+	service dispatchBinder
+	repo    string
+	// repoNamespace is the registry repo id; it namespaces the active run id the SAME
+	// way the per-repo Service does, so the watchdog Stop targets exactly the id the
+	// launch started under (BUG-0003: empty = legacy/global id, byte-identical).
+	repoNamespace string
+	launch        launchConfig
+	launcher      agentLauncher
+	supervisor    watchdogSupervisor
+}
+
+// runID builds the active run id under this dispatcher's repo namespace — the same
+// construction the per-repo Service uses for dispatch — so supervisor Start (via the
+// launched view.RunID) and Stop resolve to one id and no watchdog goroutine leaks.
+func (d taskrunDispatcher) runID(taskID string) string {
+	return taskrun.ActiveRunIDForRepo(d.repoNamespace, taskID)
 }
 
 func (d taskrunDispatcher) Dispatch(ctx context.Context, taskID string) error {
@@ -100,7 +111,7 @@ func (d taskrunDispatcher) Reclaim(_ context.Context, taskID string) error {
 	// On terminal close the run is no longer supervised: stop its watchdog so a
 	// reclaimed slot does not keep a goroutine polling a removed transcript.
 	if err == nil && d.supervisor != nil {
-		d.supervisor.Stop(taskrun.ActiveRunID(taskID))
+		d.supervisor.Stop(d.runID(taskID))
 	}
 	return err
 }
@@ -148,7 +159,11 @@ func newQueueDrainActivities(cfg config.Config, runtime taskrun.Runtime) (*queue
 		// is naturally per-repo, and the slot cap is the entry's queue_workers PASSED
 		// IN (no co-located <local_root>/REPO-MANIFEST.json lookup).
 		service := taskrun.NewServiceForRepo(repo.LocalRoot, cfg.RunsRoot, runtime, repo.QueueWorkers)
-		dispatcher := taskrunDispatcher{service: service, repo: repo.ProviderRepo}
+		// CUTOVER (BUG-0003): namespace this repo's run ids + artifact paths by the
+		// registry repo id so two repos' identical issue #N can never collide on the
+		// Temporal workflow id or the runs-root path.
+		service.SetRepoNamespace(repo.ID)
+		dispatcher := taskrunDispatcher{service: service, repo: repo.ProviderRepo, repoNamespace: repo.ID}
 		if cfg.LaunchQueueAgent {
 			dispatcher.launch = launchConfig{
 				Enabled:        true,
