@@ -292,6 +292,12 @@ type Runtime interface {
 	// active run id. The Service owns namespace construction (s.runID) so dispatch
 	// and lookup never diverge; the runtime is a dumb id-keyed query.
 	GetActiveTaskRun(ctx context.Context, runID string) (TaskRunView, error)
+	// SetRunGateState / BindLaunchedSession (Landing 2) move the run/gate label and the
+	// worktree<->session binding into the per-run workflow's durable state (signal +
+	// read-back), keyed by an already-namespaced runID. They never change run lifecycle
+	// or closure. ErrRunNotFound when the run is gone.
+	SetRunGateState(ctx context.Context, runID string, state string) (TaskRunView, error)
+	BindLaunchedSession(ctx context.Context, runID string, sessionID string, transcriptPath string, pid int) (TaskRunView, error)
 	ReconcileTaskSnapshot(ctx context.Context, runID string, snapshot TaskDefinitionSnapshot) (TaskRunView, error)
 	UpdateTaskRun(ctx context.Context, runID string, update TaskRunUpdate) (TaskRunView, error)
 	RetryTaskRunWorkload(ctx context.Context, runID string, request WorkloadRetryRequest) (TaskRunView, error)
@@ -323,6 +329,25 @@ type WorkloadRetryRequest struct {
 	CapturedTaskSnapshot TaskDefinitionSnapshot `json:"captured_task_snapshot"`
 	RepoLane             RepoLane               `json:"repo_lane"`
 	RetryRequestedAt     time.Time              `json:"retry_requested_at"`
+}
+
+// SetGateStateRequest is the payload of the taskrun.set_gate_state signal (Landing 2):
+// it moves the run/gate label (running/parked_*) into the per-run workflow's durable
+// state as the SOLE live writer, instead of the owned-lane-bootstrap.json side-store.
+// It carries ONLY the gate label and never changes StateEnvelope/Status (gate state is
+// orthogonal to run lifecycle, exactly as the legacy Service.SetRunGateState was).
+type SetGateStateRequest struct {
+	State string `json:"state"`
+}
+
+// BindSessionRequest is the payload of the taskrun.bind_session signal (Landing 2): it
+// records the launched agent's discovered session/transcript/PID onto the per-run
+// workflow's durable binding (the live authority), replacing the dispatch-time
+// placeholders. It never changes run lifecycle/closure.
+type BindSessionRequest struct {
+	AgentSessionID        string `json:"agent_session_id"`
+	SessionTranscriptPath string `json:"session_transcript_path"`
+	LaunchedPID           int    `json:"launched_pid"`
 }
 
 type TaskRunUpdate struct {

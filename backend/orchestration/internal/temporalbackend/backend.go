@@ -189,6 +189,46 @@ func (b *Backend) GetActiveTaskRun(ctx context.Context, runID string) (taskrun.T
 	return b.GetTaskRun(ctx, runID)
 }
 
+// SetRunGateState signals the per-run workflow to set its durable run/gate label
+// (Landing 2: the workflow is the sole live writer, not the JSON side-store) and waits
+// until the query reflects it. ErrRunNotFound when the run is gone (so the Service can
+// map it to ErrNoActiveOwnedLane, matching the legacy file path's tolerance).
+func (b *Backend) SetRunGateState(ctx context.Context, runID string, state string) (taskrun.TaskRunView, error) {
+	if err := b.client.SignalWorkflow(ctx, runID, "", taskexec.SetGateStateSignalName, taskrun.SetGateStateRequest{State: state}); err != nil {
+		if isTemporalNotFound(err) {
+			return taskrun.TaskRunView{}, taskrun.ErrRunNotFound
+		}
+		return taskrun.TaskRunView{}, fmt.Errorf("signal set-gate for task run %s: %w", runID, err)
+	}
+	return waitForTaskRunCondition(ctx, 10, 50*time.Millisecond, func() (taskrun.TaskRunView, error) {
+		return b.GetTaskRun(ctx, runID)
+	}, func(view taskrun.TaskRunView) bool {
+		return view.RepoLane.Binding != nil && view.RepoLane.Binding.RunGateState == state
+	})
+}
+
+// BindLaunchedSession signals the per-run workflow to record the launched agent's
+// discovered session/transcript/PID onto its durable binding (Landing 2) and waits until
+// the query reflects it. ErrRunNotFound when the run is gone.
+func (b *Backend) BindLaunchedSession(ctx context.Context, runID string, sessionID string, transcriptPath string, pid int) (taskrun.TaskRunView, error) {
+	if err := b.client.SignalWorkflow(ctx, runID, "", taskexec.BindSessionSignalName, taskrun.BindSessionRequest{
+		AgentSessionID:        sessionID,
+		SessionTranscriptPath: transcriptPath,
+		LaunchedPID:           pid,
+	}); err != nil {
+		if isTemporalNotFound(err) {
+			return taskrun.TaskRunView{}, taskrun.ErrRunNotFound
+		}
+		return taskrun.TaskRunView{}, fmt.Errorf("signal bind-session for task run %s: %w", runID, err)
+	}
+	return waitForTaskRunCondition(ctx, 10, 50*time.Millisecond, func() (taskrun.TaskRunView, error) {
+		return b.GetTaskRun(ctx, runID)
+	}, func(view taskrun.TaskRunView) bool {
+		bnd := view.RepoLane.Binding
+		return bnd != nil && bnd.AgentSessionID == sessionID && bnd.SessionTranscriptPath == transcriptPath && bnd.LaunchedPID == pid
+	})
+}
+
 func (b *Backend) ReconcileTaskSnapshot(ctx context.Context, runID string, snapshot taskrun.TaskDefinitionSnapshot) (taskrun.TaskRunView, error) {
 	if err := b.client.SignalWorkflow(ctx, runID, "", taskexec.ReconcileSnapshotSignalName, snapshot); err != nil {
 		if isTemporalNotFound(err) {

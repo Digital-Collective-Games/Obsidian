@@ -149,6 +149,44 @@ func (f *fakeTaskRuntime) GetActiveTaskRun(_ context.Context, runID string) (tas
 	return taskrun.TaskRunView{}, taskrun.ErrRunNotFound
 }
 
+func (f *fakeTaskRuntime) SetRunGateState(_ context.Context, runID string, state string) (taskrun.TaskRunView, error) {
+	for taskID, run := range f.activeByTask {
+		if taskrun.ActiveRunID(taskID) != runID {
+			continue
+		}
+		if run.RepoLane.Binding == nil {
+			run.RepoLane.Binding = &taskrun.RepoBinding{TaskID: run.TaskID, WorktreePath: run.RepoLane.OwnedRepoRoot, RunGateState: taskrun.RunGateStateRunning}
+		}
+		run.RepoLane.Binding.RunGateState = state
+		f.activeByTask[taskID] = run
+		if run.RunID != "" {
+			f.byRunID[run.RunID] = run
+		}
+		return run, nil
+	}
+	return taskrun.TaskRunView{}, taskrun.ErrRunNotFound
+}
+
+func (f *fakeTaskRuntime) BindLaunchedSession(_ context.Context, runID string, sessionID string, transcriptPath string, pid int) (taskrun.TaskRunView, error) {
+	for taskID, run := range f.activeByTask {
+		if taskrun.ActiveRunID(taskID) != runID {
+			continue
+		}
+		if run.RepoLane.Binding == nil {
+			run.RepoLane.Binding = &taskrun.RepoBinding{TaskID: run.TaskID, WorktreePath: run.RepoLane.OwnedRepoRoot, RunGateState: taskrun.RunGateStateRunning}
+		}
+		run.RepoLane.Binding.AgentSessionID = sessionID
+		run.RepoLane.Binding.SessionTranscriptPath = transcriptPath
+		run.RepoLane.Binding.LaunchedPID = pid
+		f.activeByTask[taskID] = run
+		if run.RunID != "" {
+			f.byRunID[run.RunID] = run
+		}
+		return run, nil
+	}
+	return taskrun.TaskRunView{}, taskrun.ErrRunNotFound
+}
+
 func (f *fakeTaskRuntime) ReconcileTaskSnapshot(_ context.Context, runID string, snapshot taskrun.TaskDefinitionSnapshot) (taskrun.TaskRunView, error) {
 	run, ok := f.byRunID[runID]
 	if !ok {

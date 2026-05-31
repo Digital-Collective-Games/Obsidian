@@ -25,9 +25,15 @@ const (
 	ReconcileSnapshotSignalName = "taskrun.reconcile_snapshot"
 	UpdateRunSignalName         = "taskrun.update_state"
 	RetryWorkloadSignalName     = "taskrun.retry_workload"
-	RunExecutionPreflightName   = "taskrun.execution_preflight"
-	RunWorkloadStepName         = "taskrun.workload_step"
-	RunExecuteWorkloadName      = "taskrun.execute_workload_step"
+	// SetGateStateSignalName / BindSessionSignalName (Landing 2): the per-run workflow
+	// is the durable, sole live writer of the run/gate label and the worktree<->session
+	// binding (moved off the owned-lane-bootstrap.json side-store). Both update only
+	// view.RepoLane.Binding and never touch StateEnvelope/Status or closure.
+	SetGateStateSignalName    = "taskrun.set_gate_state"
+	BindSessionSignalName     = "taskrun.bind_session"
+	RunExecutionPreflightName = "taskrun.execution_preflight"
+	RunWorkloadStepName       = "taskrun.workload_step"
+	RunExecuteWorkloadName    = "taskrun.execute_workload_step"
 )
 
 func Register(w worker.Worker) {
@@ -57,6 +63,8 @@ func TaskRunWorkflow(ctx workflow.Context, request taskrun.StartTaskRunRequest) 
 	reconcileCh := workflow.GetSignalChannel(ctx, ReconcileSnapshotSignalName)
 	updateCh := workflow.GetSignalChannel(ctx, UpdateRunSignalName)
 	retryWorkloadCh := workflow.GetSignalChannel(ctx, RetryWorkloadSignalName)
+	setGateCh := workflow.GetSignalChannel(ctx, SetGateStateSignalName)
+	bindSessionCh := workflow.GetSignalChannel(ctx, BindSessionSignalName)
 	for {
 		var retryRequest taskrun.WorkloadRetryRequest
 		retryRequested := false
@@ -89,6 +97,23 @@ func TaskRunWorkflow(ctx workflow.Context, request taskrun.StartTaskRunRequest) 
 			c.Receive(ctx, &retryRequest)
 			retryRequested = true
 		})
+		// Landing 2: the per-run workflow is the durable, sole live writer of the
+		// run/gate label + the worktree<->session binding. These update ONLY
+		// view.RepoLane.Binding; they never touch StateEnvelope/Status or closure.
+		selector.AddReceive(setGateCh, func(c workflow.ReceiveChannel, more bool) {
+			var req taskrun.SetGateStateRequest
+			c.Receive(ctx, &req)
+			ensureBinding(&view)
+			view.RepoLane.Binding.RunGateState = req.State
+		})
+		selector.AddReceive(bindSessionCh, func(c workflow.ReceiveChannel, more bool) {
+			var req taskrun.BindSessionRequest
+			c.Receive(ctx, &req)
+			ensureBinding(&view)
+			view.RepoLane.Binding.AgentSessionID = req.AgentSessionID
+			view.RepoLane.Binding.SessionTranscriptPath = req.SessionTranscriptPath
+			view.RepoLane.Binding.LaunchedPID = req.LaunchedPID
+		})
 		selector.Select(ctx)
 		if retryRequested {
 			request.CapturedTaskSnapshot = retryRequest.CapturedTaskSnapshot
@@ -113,6 +138,19 @@ func TaskRunWorkflow(ctx workflow.Context, request taskrun.StartTaskRunRequest) 
 		}
 		if shouldExit(view) {
 			return view, nil
+		}
+	}
+}
+
+// ensureBinding guarantees view.RepoLane.Binding is non-nil before a Landing-2 signal
+// (set_gate_state / bind_session) mutates it, seeding the stable identity fields from the
+// view so a signal arriving before any binding was seeded still yields a coherent record.
+func ensureBinding(view *taskrun.TaskRunView) {
+	if view.RepoLane.Binding == nil {
+		view.RepoLane.Binding = &taskrun.RepoBinding{
+			TaskID:       view.TaskID,
+			WorktreePath: view.RepoLane.OwnedRepoRoot,
+			RunGateState: taskrun.RunGateStateRunning,
 		}
 	}
 }
