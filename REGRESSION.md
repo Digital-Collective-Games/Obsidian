@@ -450,6 +450,95 @@ Proof of all three (live, registry-driven, `queue_workers=2`):
   enumerate a GLOBAL runs-root (`ListActiveWorktrees` is not repo-scoped), so a shared
   runs-root / second backend can interfere with lane accounting.
 
+### REG-008 Queue-Drain Durable State In Temporal + Backend-Restart Survival
+
+Goal:
+
+Confirm the run/gate label (`running`/`parked_*`) and the worktree↔session binding
+(session id, transcript, launched PID) are the per-run `TaskRunWorkflow`'s DURABLE state —
+written by signal, read by query — and NOT the `owned-lane-bootstrap.json` side-store, which
+is demoted to a recovery breadcrumb (its gate ossifies at `running`; it retains only the
+launched PID for the reclaim path). After a backend crash/restart on the same Temporal
+namespace, active lanes' gate + binding + per-repo watchdog supervision reconstruct from
+durable Temporal state + the git worktree list — nothing is lost, no agent is orphaned.
+
+Surface:
+
+The queue-drain consumer + `GET /api/v1/worktrees` on the isolated `reg007` lane, driven
+from the GitHub web surface (as REG-007). The human-perceived behavior under test is "kill
+and restart the backend mid-run and nothing is lost."
+
+Steps (in-app, against the Landing-2 code):
+
+1. Via the REG-007 GitHub-web Ready-flip, dispatch a lane, then set the issue
+   `Human Needed=Yes` so the consumer PARKS it (`run_gate_state=parked_*`).
+2. Confirm `GET /api/v1/worktrees` reports the parked gate while the on-disk
+   `owned-lane-bootstrap.json` still reads `running` (demotion: the binary trusts the
+   workflow, not the JSON).
+3. Kill the backend (simulated crash); restart on the same namespace.
+4. Confirm `GET /api/v1/worktrees` still reports the parked lane (gate read from the durable
+   workflow) and the watchdog supervisor is re-established for any launched lane.
+5. Close the issue (human-approved path) and confirm reclaim still deallocates the worktree.
+
+Expected result:
+
+- gate/binding always reflect the workflow; the JSON breadcrumb is never authoritative
+- a backend restart loses no active-lane state and orphans no agent/worktree
+
+Disqualifiers:
+
+- reading gate/binding from the JSON side-store, or a restart that drops a lane / orphans an agent
+- CLI-signaling the workflow gate instead of driving the real consumer — that is a smoke
+  (see [PASS-0011](./Tracking/Task-0015/Testing/PASS-0011/REG-007-LANDING2-LIVE-PROOF.md)),
+  NOT this in-app regression
+
+Status:
+
+DEFINED this session (Landing 2). The MECHANISM is proven by a gated real-Temporal unit smoke
+(signal round-trip) + a manual binary dispatch/CLI-signal/restart sequence
+([PASS-0011](./Tracking/Task-0015/Testing/PASS-0011/REG-007-LANDING2-LIVE-PROOF.md)). The
+in-app, consumer-driven + restart regression has **NOT been run on the Landing-2 code** — not
+yet PASSED as a regression.
+
+### REG-009 Cross-Repo Registry Isolation (No Shared-#N Reclaim) [BUG-0003]
+
+Goal:
+
+With a multi-repo registry where two repos each have an issue `#N`, closing repo A's `#N`
+must NOT reclaim repo B's live `Task-N` (no agent kill, no worktree deletion). Run identity
+is repo-namespaced (`taskrun--<repoID>--Task-N--active`) and lane accounting is repo-scoped,
+so one repo never sees or acts on another repo's lane.
+
+Surface:
+
+The queue-drain consumer over a TWO-repo registry on the isolated `reg007` lane (two
+throwaway repos, each with an open `#1`).
+
+Steps:
+
+1. Register two throwaway repos, each with an open `#1` flipped `Queue=Ready`; dispatch both
+   (each gets its own namespaced lane + a live launched agent).
+2. Close repo A's `#1` (human-approved path) so its lane reclaims.
+3. Confirm repo B's `Task-0001` worktree + launched agent SURVIVE (PID stays alive, worktree
+   intact); only repo A's lane reclaimed.
+
+Expected result:
+
+- no cross-repo reclaim; repo B's live lane is untouched by repo A's close
+
+Disqualifiers:
+
+- a single-repo testbed (cannot exhibit the collision)
+- proxy/log-only evidence without a live launched agent to prove it was not killed
+
+Status:
+
+Proven live on the **Landing-1** code
+([PASS-0010](./Tracking/Task-0015/Testing/PASS-0010/REG-007-BUG-0003-FIX-PROOF.md), the
+[BUG-0003](./Tracking/Task-0015/BUG-0003.md) fix). NOT re-run on the Landing-2 code, whose
+global `ListActiveWorktrees` workflow-query fan-out changed the read path — not yet PASSED on
+Landing 2.
+
 ## Supporting Smoke
 
 ### SMOKE-001 Ingest Core
