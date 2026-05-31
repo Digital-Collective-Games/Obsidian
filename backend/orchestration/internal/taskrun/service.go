@@ -159,21 +159,43 @@ func (s *Service) countOwnedLaneWorktrees() (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("list owned-lane worktrees: %w", err)
 	}
+	return countOwnedLaneWorktreesFromPorcelain(out, s.ownedLaneRoot), nil
+}
+
+// countOwnedLaneWorktreesFromPorcelain counts live owned-lane slots from
+// `git worktree list --porcelain` output: one per record block (blank-line
+// separated, starting with `worktree <path>`) whose path is under ownedLaneRoot
+// AND which is NOT prunable. A prunable entry is a stale registration whose working
+// dir is gone (e.g. a worktree dir removed out-of-band); counting it wrongly pins a
+// slot and blocks dispatch (the Landing-1 regression). Pure for unit-testability.
+func countOwnedLaneWorktreesFromPorcelain(out []byte, ownedLaneRoot string) int {
 	count := 0
-	for _, line := range strings.Split(string(out), "\n") {
-		const prefix = "worktree "
-		if !strings.HasPrefix(line, prefix) {
-			continue
-		}
-		path := strings.TrimSpace(strings.TrimPrefix(line, prefix))
-		if path == "" {
-			continue
-		}
-		if pathWithinRoot(path, s.ownedLaneRoot) {
+	curPath := ""
+	curPrunable := false
+	flush := func() {
+		if curPath != "" && !curPrunable && pathWithinRoot(curPath, ownedLaneRoot) {
 			count++
 		}
+		curPath = ""
+		curPrunable = false
 	}
-	return count, nil
+	for _, raw := range strings.Split(string(out), "\n") {
+		line := strings.TrimRight(raw, "\r")
+		if strings.TrimSpace(line) == "" {
+			flush()
+			continue
+		}
+		if rest, ok := strings.CutPrefix(line, "worktree "); ok {
+			flush()
+			curPath = strings.TrimSpace(rest)
+			continue
+		}
+		if line == "prunable" || strings.HasPrefix(line, "prunable ") {
+			curPrunable = true
+		}
+	}
+	flush()
+	return count
 }
 
 // WorktreeBinding is one active owned worktree's O6 binding as returned by the

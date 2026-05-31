@@ -38,10 +38,44 @@ identity/slot-count bypass families. Verified by `go build/vet/test`, the BUG-00
 **Landing 2 — move gate/binding into Temporal (remaining bypass).** The gate-state +
 worktree↔session binding still live in the (now repo-scoped, namespaced) JSON file after
 Landing 1. Landing 2 relocates them into the per-run `TaskRunWorkflow`: the consumer
-**signals** bind/park/closure transitions into the workflow and **queries** them back
+**signals** bind/park transitions into the workflow and **queries** them back
 (the workflow already exposes `taskrun.current_state` + signal channels), and the JSON
 becomes a true recovery breadcrumb. This is the larger piece and is tracked separately so
 it is not silently conflated with "relabel the file in a comment."
+
+### Landing 2 — validated step sequence (design-hardened; tree green per step)
+
+Authority discipline (adversarial-checked): a fact backed by an **external resource** keeps
+that resource authoritative (the **worktree** → git `worktree list`/`prune`; the launched
+**process/transcript** → not git-managed, lives in the workflow); only **resource-free**
+facts (the gate label) move into Temporal as the sole live writer. Human-only closure is
+untouched — `ClosureRequested` stays a READ of the agent's own `current_gate` and no new
+signal closes an issue.
+
+1. **Prunable slot-count fix** (pure `countOwnedLaneWorktreesFromPorcelain`): exclude
+   `prunable` (stale) git worktrees from the slot count — directly unblocks the Landing-1
+   regression. Self-contained, ships independently.
+2. **Workflow signal surface** (additive): `TaskRunWorkflow` gains `taskrun.set_gate_state`
+   + `taskrun.bind_session` signals that update `view.RepoLane.Binding`; no caller cutover.
+3. **Backend signal+read-back methods** (`SetRunGateState`/`BindLaunchedSession` → `SignalWorkflow`
+   + `waitForTaskRunCondition`) + grow the `Runtime` interface + all fakes.
+4. **Cutover Set/Bind** to the workflow signals; stop the JSON gate side-store; **keep the
+   breadcrumb's launched-PID write** (R2 mitigation: the reclaim fallback needs the real PID
+   or it regresses BUG-0002's terminate-before-remove).
+5. **Thread ctx** through the `dispatchBinder` seam (leaf `queue` stays ctx-less); point the
+   supervisor's live gate read at a direct query (not a stale per-poll Service).
+6. **Cutover reads** (`ListActiveWorktrees`/`ReclaimOwnedLane`) to the workflow query with
+   breadcrumb fallback on `ErrRunNotFound`; keep BUG-0002 terminate-before-remove.
+7. **Durable supervision**: cache the per-repo supervisor across polls (fix the leak) +
+   reconstruct supervisors on first poll from the repo-scoped active set.
+8. **Reconciliation** `ReconcileOwnedLanes`: `git worktree prune` stale entries + reclaim
+   orphan lanes (worktree gone OR workflow terminal/absent).
+9. **Breadcrumb demotion** (doc-only) + full-suite + raw-diff churn check.
+
+Residuals (stated): the breadcrumb's gate field ossifies at `running` (only read when the
+workflow is already gone — harmless); the breadcrumb keeps a faithful launched-PID for the
+reclaim recovery path; reconciliation issues one query per active lane per poll (load, not
+correctness).
 
 > Honesty note: Landing 1 alone does NOT satisfy the full approved architecture — it
 > leaves gate/binding in the JSON file (repo-correct, but still a side-store). That gap is
