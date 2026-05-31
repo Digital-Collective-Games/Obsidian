@@ -77,6 +77,37 @@ workflow is already gone — harmless); the breadcrumb keeps a faithful launched
 reclaim recovery path; reconciliation issues one query per active lane per poll (load, not
 correctness).
 
+#### As-built (Steps 4–6, committed) — two honest deviations from the wording above
+
+Steps 4, 5, and 6 shipped as **one coherent change** to `internal/taskrun/service.go`
+(write + read authority both move to the workflow in the same commit, because once
+`SetRunGateState` stops writing the JSON gate, `ListActiveWorktrees` MUST read the live
+gate from the workflow or its assertions/operators would see an ossified `running`). The
+existing unit tests passed **unmodified** — the `fakeRuntime` already mirrors the same
+binding the JSON used to hold, keyed by the same run id.
+
+1. **No ctx threading; `context.Background()` instead.** The design's Step 5 said "thread
+   ctx through the dispatchBinder seam." As-built, the Service `SetRunGateState` /
+   `BindLaunchedSession` / `ListActiveWorktrees` signatures stay **ctx-less** and use
+   `context.Background()` for the Landing-2 Temporal signal/query calls. Rationale: this is
+   consistent with **BUG-0001**, where the launch deliberately detaches from the dispatch
+   activity ctx so the durable run outlives the activity; a park/bind/list signal should
+   likewise not be cancelled by a returning poll activity. It also avoids churning the
+   `dispatchBinder`, `fakeBinder`, `queue.Dispatcher`, and four `*_test.go` signatures for
+   no correctness gain (the read-backs are bounded by `waitForTaskRunCondition`'s attempt
+   cap, not a ctx deadline). The leaf `queue` package stays ctx-less, as intended.
+2. **`ReclaimOwnedLane` keeps reading the breadcrumb PID (not cut to a workflow query).**
+   The launched PID never changes during a run and is faithfully mirrored to the breadcrumb
+   by `BindLaunchedSession` (the R2 write). At reclaim time the workflow is frequently
+   already terminal (the issue was closed → the run completed), so the breadcrumb is the
+   robust PID source and a workflow-first query would usually fall back to it anyway. This
+   is the documented recovery copy, not a Temporal bypass: the worktree's existence stays
+   git-authoritative and BUG-0002's terminate-before-remove is preserved.
+
+The watchdog's live gate read (`gateStateForTaskFn`) is unchanged in wiring — it reads
+`ListActiveWorktrees`, which is now workflow-backed, so the watchdog suspends on a live
+park. Cost: a per-poll global query fan-out (the stated reconciliation/load residual).
+
 > Honesty note: Landing 1 alone does NOT satisfy the full approved architecture — it
 > leaves gate/binding in the JSON file (repo-correct, but still a side-store). That gap is
 > Landing 2 and is named, not papered over.

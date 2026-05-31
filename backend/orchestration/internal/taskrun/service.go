@@ -208,17 +208,18 @@ type WorktreeBinding struct {
 	RepoBinding
 }
 
-// ListActiveWorktrees enumerates the active owned-lane worktrees from the durable
-// owned-lane-bootstrap.json records and returns each one's O6 binding. A worktree
-// is "active" when its checkout directory still exists on disk (cleanupOwnedLane
-// removes it on terminal close), so a closed/reclaimed lane drops out naturally.
-// Records are deduped by worktree path, keeping the most recently bootstrapped
-// record per path.
+// ListActiveWorktrees enumerates the active owned-lane worktrees and returns each
+// one's O6 binding. A worktree is "active" when its checkout directory still exists
+// on disk (cleanupOwnedLane removes it on terminal close), so a closed/reclaimed lane
+// drops out naturally. The set of live worktrees is enumerated from the durable
+// owned-lane-bootstrap.json breadcrumbs (deduped by worktree path, most-recent record
+// per path); each one's run/gate state + session binding is then read LIVE from the
+// per-run TaskRunWorkflow (Landing 2 authority), falling back to the breadcrumb's own
+// binding when the workflow is gone.
 //
-// A worktree reports whatever run/gate state its record carries: RunGateStateRunning
-// at dispatch, or a parked state once SetRunGateState (O4/PASS-0003) records the
-// park. A parked worktree is still active (its checkout is retained) and is listed
-// unchanged, which is what lets the operator reach a parked agent's session (A6.4).
+// A parked worktree is still active (its checkout is retained) and is listed unchanged
+// with its live parked state, which is what lets the operator reach a parked agent's
+// session (A6.4).
 func (s *Service) ListActiveWorktrees() ([]WorktreeBinding, error) {
 	// GLOBAL view (repoScoped=false): GET /api/v1/worktrees reports active lanes
 	// across ALL repos. Per-repo slot/active accounting must NOT use this — it uses
@@ -230,8 +231,7 @@ func (s *Service) ListActiveWorktrees() ([]WorktreeBinding, error) {
 	}
 	bindings := make([]WorktreeBinding, 0, len(byWorktree))
 	for _, record := range byWorktree {
-		binding := bindingFromRecord(record)
-		bindings = append(bindings, WorktreeBinding{RunID: record.RunID, RepoBinding: binding})
+		bindings = append(bindings, WorktreeBinding{RunID: record.RunID, RepoBinding: s.liveBindingForRecord(record)})
 	}
 	sort.Slice(bindings, func(i, j int) bool {
 		if bindings[i].TaskID != bindings[j].TaskID {
@@ -318,20 +318,47 @@ func bindingFromRecord(record ownedLaneBootstrapRecord) RepoBinding {
 	}
 }
 
+// worktreeBindingFromView projects a TaskRunView's live RepoLane binding (the Landing-2
+// workflow authority) into the WorktreeBinding shape Set/Bind return. A view with no
+// binding yields an empty RepoBinding (the workflow seeds one on the first signal).
+func worktreeBindingFromView(view TaskRunView) WorktreeBinding {
+	binding := RepoBinding{}
+	if view.RepoLane.Binding != nil {
+		binding = *view.RepoLane.Binding
+	}
+	return WorktreeBinding{RunID: view.RunID, RepoBinding: binding}
+}
+
+// liveBindingForRecord returns the LIVE run/gate + session binding for an owned-lane
+// record. Landing 2 makes the per-run TaskRunWorkflow the durable authority for the
+// binding, so this queries it by the record's run id. The breadcrumb is a recovery
+// fallback: when the workflow is gone (ErrRunNotFound), unreachable, or carries no
+// binding yet, the record's own persisted binding is returned (its gate ossifies at the
+// last value; its launched PID is kept faithful by BindLaunchedSession for reclaim).
+func (s *Service) liveBindingForRecord(record ownedLaneBootstrapRecord) RepoBinding {
+	if s.runtime == nil {
+		return bindingFromRecord(record)
+	}
+	view, err := s.runtime.GetActiveTaskRun(context.Background(), record.RunID)
+	if err != nil || view.RepoLane.Binding == nil {
+		return bindingFromRecord(record)
+	}
+	return *view.RepoLane.Binding
+}
+
 // ErrNoActiveOwnedLane is returned by SetRunGateState when the task has no active
 // owned-lane record (no worktree to record a park/running state on).
 var ErrNoActiveOwnedLane = errors.New("no active owned lane for task")
 
-// SetRunGateState records the run/gate state for a task's active owned lane and
-// persists it on the durable owned-lane-bootstrap.json record so the next
-// ListActiveWorktrees / GET /api/v1/worktrees read reflects it (O4/O6). It is the
-// clean transition API the O3 consumer (PASS-0004) calls when it observes a GitHub
-// issue parked Human Needed=Yes (one of the parked states) or back to running.
+// SetRunGateState records the run/gate state for a task's active owned lane by
+// SIGNALING the per-run TaskRunWorkflow, which is the durable, sole live writer of the
+// run/gate label (Landing 2: no JSON side-store). It is the clean transition API the O3
+// consumer (PASS-0004) calls when it observes a GitHub issue parked Human Needed=Yes
+// (one of the parked states) or back to running. A run that is gone (ErrRunNotFound)
+// maps to ErrNoActiveOwnedLane so the consumer tolerates it as an already-reclaimed no-op.
 //
 // SetRunGateState never deallocates: parking RETAINS the worktree and slot (D2).
-// Only the human-approved CLOSE path (cleanupOwnedLane) frees a slot. The active
-// lane is the most recently bootstrapped record for the task whose worktree still
-// exists on disk.
+// Only the human-approved CLOSE path (cleanupOwnedLane) frees a slot.
 func (s *Service) SetRunGateState(taskID string, state string) (WorktreeBinding, error) {
 	switch state {
 	case RunGateStateRunning,
@@ -342,44 +369,56 @@ func (s *Service) SetRunGateState(taskID string, state string) (WorktreeBinding,
 	default:
 		return WorktreeBinding{}, fmt.Errorf("unknown run/gate state %q", state)
 	}
-
-	activePath, activeRecord, err := s.findActiveLaneRecord(taskID)
+	if s.runtime == nil {
+		return WorktreeBinding{}, fmt.Errorf("set run/gate state for %s: task runtime not configured", taskID)
+	}
+	view, err := s.runtime.SetRunGateState(context.Background(), s.runID(taskID), state)
 	if err != nil {
-		return WorktreeBinding{}, err
+		if errors.Is(err, ErrRunNotFound) {
+			return WorktreeBinding{}, fmt.Errorf("%w: %s", ErrNoActiveOwnedLane, taskID)
+		}
+		return WorktreeBinding{}, fmt.Errorf("signal run/gate state for %s: %w", taskID, err)
 	}
-
-	binding := bindingFromRecord(activeRecord)
-	binding.RunGateState = state
-	activeRecord.Binding = &binding
-	if err := writeJSONFile(activePath, activeRecord); err != nil {
-		return WorktreeBinding{}, fmt.Errorf("persist run/gate state on owned-lane record: %w", err)
-	}
-	return WorktreeBinding{RunID: activeRecord.RunID, RepoBinding: binding}, nil
+	return worktreeBindingFromView(view), nil
 }
 
-// BindLaunchedSession records the POST-LAUNCH-discovered agent session id and
-// transcript path on the task's active owned-lane binding (O5/O6, coordinator-review
-// correction 2). At dispatch the binding's session fields are placeholders sourced
-// from the BACKEND process's env (bindingForLane); they cannot name the launched
-// agent's own session, which does not exist until after launch. After the launcher
-// discovers the agent's session (DiscoverSession), the consumer calls this to
-// replace those placeholders with the real values the O5 watchdog stats and the O6
-// endpoint reports. It never changes the run/gate state and never deallocates.
+// BindLaunchedSession records the POST-LAUNCH-discovered agent session id, transcript
+// path, and OS pid on the task's active owned-lane binding (O5/O6, coordinator-review
+// correction 2). At dispatch the binding's session fields are placeholders sourced from
+// the BACKEND process's env (bindingForLane); they cannot name the launched agent's own
+// session, which does not exist until after launch. After the launcher discovers the
+// agent's session, the consumer calls this to replace those placeholders.
+//
+// Landing 2: the per-run TaskRunWorkflow is the durable, sole live writer of the binding
+// (signaled here). The owned-lane breadcrumb is demoted to a recovery breadcrumb, but it
+// RETAINS a faithful launched PID (R2/BUG-0002): reclaim's recovery path terminates the
+// agent before removing the worktree, and must find the real PID even if the workflow is
+// already gone. It never changes the run/gate state and never deallocates.
 func (s *Service) BindLaunchedSession(taskID string, sessionID string, transcriptPath string, pid int) (WorktreeBinding, error) {
-	activePath, activeRecord, err := s.findActiveLaneRecord(taskID)
+	if s.runtime == nil {
+		return WorktreeBinding{}, fmt.Errorf("bind launched session for %s: task runtime not configured", taskID)
+	}
+	view, err := s.runtime.BindLaunchedSession(context.Background(), s.runID(taskID), sessionID, transcriptPath, pid)
 	if err != nil {
-		return WorktreeBinding{}, err
+		if errors.Is(err, ErrRunNotFound) {
+			return WorktreeBinding{}, fmt.Errorf("%w: %s", ErrNoActiveOwnedLane, taskID)
+		}
+		return WorktreeBinding{}, fmt.Errorf("signal launched-session binding for %s: %w", taskID, err)
 	}
-
-	binding := bindingFromRecord(activeRecord)
-	binding.AgentSessionID = sessionID
-	binding.SessionTranscriptPath = transcriptPath
-	binding.LaunchedPID = pid
-	activeRecord.Binding = &binding
-	if err := writeJSONFile(activePath, activeRecord); err != nil {
-		return WorktreeBinding{}, fmt.Errorf("persist launched-session binding on owned-lane record: %w", err)
+	// R2 (BUG-0002): keep a faithful launched PID on the recovery breadcrumb so reclaim
+	// can terminate-before-remove even when the workflow is gone. Only the PID is written
+	// (the live binding lives in the workflow); a task with no breadcrumb is tolerated.
+	if activePath, activeRecord, ferr := s.findActiveLaneRecord(taskID); ferr == nil {
+		binding := bindingFromRecord(activeRecord)
+		binding.LaunchedPID = pid
+		activeRecord.Binding = &binding
+		if werr := writeJSONFile(activePath, activeRecord); werr != nil {
+			return WorktreeBinding{}, fmt.Errorf("persist launched PID on owned-lane breadcrumb: %w", werr)
+		}
+	} else if !errors.Is(ferr, ErrNoActiveOwnedLane) {
+		return WorktreeBinding{}, ferr
 	}
-	return WorktreeBinding{RunID: activeRecord.RunID, RepoBinding: binding}, nil
+	return worktreeBindingFromView(view), nil
 }
 
 // findActiveLaneRecord returns the bootstrap record path and decoded record for a
