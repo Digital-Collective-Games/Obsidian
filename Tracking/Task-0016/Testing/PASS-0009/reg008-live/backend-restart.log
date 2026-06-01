@@ -1,0 +1,10 @@
+2026/06/01 14:28:10 INFO  No logger configured for temporal client. Created default one.
+2026/06/01 14:28:10 DEBUG Worker heartbeating configured, but server version does not support it.
+2026/06/01 14:28:10 INFO  Started Worker Namespace reg007live TaskQueue codex-orchestration-reg007live WorkerID 74052@agentprime@
+2026/06/01 14:28:10 codex orchestration control-plane listening on 127.0.0.1:24320
+2026/06/01 14:28:10 DEBUG ExecuteActivity Namespace reg007live TaskQueue codex-orchestration-reg007live WorkerID 74052@agentprime@ WorkflowType codex.queue.drain WorkflowID queue-drain--consumer RunID 019e846e-473a-7759-81f2-2e33330ce9e9 Attempt 1 ActivityID 71 ActivityType queue.drain.poll
+2026/06/01 14:28:15 INFO  queue-drain poll acted Namespace reg007live TaskQueue codex-orchestration-reg007live WorkerID 74052@agentprime@ WorkflowType codex.queue.drain WorkflowID queue-drain--consumer RunID 019e846e-473a-7759-81f2-2e33330ce9e9 Attempt 1 dispatched [] parked [Task-0005 Task-0001] reclaimed []
+2026/06/01 14:28:15 DEBUG NewTimer Namespace reg007live TaskQueue codex-orchestration-reg007live WorkerID 74052@agentprime@ WorkflowType codex.queue.drain WorkflowID queue-drain--consumer RunID 019e846e-473a-7759-81f2-2e33330ce9e9 Attempt 1 TimerID 77 Duration 30s
+2026/06/01 14:28:45 DEBUG ExecuteActivity Namespace reg007live TaskQueue codex-orchestration-reg007live WorkerID 74052@agentprime@ WorkflowType codex.queue.drain WorkflowID queue-drain--consumer RunID 019e846e-473a-7759-81f2-2e33330ce9e9 Attempt 1 ActivityID 82 ActivityType queue.drain.poll
+2026/06/01 14:28:50 INFO  queue-drain poll acted Namespace reg007live TaskQueue codex-orchestration-reg007live WorkerID 74052@agentprime@ WorkflowType codex.queue.drain WorkflowID queue-drain--consumer RunID 019e846e-473a-7759-81f2-2e33330ce9e9 Attempt 1 dispatched [] parked [Task-0005 Task-0001] reclaimed []
+2026/06/01 14:28:50 DEBUG NewTimer Namespace reg007live TaskQueue codex-orchestration-reg007live WorkerID 74052@agentprime@ WorkflowType codex.queue.drain WorkflowID queue-drain--consumer RunID 019e846e-473a-7759-81f2-2e33330ce9e9 Attempt 1 TimerID 88 Duration 30s

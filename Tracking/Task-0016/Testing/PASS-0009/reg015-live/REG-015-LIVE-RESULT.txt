@@ -1,0 +1,14 @@
+REG-015 LIVE (BUG-0001 fix) — in-app/dashboard Eject -> Queue=Never -> no re-dispatch
+lane: 127.0.0.1:24320, ns reg007live, throwaway Digital-Collective-Games/QueueDrainTestbed (RepoA)
+
+SEQUENCE:
+1. Real-UI flip QueueDrainTestbed#1 -> Ready (Committed=True, ObservedButtonText=QueueReady, ApiMatches=True)
+2. dashboard Assign Task-0001 -> repo-e6c0b4009360/wt-0001 => allocated, run taskrun--Task-0001--active
+3. dashboard POST /api/v1/worktrees/eject {run_id} => wt returned to IDLE, folder kept on disk
+4. BUG-0001 fix result: #1 Queue Ready->Never (registry-resolved RepoA->Digital-Collective-Games/QueueDrainTestbed); issue stayed OPEN
+5. consumer running with an idle RepoA worktree available: Task-0001 NOT re-dispatched (skipped, #1=Never);
+   a genuinely-Ready issue #5/Task-0005 WAS dispatched (dequeue is load-bearing).
+
+FINAL #1 state:
+  Queue=Never
+  State=OPEN

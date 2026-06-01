@@ -1,0 +1,11 @@
+REG-009 cross-repo isolation (BUG-0003 property) — LIVE on reg007live
+Two repos each with issue #1 -> DISTINCT repo-namespaced run ids:
+  taskrun--RepoA--Task-0001--active (RepoA = Digital-Collective-Games/QueueDrainTestbed)
+  taskrun--RepoB--Task-0001--active (RepoB = Digital-Collective-Games/QueueDrainTestbed2)
+Both dispatched + running concurrently; also RepoA Task-0005 parked.
+
+Closed RepoB#1 (human-approved gh close):
+  -> consumer reclaimed ONLY RepoB's Task-0001 (its checkout removed)
+  -> RepoA's parked Task-0005 lane SURVIVED (allocated/parked_awaiting_closure, workflow running, worktrees intact)
+  -> RepoA's identical-numbered #1 lane was NOT reclaimed by RepoB's close.
+Cross-repo isolation holds: repo A's close never touched repo B's identically-numbered lane.

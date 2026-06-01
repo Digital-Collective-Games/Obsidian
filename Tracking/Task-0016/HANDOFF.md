@@ -22,13 +22,61 @@ pass on the isolated validation lane. Full scope + acceptance live in
 
 ## Current resume point
 
-**Phase: implementation. Plan APPROVED (UPDATE 4). Backend passes PASS-0000…PASS-0006 DONE
-+ clean-context audit (PASS-0006-AUDIT.json `ready`). FRONTEND passes PASS-0007 + PASS-0008
-DONE. PASS-0007 INTERFACE-DESIGNER fidelity fix (B1/B2/empty-msg) DONE + the full in-app
-regression set RE-CAPTURED on the final post-fix surface (PASS-0009 UI-surface evidence /
-INTERFACE-DESIGNER B3). Python unit suite green @ 182. Committed/pushed on `master`.
-REG-003/REG-004 retired in repo-root `REGRESSION.md` (UPDATE 4). `TASK-STATE.json`
-current_pass=PASS-0009.**
+**Phase: implementation. Plan APPROVED (UPDATE 4). Backend PASS-0000…PASS-0006 DONE +
+audited `ready`. FRONTEND PASS-0007 + PASS-0008 DONE; fidelity fix + in-app re-captures
+DONE. LIVE PASS-0009 regression run executed this run (real GitHub web surface). Python
+suite green @ 182. `TASK-STATE.json` current_pass=PASS-0009. `validation.regression =
+blocked` (REG-007 closure leg blocked by a newly-found product defect — see below).**
+
+### LIVE PASS-0009 regression run — THIS run (real GitHub web surface, isolated lanes)
+
+Full record: [Testing/PASS-0009/REGRESSION-RUN-0001.md](./Testing/PASS-0009/REGRESSION-RUN-0001.md).
+Ran on an isolated control-plane (`:24320`/`:24321`, throwaway Temporal namespaces
+`reg007live`/`reg014cap` on the validation Temporal `:17233`, throwaway
+`QueueDrainTestbed`/`QueueDrainTestbed2`, isolated TEMP/runs roots). Production lanes
+(`:4318`, `:14318`, the real `default` namespace, the `Obsidian` repo) NEVER touched;
+confirmed at teardown. Real-UI `Queue` flips driven via the human-authenticated Chrome
+9222 session (`Set-IssueFieldViaUi.ps1`), each `Committed=True` / `QueueReady` /
+`ApiMatches=True`.
+
+- **REG-008 — PASS.** Park (real-UI `Human Needed=Yes`) → `/worktrees` reports
+  `parked_awaiting_closure` from the workflow while the on-disk breadcrumb stays `running`
+  (demotion); backend kill+restart on the same namespace reconstructs the parked lane via
+  discover-on-startup and RETAINS it. ([reg008-live/](./Testing/PASS-0009/reg008-live/))
+- **REG-009 — PASS.** Two repos each with `#1` → distinct repo-namespaced run ids
+  (`taskrun--RepoA--Task-0001` vs `taskrun--RepoB--Task-0001`); closing RepoB's `#1`
+  reclaimed ONLY RepoB's lane; RepoA's lanes survived untouched.
+  ([reg009-live/](./Testing/PASS-0009/reg009-live/))
+- **Live REG-015 (verifies [BUG-0001](./BUG-0001.md)) — PASS.** Dashboard Assign→Eject of a
+  `Queue=Ready` throwaway task wrote **`Queue=Never` to the CORRECT repo** (registry-resolved
+  RepoA→`Digital-Collective-Games/QueueDrainTestbed`), the issue stayed **OPEN**, the folder
+  was **kept**, and the freed task was **NOT re-dispatched** on the next poll (while a
+  genuinely-Ready `#5` WAS dispatched — the dequeue is load-bearing). BUG-0001 →
+  fixed-AND-live-verified. Honest scope: Eject driven via the production HTTP endpoint (the
+  code path the Tk Eject button calls), not a literal widget click; the widget-click Eject
+  was proven earlier on the local-no-op lane. ([reg015-live/](./Testing/PASS-0009/reg015-live/))
+- **REG-007 — PARTIAL (core PROVEN; closure leg BLOCKED).** PROVEN: real-UI Ready flip →
+  consumer dispatches exactly one into a pool worktree within `<=1 min` of an idle worktree
+  existing → launches a discoverable top-level **claude** agent; the SECOND Ready issue
+  WAITS (empty pool defers, no auto-create). BLOCKED: seeding the consumer's pool via the
+  **product Create** action and the **close/eject→reuse** leg — see the new BUG.
+  ([reg007-live/](./Testing/PASS-0009/reg007-live/))
+- **Clean reg014 re-capture — DONE.** Fresh-empty seed → Create `RepoX/wt-0001` → real-Tk
+  Assign of `Task-9001`; the displayed `Local dir …\wt-0001\wt-0001` now matches the
+  assigned worktree id (the QA-REPORT path-string artifact is resolved).
+  ([reg014-assign-bound-clean/overlay.png](./Testing/PASS-0009/reg014-assign-bound-clean/overlay.png))
+
+### NEW BLOCKER — [BUG-0002](./BUG-0002.md) (manual-pool repo-segment mismatch)
+
+The dashboard control-plane `taskService.CreatePoolWorktree` segments the pool by a hash
+of its single `WorktreeRoot`, while the registry-driven consumer segments by the registry
+repo id — so a worktree Created via the WORKTREES tab / `POST /api/v1/worktrees/create` is
+**invisible to the queue-drain consumer's pool-draw**. This breaks the REG-007 "pool of 1"
+documented flow ("seed the pool via Create first") and the close/eject→reuse leg.
+Structurally identical to BUG-0001 (multi-repo dashboard Service not repo-resolving a
+per-repo op). Proposed fix: registry-resolve the pool segment from the `repo` arg (mirror
+the BUG-0001 dequeue-provider pattern). **REG-007 is not fully green and the task is not
+closure-ready until BUG-0002 is fixed and REG-007 (Create-seed + reuse) is re-verified live.**
 
 ### PASS-0009 QA route-back re-capture (REG-014/015/016) — DONE this run
 
