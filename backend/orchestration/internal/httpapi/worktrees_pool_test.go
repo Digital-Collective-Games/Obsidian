@@ -254,8 +254,11 @@ func TestWorktreeEjectReturnsIdleAndDequeues(t *testing.T) {
 	if len(payload.Worktrees) != 1 || payload.Worktrees[0].Status != "idle" {
 		t.Fatalf("pool after eject = %#v, want one idle worktree", payload.Worktrees)
 	}
-	if len(fake.calls) != 1 || fake.calls[0].number != 8 {
-		t.Fatalf("eject dequeue calls = %#v, want one dequeue for issue #8 (Task-0008)", fake.calls)
+	// BUG-0001: the in-app Eject routes the Queue->Never write to the EJECTED worktree's
+	// own repo (record.Repo == "obsidian", set when the worktree was created), so the
+	// multi-repo dashboard writes to the CORRECT repo's provider (not a hardcoded/empty one).
+	if len(fake.calls) != 1 || fake.calls[0].number != 8 || fake.calls[0].repo != "obsidian" {
+		t.Fatalf("eject dequeue calls = %#v, want one dequeue for repo obsidian issue #8 (Task-0008)", fake.calls)
 	}
 }
 

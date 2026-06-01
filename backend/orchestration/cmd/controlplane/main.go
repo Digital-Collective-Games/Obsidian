@@ -32,6 +32,12 @@ func main() {
 
 	service := controlplane.NewService(cfg.JobsRoot, backend)
 	taskService := taskrun.NewService(cfg.WorktreeRoot, cfg.RunsRoot, backend)
+	// Wire the multi-repo task-provider dequeue write so in-app Eject/Dequeue actually
+	// writes Queue=Never to the CORRECT repo's task provider (Task-0016 BUG-0001). The
+	// dashboard Service spans all registered repos, so the provider resolves each ejected
+	// worktree's repo -> its task_provider slug via the registry and writes through the
+	// gh provider; a repo with no GitHub provider configured is a safe no-op.
+	taskService.SetDequeueProvider(temporalbackend.NewControlPlaneDequeueProvider(cfg.RegistryPath))
 
 	worker, err := backend.StartWorker(cfg, taskService)
 	if err != nil {

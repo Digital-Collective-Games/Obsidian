@@ -671,21 +671,18 @@ func (s *Service) EjectWorktree(ctx context.Context, runID string, worktreeID st
 	}
 
 	// Dequeue the freed task (Queue -> Never) so the still-Ready task is NOT re-dispatched.
-	// Safe no-op when the worktree had no provider-backed task. Never closes the issue.
+	// Safe no-op when the worktree had no provider-backed task. Never closes the issue. The
+	// dequeue is routed to the EJECTED worktree's own repo (record.Repo) so the multi-repo
+	// dashboard control plane writes Queue=Never to the CORRECT repo's task provider; the
+	// per-repo queue-drain Service's provider is already bound to one repo, so an
+	// owner/name slug or a registry id resolves to the same write.
 	if taskID != "" {
-		if err := s.DequeueTask(s.dequeueRepo(), taskID); err != nil {
+		if err := s.DequeueTask(record.Repo, taskID); err != nil {
 			return PoolWorktree{}, fmt.Errorf("dequeue ejected task %s: %w", taskID, err)
 		}
 	}
 
 	return s.classifyPoolMember(record), nil
-}
-
-// dequeueRepo names the task-provider repo the dequeue write targets. The provider is
-// already bound to its repo (NewGitHubQueueProvider), so an empty repo lets the provider
-// use its configured repo; the Service does not hold the provider repo string directly.
-func (s *Service) dequeueRepo() string {
-	return ""
 }
 
 // taskIDFromRunID extracts the Task-NNNN id embedded in an active run id of the form

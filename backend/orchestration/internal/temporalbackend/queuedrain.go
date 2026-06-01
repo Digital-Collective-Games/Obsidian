@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -244,6 +245,106 @@ func newQueueDrainActivities(cfg config.Config, runtime taskrun.Runtime) (*queue
 	// false keeps the consumer read-only against GitHub.
 	consumer.SetAutoCloseEnabled(cfg.AutoCloseQueued)
 	return queue.NewQueueDrainActivities(consumer), nil
+}
+
+// registryDequeueProvider is the multi-repo task-provider WRITE capability the dashboard
+// control-plane Service uses for in-app Eject / Dequeue (Task-0016 BUG-0001). The
+// dashboard Service spans EVERY registered repo, so a single fixed gh provider is wrong:
+// each repo's Queue field id is resolved against its OWNER's org, and an Eject must write
+// Queue=Never to the EJECTED worktree's repo, not one hardcoded repo. On each DequeueIssue
+// call it resolves the requested repo (a registry id like "obsidian", or an owner/name
+// task_provider slug) to that repo's task_provider.repo, lazily builds and caches a real
+// ghQueueProvider for that slug (built EXACTLY like the queue-drain read provider, via
+// queue.NewGitHubQueueProvider), and delegates the write. A repo with no GitHub provider
+// configured — an unknown repo, a non-github_issues entry, or a slug not in the registry —
+// is a SAFE no-op (returns nil): the dashboard never crashes when a worktree has no
+// provider-backed queue. It NEVER closes the issue (it only delegates DequeueIssue).
+type registryDequeueProvider struct {
+	registryPath string
+	// build constructs the gh provider for a resolved task_provider slug; injectable so a
+	// test asserts the repo+issue routing through a recording provider WITHOUT real GitHub.
+	// Production uses queue.NewGitHubQueueProvider (the same build as the queue-drain read
+	// provider).
+	build  func(slug string) (queue.QueueProvider, error)
+	mu     sync.Mutex
+	bySlug map[string]queue.QueueProvider
+}
+
+// newControlPlaneDequeueProvider builds the registry-backed dequeue provider injected into
+// the dashboard control-plane Service. An empty registry path yields a provider that
+// resolves nothing (every dequeue is a safe no-op).
+func newControlPlaneDequeueProvider(registryPath string) *registryDequeueProvider {
+	return &registryDequeueProvider{
+		registryPath: registryPath,
+		build:        func(slug string) (queue.QueueProvider, error) { return queue.NewGitHubQueueProvider(slug, 0) },
+		bySlug:       map[string]queue.QueueProvider{},
+	}
+}
+
+// DequeueIssue resolves repo -> its task_provider slug, builds/caches the gh provider for
+// that slug, and writes Queue=Never for issue #number on it. A repo that resolves to no
+// configured GitHub provider is a safe no-op.
+func (p *registryDequeueProvider) DequeueIssue(repo string, number int) error {
+	slug := p.resolveSlug(repo)
+	if slug == "" {
+		// No provider-backed repo for this worktree (unknown/no-provider repo): safe no-op.
+		return nil
+	}
+	provider, err := p.providerForSlug(slug)
+	if err != nil {
+		return err
+	}
+	return provider.DequeueIssue(slug, number)
+}
+
+// resolveSlug maps the requested repo to its task_provider.repo owner/name slug. It accepts
+// either a registry id (matched against repos[].id) or an already-resolved task_provider
+// slug (matched against repos[].task_provider.repo). It returns "" when the registry has no
+// GitHub provider for the repo (safe no-op), reading the registry fresh so a registry edit
+// is picked up.
+func (p *registryDequeueProvider) resolveSlug(repo string) string {
+	repo = strings.TrimSpace(repo)
+	if repo == "" || p.registryPath == "" {
+		return ""
+	}
+	manifest, err := queue.LoadRegistry(p.registryPath)
+	if err != nil {
+		return ""
+	}
+	for _, entry := range manifest.Repos {
+		if entry.TaskProvider == nil || entry.TaskProvider.Repo == "" {
+			continue
+		}
+		if entry.ID == repo || entry.TaskProvider.Repo == repo {
+			return entry.TaskProvider.Repo
+		}
+	}
+	return ""
+}
+
+// providerForSlug returns the cached gh provider for a task_provider slug, building one (the
+// same way the queue-drain read provider is built) on first use. The cache keeps each repo's
+// org field-id resolution warm and avoids rebuilding the provider per call.
+func (p *registryDequeueProvider) providerForSlug(slug string) (queue.QueueProvider, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if provider, ok := p.bySlug[slug]; ok {
+		return provider, nil
+	}
+	provider, err := p.build(slug)
+	if err != nil {
+		return nil, fmt.Errorf("build dequeue provider for %s: %w", slug, err)
+	}
+	p.bySlug[slug] = provider
+	return provider, nil
+}
+
+// NewControlPlaneDequeueProvider exposes the registry-backed dequeue provider so the
+// control-plane entrypoint can inject it into the dashboard task Service (the production
+// wiring of Task-0016 BUG-0001). It returns the taskrun.DequeueProvider seam the Service
+// calls; an empty registry path makes every dequeue a safe no-op.
+func NewControlPlaneDequeueProvider(registryPath string) taskrun.DequeueProvider {
+	return newControlPlaneDequeueProvider(registryPath)
 }
 
 // StartQueueDrainConsumer starts the singleton queue-drain consumer workflow

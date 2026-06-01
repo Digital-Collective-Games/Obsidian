@@ -54,10 +54,16 @@ session for the real-UI `Queue=Ready` flip. The agent never closes issue #16.
   [Testing/PASS-0008-CHECKLIST.json](./Testing/PASS-0008-CHECKLIST.json). In-app REG-013
   (Create), REG-014 (Assign popup + bind→allocated), REG-015 (Eject→idle, folder kept),
   REG-016 (Destroy idle removes / allocated rejected + standalone Dequeue) captured under
-  [Testing/PASS-0008/](./Testing/PASS-0008/). Caveat: on this single-Service control plane
-  the dequeue provider is unwired, so the in-app dequeue is a safe no-op — the
-  `Queue=Never` write + no-bounce-back are unit-proven in PASS-0004/0005 and re-exercised
-  live in PASS-0009.
+  [Testing/PASS-0008/](./Testing/PASS-0008/). Caveat (PASS-0008): on the single-Service
+  control plane the dequeue provider was unwired, so the in-app dequeue was a safe no-op.
+  **This is now FIXED — see [BUG-0001](./BUG-0001.md) (fixed-pending-live-verification):**
+  a registry-backed multi-repo `DequeueProvider`
+  ([`temporalbackend.NewControlPlaneDequeueProvider`](../../backend/orchestration/internal/temporalbackend/queuedrain.go))
+  is now injected into the control-plane `taskService` in
+  [`cmd/controlplane/main.go`](../../backend/orchestration/cmd/controlplane/main.go), and
+  Eject routes `Queue→Never` to the ejected worktree's own repo. Unit/integration-proven
+  (no real GitHub); `go build/test ./...` green; gofmt clean. The LIVE in-app dequeue
+  (`Queue=Never` + no-bounce-back) is REG-015 in PASS-0009.
 - **REG-003 / REG-004 retired** in [REGRESSION.md](../../REGRESSION.md): both marked
   SUPERSEDED by Task-0016 D1=replace (the `Tasks` surface is removed; the lifecycle lives
   on the GitHub Issues queue surface; the `WORKTREES` tab is covered by REG-010…016). Case
@@ -147,8 +153,10 @@ producer — it is coordinator-arranged.
   isolated validation / reg007 lanes. Needs a clean-context QA verdict (coordinator-
   arranged) and the human-authenticated Chrome debug session for the real-UI REG-007
   `Queue=Ready` flip. This is also where the live provider `Queue=Never` dequeue write is
-  exercised against the throwaway testbed (the in-app dequeue is a safe no-op on the
-  single-Service control plane; see [PASS-0008 NOTES](./Testing/PASS-0008/PASS-0008-NOTES.md)).
+  exercised against the throwaway testbed. The control-plane dequeue provider is now WIRED
+  (see [BUG-0001](./BUG-0001.md), fixed-pending-live-verification), so the in-app dequeue is
+  no longer a no-op; PASS-0009 REG-015 is the LIVE confirmation (in-app Eject of a
+  `Queue=Ready` testbed task → `Queue=Never` → no re-dispatch).
 
 The new [BE] endpoints the UI consumes (verified live in the PASS-0006 smoke and the
 PASS-0007/0008 in-app captures): `GET /api/v1/repos`, `GET /api/v1/worktrees` (full pool,
