@@ -2,18 +2,21 @@
   "schema_version": 1,
   "task_id": "Task-0016",
   "status": "in_progress",
-  "phase": "implementation",
+  "phase": "closure",
   "plan_approved": true,
-  "current_pass": "PASS-0009",
-  "last_completed_pass": "PASS-0008",
-  "current_gate": "implementation",
-  "latest_audit_verdict": "unknown",
+  "current_pass": null,
+  "last_completed_pass": "PASS-0009",
+  "current_gate": "closure",
+  "latest_audit_verdict": "ready",
   "validation": {
     "build": "passing",
     "unit_tests": "passing",
     "regression": "passing"
   },
-  "blockers": [],
+  "blockers": [
+    "Awaiting human closure approval on issue #16 (the agent never self-closes).",
+    "Separate human-gated step (optional, not task closure): publish a new pinned dashboard release to roll the WORKTREES tab to the live lane."
+  ],
   "live_regression_run": {
     "artifact": "Tracking/Task-0016/Testing/PASS-0009/REGRESSION-RUN-0002.md",
     "REG-007": "passing_live_after_BUG-0002_fix_create_seed_and_close_reclaim_reuse_proven",
@@ -28,5 +31,5 @@
     "BUG-0001 (fixed + live-verified by REG-015 in this PASS-0009 run)",
     "BUG-0002 (fixed + live-verified by REG-007 v2 in REGRESSION-RUN-0002; commit dddab0e)"
   ],
-  "updated_at": "2026-06-01T15:05:00-04:00"
+  "updated_at": "2026-06-01T15:30:00-04:00"
 }
