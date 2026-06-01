@@ -820,7 +820,18 @@ func (s *Service) EjectWorktree(ctx context.Context, runID string, worktreeID st
 	if err != nil {
 		return PoolWorktree{}, err
 	}
-	baselineCommit := gitRevision(s.declaredWorktreeRoot)
+	// Resolve the baseline against the member's OWN repo (BUG-0004): a pool worktree is a
+	// git worktree of its repo's local_root, so it must be reset to THAT repo's HEAD. On the
+	// multi-repo dashboard control plane this Service's declaredWorktreeRoot is an unrelated
+	// repo, whose HEAD commit is not in the member repo's object DB — `git reset --hard`
+	// then fails ("Could not parse object"). Mirror CreatePoolWorktree: prefer the registry-
+	// resolved local_root for the member's repo, falling back to declaredWorktreeRoot for the
+	// single-repo control plane / per-repo consumer (where they are the same repo).
+	baselineRoot := s.declaredWorktreeRoot
+	if root := s.registryRepoLocalRoot(record.Repo); root != "" {
+		baselineRoot = root
+	}
+	baselineCommit := gitRevision(baselineRoot)
 	repoLane := RepoLane{
 		OwnedRepoRoot:         record.WorktreePath,
 		BaselineCommit:        baselineCommit,
