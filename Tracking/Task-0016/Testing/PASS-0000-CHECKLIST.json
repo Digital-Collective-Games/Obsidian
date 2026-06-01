@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "task_id": "Task-0016",
+  "pass_id": "PASS-0000",
+  "checklist_status": "ready_for_audit",
+  "implemented": true,
+  "build": "passing",
+  "unit_tests": "passing",
+  "pass_audit_written": true,
+  "audit_verdict": "unknown",
+  "audit_result_ref": "Tracking/Task-0016/Testing/PASS-0000/PASS-0000-NOTES.md",
+  "handoff_updated": true,
+  "commit_created": false,
+  "pushed_upstream": false,
+  "notify_sent": false,
+  "blockers": [],
+  "next_required_actions": [
+    "Coordinator-arranged clean-context QA verdict on the backend batch after PASS-0006",
+    "PASS-0001 discover-on-startup"
+  ],
+  "updated_at": "2026-06-01T00:40:00-04:00"
+}

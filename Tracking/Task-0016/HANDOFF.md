@@ -22,6 +22,23 @@ pass on the isolated validation lane. Full scope + acceptance live in
 
 ## Current resume point
 
+**Phase: implementation (backend batch). Plan APPROVED (UPDATE 4). Backend passes
+PASS-0000…PASS-0006 are in progress in this single-context run; UI passes
+PASS-0007…PASS-0009 are deferred to a later coordinator-arranged run after a
+clean-context QA verdict on the backend.**
+
+Backend batch progress:
+
+- **PASS-0000 — Pool record + stable identity — DONE.** New
+  [pool.go](../../backend/orchestration/internal/taskrun/pool.go) + idle-persistence
+  unit tests ([pool_test.go](../../backend/orchestration/internal/taskrun/pool_test.go)).
+  Proof: [Testing/PASS-0000/PASS-0000-NOTES.md](./Testing/PASS-0000/PASS-0000-NOTES.md),
+  [Testing/PASS-0000-CHECKLIST.json](./Testing/PASS-0000-CHECKLIST.json). `go build ./...`
+  + `go test ./internal/taskrun/...` green.
+- **Next:** PASS-0001 discover-on-startup.
+
+### Original planning resume point (superseded by the approval above)
+
 **Phase: planning. Gate: awaiting explicit human PLAN approval. No implementation has
 started.**
 
