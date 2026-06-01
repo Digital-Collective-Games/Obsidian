@@ -66,6 +66,28 @@ def worktree_repo_segment(worktree: dict[str, object]) -> str:
     return ""
 
 
+def worktree_heading_repo(worktree: dict[str, object]) -> str:
+    """The short repo token for the panel HEADING in BOTH idle and allocated states.
+
+    The flattened `repo` field is the registry id for an idle member but the bound
+    checkout PATH for an allocated one; using it raw overflows the Space-Grotesk heading
+    slot and reads as a different "kind" of heading. Prefer the stable worktree-id repo
+    segment (identical for idle and allocated), falling back to `repo` only if empty.
+    """
+    segment = worktree_repo_segment(worktree)
+    if segment:
+        return segment
+    return str(worktree.get("repo") or "")
+
+
+# The chip carries a leading STATE MARK (UPDATE 5: "status via a chip, not text-only"):
+# a filled mark for allocated, a hollow/outlined mark for idle, within the same cyan/green
+# WORKTREE_STATUS_COLORS family. Drawn as a small Tk Canvas swatch (no emoji; 0px radius).
+def worktree_chip_mark_filled(worktree: dict[str, object]) -> bool:
+    """Whether the chip's state mark is filled (allocated) vs outlined (idle)."""
+    return is_allocated(worktree)
+
+
 def worktree_matches_repo(worktree: dict[str, object], repo: dict[str, object]) -> bool:
     """Whether a worktree belongs to a registered repo.
 

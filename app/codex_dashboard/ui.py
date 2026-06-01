@@ -66,8 +66,10 @@ from .worktrees_tab import (
     is_allocated,
     open_task_options,
     repo_filter_options,
+    worktree_chip_mark_filled,
     worktree_detail_lines,
     worktree_face_lines,
+    worktree_heading_repo,
     worktree_status_background,
     worktree_status_color,
     worktree_status_label,
@@ -1263,9 +1265,15 @@ class DashboardApp:
             child.destroy()
 
         if not visible:
+            # When the backend is reachable but the (filtered) pool is empty, point the
+            # operator at CREATE WORKTREE rather than the generic refresh line.
+            if str(self.worktrees_snapshot.get("status") or "") == "ok":
+                empty_text = "No worktrees in this repo yet - use CREATE WORKTREE to add one."
+            else:
+                empty_text = self.worktrees_status_message
             ttk.Label(
                 self.worktrees_rows_content,
-                text=self.worktrees_status_message,
+                text=empty_text,
                 style="Status.TLabel",
                 wraplength=760,
                 justify="left",
@@ -1293,19 +1301,13 @@ class DashboardApp:
 
         head = tk.Frame(content, bg=row_bg)
         head.pack(anchor="w", fill="x")
-        chip = tk.Label(
-            head,
-            text=worktree_status_label(worktree),
-            bg="#10141a",
-            fg=accent_color,
-            padx=8,
-            pady=3,
-            font=("Space Grotesk", 8, "bold"),
-        )
+        chip = self._build_worktree_status_chip(head, worktree)
         chip.pack(side="left")
+        # The heading shows the SHORT repo token in BOTH idle and allocated states; the
+        # full bound checkout path lives in the Details reveal (B1).
         repo_label = tk.Label(
             head,
-            text=str(worktree.get("repo") or "unknown repo"),
+            text=worktree_heading_repo(worktree) or "unknown repo",
             bg=row_bg,
             fg="#dfe2eb",
             font=("Space Grotesk", 11, "bold"),
@@ -1340,6 +1342,36 @@ class DashboardApp:
 
         for widget in (content, head, chip, repo_label, controls):
             widget.bind("<MouseWheel>", self._on_worktrees_mousewheel)
+
+    def _build_worktree_status_chip(self, parent: tk.Misc, worktree: dict[str, object]) -> tk.Frame:
+        # The status chip carries a leading STATE MARK, not text only (UPDATE 5 / B2): a
+        # filled cyan/green swatch for allocated, a hollow/outlined one for idle, within
+        # the WORKTREE_STATUS_COLORS family. Drawn as a small 0px-radius Canvas square
+        # (no emoji), matching the Monolithic-Terminal style.
+        chip_bg = "#10141a"
+        accent_color = worktree_status_color(worktree)
+        chip = tk.Frame(parent, bg=chip_bg, padx=8, pady=3)
+        mark = tk.Canvas(
+            chip,
+            width=8,
+            height=8,
+            bg=chip_bg,
+            highlightthickness=0,
+            bd=0,
+        )
+        if worktree_chip_mark_filled(worktree):
+            mark.create_rectangle(0, 0, 7, 7, fill=accent_color, outline=accent_color)
+        else:
+            mark.create_rectangle(0, 0, 7, 7, fill=chip_bg, outline=accent_color)
+        mark.pack(side="left", padx=(0, 5))
+        tk.Label(
+            chip,
+            text=worktree_status_label(worktree),
+            bg=chip_bg,
+            fg=accent_color,
+            font=("Space Grotesk", 8, "bold"),
+        ).pack(side="left")
+        return chip
 
     def _build_worktree_row_controls(self, parent: tk.Frame, worktree: dict[str, object]) -> None:
         worktree_id = str(worktree.get("worktree_id") or "")
@@ -1439,21 +1471,12 @@ class DashboardApp:
         popup.attributes("-topmost", True)
         popup.geometry("560x360")
 
-        accent = worktree_status_color(worktree)
         head = tk.Frame(popup, bg="#1c2026")
         head.pack(fill="x", padx=16, pady=(16, 8))
+        self._build_worktree_status_chip(head, worktree).pack(side="left")
         tk.Label(
             head,
-            text=worktree_status_label(worktree),
-            bg="#10141a",
-            fg=accent,
-            padx=8,
-            pady=3,
-            font=("Space Grotesk", 8, "bold"),
-        ).pack(side="left")
-        tk.Label(
-            head,
-            text=str(worktree.get("repo") or "unknown repo"),
+            text=worktree_heading_repo(worktree) or "unknown repo",
             bg="#1c2026",
             fg="#dfe2eb",
             font=("Space Grotesk", 11, "bold"),

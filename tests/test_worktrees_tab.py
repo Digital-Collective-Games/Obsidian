@@ -28,8 +28,10 @@ from app.codex_dashboard.worktrees_tab import (
     repo_filter_options,
     shorten_path,
     sort_worktrees,
+    worktree_chip_mark_filled,
     worktree_detail_lines,
     worktree_face_lines,
+    worktree_heading_repo,
     worktree_matches_repo,
     worktree_status_background,
     worktree_status_color,
@@ -92,6 +94,21 @@ class WorktreesTabHelperTests(unittest.TestCase):
         self.assertIn("ALLOCATED", worktree_status_label(ALLOCATED_WORKTREE))
         self.assertIn("RUNNING", worktree_status_label(ALLOCATED_WORKTREE))
         self.assertEqual(worktree_status_label(IDLE_WORKTREE), "IDLE")
+
+    def test_heading_uses_short_repo_segment_for_both_states(self) -> None:
+        # B1: the heading must be the short repo token in BOTH states, NOT the raw `repo`
+        # field (which is the bound checkout PATH for an allocated member).
+        self.assertEqual(worktree_heading_repo(ALLOCATED_WORKTREE), "obsidian")
+        self.assertEqual(worktree_heading_repo(IDLE_WORKTREE), "obsidian")
+        # The allocated heading must NOT be the overflowing bound checkout path.
+        self.assertNotEqual(worktree_heading_repo(ALLOCATED_WORKTREE), ALLOCATED_WORKTREE["repo"])
+        # Fall back to `repo` only when there is no id segment.
+        self.assertEqual(worktree_heading_repo({"worktree_id": "", "repo": "demo"}), "demo")
+
+    def test_chip_mark_is_filled_for_allocated_hollow_for_idle(self) -> None:
+        # B2: the chip carries a state MARK (filled allocated, hollow idle), not text-only.
+        self.assertTrue(worktree_chip_mark_filled(ALLOCATED_WORKTREE))
+        self.assertFalse(worktree_chip_mark_filled(IDLE_WORKTREE))
 
     def test_detail_lines_include_repo_path_id_and_allocated_binding(self) -> None:
         idle_lines = dict(worktree_detail_lines(IDLE_WORKTREE))

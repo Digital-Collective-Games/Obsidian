@@ -621,7 +621,9 @@ Steps:
    switching tabs.
 7. Verify the surface lists every worktree the backend reports, each row showing the
    repo, the local directory path, a stable identifier, and — for allocated rows — the
-   bound task/run/status.
+   bound task/run/status. Verify each panel's HEADING is the short repo id in BOTH idle
+   and allocated states (e.g. `obsidian`); a full filesystem path in the heading fails —
+   the full bound checkout path belongs only in the Details reveal.
 8. Verify allocated rows render with a visibly different background color than idle
    rows (the distinction is perceivable, not only a text label).
 9. Stop the validation-lane backend and confirm the tab shows a clear human-facing
@@ -638,6 +640,8 @@ Expected result:
 - switching to `WORKTREES` is read-only and does not mutate backend state
 - the pool view renders every backend-reported worktree with repo + local dir +
   identifier, and allocated rows are a visibly different background color than idle rows
+- each panel HEADING shows the short repo id (not a full filesystem path) in BOTH idle
+  and allocated states
 - a backend-unavailable state shows a clear message and does not crash
 - no extra console or app windows are spawned by the interaction
 
