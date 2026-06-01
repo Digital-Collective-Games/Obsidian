@@ -7,5 +7,5 @@ repo_options=All repos,RepoX,RepoY
 visible_total=02
 visible_allocated=00
 visible_idle=02
-visible_ids=RepoX/wt-0001,RepoX/wt-0003
+visible_ids=RepoX/wt-0001,RepoX/wt-0002
 status=Ejected RepoX/wt-0001; it is idle and the task is dequeued.

@@ -30,6 +30,49 @@ INTERFACE-DESIGNER B3). Python unit suite green @ 182. Committed/pushed on `mast
 REG-003/REG-004 retired in repo-root `REGRESSION.md` (UPDATE 4). `TASK-STATE.json`
 current_pass=PASS-0009.**
 
+### PASS-0009 QA route-back re-capture (REG-014/015/016) — DONE this run
+
+The [PASS-0009 QA](./Testing/PASS-0009/QA-REPORT.md) PASSED the UI fidelity re-check and the
+REG-010…REG-013 functional QA but FAILED three ACTION proofs on **evidence quality only** (a
+capture-harness defect, not a product defect): the REG-014/REG-015 post-action PNGs captured
+the wrong foreground window, and the REG-016 rejection/confirmation messages were not rendered
+in-frame. Both are now fixed and the three captures re-shot on the same isolated throwaway lane
+(`:24319`, namespace `reg016fix`, throwaway `RepoX/RepoY` with NO `task_provider` → Eject/Dequeue
+are safe local no-ops; never the human service `:4318`, validation `:14318`, the human dashboard
+config/db, or live data; no production queue touched):
+
+- **Wrong-window root cause** — the task-owned capture harness (gitignored
+  `Tracking/Task-0016/Testing/Runtime/capture_filtered.py`, NOT product code) screenshotted the
+  overlay's *screen rectangle* via `CopyFromScreen`, so when the borderless `overrideredirect`
+  overlay was not the top-most painted window, the Claude Code IDE in the same region was grabbed.
+  Fixed by capturing the overlay's OWN content **by HWND via `PrintWindow(PW_RENDERFULLCONTENT)`**
+  (immune to occlusion/foreground), plus a blank-frame guard that pumps Tk/DWM repaints and
+  retries until the grab is non-black, and by neutralizing the app's auto smoke-capture (which had
+  re-introduced the `CopyFromScreen` path + `os._exit`) so the harness fully owns each shot.
+- **REG-016 message-not-in-frame — minimal real UI fix.** The action status (`worktrees_status_message`)
+  was only pushed to the global `status_label`, which is **never laid out on the WORKTREES tab**, so
+  Eject/Destroy-reject/Dequeue outcomes were invisible. Added a visible
+  `worktrees_action_status_label` to the WORKTREES header (same `Status.TLabel` style) and wired
+  `_set_worktrees_status` to update it; the pool re-render does not clear it. Two-line surgical
+  change in [ui.py](../../app/codex_dashboard/ui.py); Python unit suite green @ 182.
+- **Re-captured, opened, and verified** (each PNG confirmed to show the WORKTREES tab with the
+  claimed state/message, not another window):
+  - [reg014-assign-bound/overlay.png](./Testing/PASS-0009/reg014-assign-bound/overlay.png) —
+    `RepoX/wt-0002` ALLOCATED-RUNNING bound to `Task-9001` + the "Assigned …; it is now allocated."
+    status in-frame, idle `RepoX/wt-0001` below.
+  - [reg015-eject/overlay.png](./Testing/PASS-0009/reg015-eject/overlay.png) — `RepoX/wt-0001`
+    returned IDLE (folder kept) + the "Ejected RepoX/wt-0001; it is idle and the task is dequeued."
+    status in-frame.
+  - [reg016-destroy-allocated-reject/overlay.png](./Testing/PASS-0009/reg016-destroy-allocated-reject/overlay.png)
+    — the HTTP 409 "worktree is allocated; eject it before destroy" rejection rendered in-frame,
+    `wt-0001` still allocated.
+  - [reg016-dequeue/overlay.png](./Testing/PASS-0009/reg016-dequeue/overlay.png) — the "Dequeued
+    Task-9001 (Queue=Never); the issue stays open." confirmation rendered in-frame, worktree still
+    allocated.
+
+REG-010/011/012/013 and REG-016 destroy-idle were unaffected (no rework). The LIVE GitHub
+`Queue=Never` provider write + no-re-dispatch consequence remain a separate human-Chrome step.
+
 ### PASS-0007 INTERFACE-DESIGNER fidelity fix + final re-capture — DONE this run
 
 The clean-context [INTERFACE-DESIGNER review](./Testing/PASS-0007/INTERFACE-DESIGNER-REVIEW.md)

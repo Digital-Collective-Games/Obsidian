@@ -15,8 +15,11 @@
   },
   "blockers": [],
   "next_expected_artifacts": [
-    "Tracking/Task-0016/Testing/PASS-0009/PASS-0009-NOTES.md",
-    "Tracking/Task-0016/Testing/PASS-0007/INTERFACE-DESIGNER-REVIEW.md"
+    "Tracking/Task-0016/Testing/PASS-0009/QA-REPORT.md",
+    "Tracking/Task-0016/Testing/PASS-0009/reg014-assign-bound/overlay.png",
+    "Tracking/Task-0016/Testing/PASS-0009/reg015-eject/overlay.png",
+    "Tracking/Task-0016/Testing/PASS-0009/reg016-destroy-allocated-reject/overlay.png",
+    "Tracking/Task-0016/Testing/PASS-0009/reg016-dequeue/overlay.png"
   ],
-  "updated_at": "2026-06-01T17:05:00-04:00"
+  "updated_at": "2026-06-01T13:25:00-04:00"
 }

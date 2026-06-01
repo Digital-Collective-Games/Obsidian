@@ -1060,6 +1060,17 @@ class DashboardApp:
             style="Status.TLabel",
         )
         self.worktrees_freshness_label.pack(anchor="w", pady=(4, 0))
+        # Action outcomes (Assign / Eject / Destroy rejection / Dequeue) are surfaced here
+        # in-frame so the operator sees the result on the WORKTREES tab itself; the global
+        # status_label is not laid out on this tab. Re-rendering the pool does NOT clear it.
+        self.worktrees_action_status_label = ttk.Label(
+            title_copy,
+            text="",
+            style="Status.TLabel",
+            wraplength=760,
+            justify="left",
+        )
+        self.worktrees_action_status_label.pack(anchor="w", pady=(2, 0))
         self.worktrees_refresh_button = ttk.Button(
             header,
             text="REFRESH STATUS",
@@ -1644,6 +1655,7 @@ class DashboardApp:
     def _set_worktrees_status(self, message: str) -> None:
         self.worktrees_status_message = message
         self.status_label.configure(text=message)
+        self.worktrees_action_status_label.configure(text=message)
 
     def _refresh_worktrees_scroll_region(self, _event=None) -> None:
         self.worktrees_scroll_canvas.configure(scrollregion=self.worktrees_scroll_canvas.bbox("all"))
