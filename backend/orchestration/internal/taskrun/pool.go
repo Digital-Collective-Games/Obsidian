@@ -3,12 +3,17 @@ package taskrun
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/gregsemple2003/CodexDesktop/backend/orchestration/internal/queue"
 )
 
 // Manual persistent worktree pool (Task-0016). The pool replaces the per-dispatch
@@ -61,18 +66,20 @@ type poolRecord struct {
 
 // PoolWorktree is one full-pool entry returned by ListPoolWorktrees / the
 // GET /api/v1/worktrees full-pool read. It carries the stable identity + status for
-// every member (idle and allocated); allocated members additionally carry the live
-// binding (task/run/gate/session) read from the per-run workflow.
+// every member (idle and allocated). The binding fields are FLATTENED (embedded
+// RepoBinding) to match the §8 response shape: repo + worktree_path are always present;
+// allocated members additionally carry the live task/run/gate/session read from the
+// per-run workflow. An idle member leaves task_id/session/run_id empty and run_gate_state
+// unset.
 type PoolWorktree struct {
-	WorktreeID   string `json:"worktree_id"`
-	Repo         string `json:"repo"`
-	WorktreePath string `json:"worktree_path"`
-	Status       string `json:"status"`
-	// RunID and Binding are populated only for an allocated member (status ==
-	// "allocated"); they are read live from the per-run workflow with a breadcrumb
-	// fallback. An idle member leaves them zero.
-	RunID   string       `json:"run_id,omitempty"`
-	Binding *RepoBinding `json:"binding,omitempty"`
+	WorktreeID string `json:"worktree_id"`
+	Status     string `json:"status"`
+	// RunID is the active run id for an allocated member; empty for an idle member.
+	RunID string `json:"run_id,omitempty"`
+	// RepoBinding is embedded (flattened) so repo, worktree_path, task_id,
+	// agent_session_id, session_transcript_path, run_gate_state, and launched_pid appear
+	// at the top level of each entry (§8 shape).
+	RepoBinding
 }
 
 // poolRepoSegment is the stable, filesystem-safe per-repo directory segment under the
@@ -255,22 +262,25 @@ func sortedPoolWorktrees(in []PoolWorktree) []PoolWorktree {
 // member to idle. This is what reconstructs allocated-vs-idle across a backend restart
 // without losing bound state for a still-live run.
 func (s *Service) classifyPoolMember(record poolRecord) PoolWorktree {
+	// Idle baseline: repo + worktree_path always present, no task/session/gate bound.
 	entry := PoolWorktree{
-		WorktreeID:   record.WorktreeID,
-		Repo:         record.Repo,
-		WorktreePath: record.WorktreePath,
-		Status:       poolStatusIdle,
+		WorktreeID: record.WorktreeID,
+		Status:     poolStatusIdle,
+		RepoBinding: RepoBinding{
+			Repo:         record.Repo,
+			WorktreePath: record.WorktreePath,
+		},
 	}
 	if record.RunID == "" {
 		return entry
 	}
 	if s.runtime == nil {
-		// No runtime to consult: trust the record's own run id + breadcrumb binding so
-		// a still-bound member is not silently reclassified idle in a runtime-less test.
+		// No runtime to consult: trust the record's own run id + a minimal allocated
+		// binding so a still-bound member is not silently reclassified idle in a
+		// runtime-less test.
 		entry.Status = poolStatusAllocated
 		entry.RunID = record.RunID
-		binding := s.poolBindingFallback(record)
-		entry.Binding = &binding
+		entry.RunGateState = RunGateStateRunning
 		return entry
 	}
 	view, err := s.runtime.GetActiveTaskRun(context.Background(), record.RunID)
@@ -281,23 +291,20 @@ func (s *Service) classifyPoolMember(record poolRecord) PoolWorktree {
 	}
 	entry.Status = poolStatusAllocated
 	entry.RunID = record.RunID
-	binding := s.poolBindingFallback(record)
+	entry.RunGateState = RunGateStateRunning
 	if view.RepoLane.Binding != nil {
-		binding = *view.RepoLane.Binding
+		// Carry the live task/run/gate/session binding, but keep the stable pool path +
+		// repo from the record (the binding's worktree path mirrors it).
+		binding := *view.RepoLane.Binding
+		if binding.WorktreePath == "" {
+			binding.WorktreePath = record.WorktreePath
+		}
+		if binding.Repo == "" {
+			binding.Repo = record.Repo
+		}
+		entry.RepoBinding = binding
 	}
-	entry.Binding = &binding
 	return entry
-}
-
-// poolBindingFallback builds a minimal binding for an allocated pool member from its
-// record when the live workflow carries none yet, so an allocated member always names
-// its task/worktree even before the workflow seeds the binding.
-func (s *Service) poolBindingFallback(record poolRecord) RepoBinding {
-	return RepoBinding{
-		Repo:         record.Repo,
-		WorktreePath: record.WorktreePath,
-		RunGateState: RunGateStateRunning,
-	}
 }
 
 // ListPoolWorktrees returns the FULL pool for this Service's repo — every member,
@@ -313,6 +320,49 @@ func (s *Service) ListPoolWorktrees() ([]PoolWorktree, error) {
 	out := make([]PoolWorktree, 0, len(records))
 	for _, record := range records {
 		out = append(out, s.classifyPoolMember(record))
+	}
+	return sortedPoolWorktrees(out), nil
+}
+
+// ListFullPool returns the full-pool view the GET /api/v1/worktrees read serves: every
+// pool member (idle + allocated) from ListPoolWorktrees, MERGED with any active
+// owned-lane worktree that is not itself a pool member. The merge keeps the endpoint
+// correct across the dispatch-path transition: before PASS-0003 a dispatch still
+// provisions a non-pool random-temp lane (surfaced here as an allocated entry from its
+// live binding), and after PASS-0003 a dispatched lane IS a pool member (surfaced via
+// the pool path) — either way it appears, and REG-008's parked-lane read keeps working.
+// Entries are deduped by worktree path (a pool member wins over a legacy lane at the
+// same path) and sorted by worktree id.
+func (s *Service) ListFullPool() ([]PoolWorktree, error) {
+	members, err := s.ListPoolWorktrees()
+	if err != nil {
+		return nil, err
+	}
+	seenPath := map[string]bool{}
+	out := make([]PoolWorktree, 0, len(members))
+	for _, m := range members {
+		out = append(out, m)
+		if m.WorktreePath != "" {
+			seenPath[m.WorktreePath] = true
+		}
+	}
+	// Merge active owned-lane worktrees that are NOT pool members (legacy random-temp
+	// dispatch lanes). They are allocated by definition (an active worktree is bound to
+	// a live run). Their worktree id falls back to the worktree path (no stable pool id).
+	active, err := s.ListActiveWorktrees()
+	if err != nil {
+		return nil, err
+	}
+	for _, b := range active {
+		if b.WorktreePath != "" && seenPath[b.WorktreePath] {
+			continue
+		}
+		out = append(out, PoolWorktree{
+			WorktreeID:  b.WorktreePath,
+			Status:      poolStatusAllocated,
+			RunID:       b.RunID,
+			RepoBinding: b.RepoBinding,
+		})
 	}
 	return sortedPoolWorktrees(out), nil
 }
@@ -367,4 +417,142 @@ func (s *Service) poolSeqForID(worktreeID string) (int, error) {
 	}
 	_, leaf, _ := strings.Cut(worktreeID, "/")
 	return poolMemberSeq(leaf)
+}
+
+// RepoView is one registered repo projected by GET /api/v1/repos: its id, the
+// arbitrary absolute local_root, and the task-provider repo it polls. queue_workers is
+// DELIBERATELY not projected — the pool's idle count is the only concurrency bound now
+// (Task-0016 removes queue_workers as an admission cap in PASS-0003).
+type RepoView struct {
+	ID               string `json:"id"`
+	LocalRoot        string `json:"local_root"`
+	TaskProviderRepo string `json:"task_provider_repo,omitempty"`
+}
+
+// ListRepos reads the central repo registry at the given explicit path
+// (OBSIDIAN_REGISTRY_PATH) and projects one RepoView per registered repo — id +
+// local_root (+ task_provider_repo), with NO queue_workers in the response. It is the
+// registry-sourced repo list the UI's repo filter dropdown consumes.
+func ListRepos(registryPath string) ([]RepoView, error) {
+	manifest, err := queue.LoadRegistry(registryPath)
+	if err != nil {
+		return nil, err
+	}
+	repos := make([]RepoView, 0, len(manifest.Repos))
+	for _, entry := range manifest.Repos {
+		if entry.ID == "" || entry.LocalRoot == "" {
+			continue
+		}
+		view := RepoView{ID: entry.ID, LocalRoot: entry.LocalRoot}
+		if entry.TaskProvider != nil {
+			view.TaskProviderRepo = entry.TaskProvider.Repo
+		}
+		repos = append(repos, view)
+	}
+	sort.Slice(repos, func(i, j int) bool { return repos[i].ID < repos[j].ID })
+	return repos, nil
+}
+
+// ErrPoolWorktreeAllocated is returned by DestroyPoolWorktree when the target member is
+// allocated (bound to a live run). The operator must Eject it first; Destroy only
+// removes an idle member.
+var ErrPoolWorktreeAllocated = errors.New("worktree is allocated; eject it before destroy")
+
+// ErrPoolWorktreeNotFound is returned when a worktree id names no pool member.
+var ErrPoolWorktreeNotFound = errors.New("pool worktree not found")
+
+// CreatePoolWorktree provisions one new IDLE pool worktree into this Service's repo
+// pool at the next stable path (git worktree add --detach <stablePath> <baselineCommit>
+// — the provisionOwnedLane git mechanics, but at a STABLE, non-temp path and with NO
+// task bound), writes its durable pool record with run_id == "", and returns it as an
+// idle PoolWorktree. The repo argument is the operator-facing repo id; it is recorded on
+// the member but the worktree is always created under THIS Service's bound repo (the
+// backend Service is per-repo). Worktree CREATION happens only here (and never as a
+// dispatch side effect, after PASS-0003).
+func (s *Service) CreatePoolWorktree(repo string) (PoolWorktree, error) {
+	baselineCommit := gitRevision(s.declaredWorktreeRoot)
+	if baselineCommit == "" {
+		return PoolWorktree{}, fmt.Errorf("resolve baseline commit for repo %q", s.declaredWorktreeRoot)
+	}
+	seq, err := s.nextPoolMemberSeq()
+	if err != nil {
+		return PoolWorktree{}, err
+	}
+	checkout := s.poolCheckoutPath(seq)
+	if err := os.MkdirAll(s.poolMemberDir(seq), 0o755); err != nil {
+		return PoolWorktree{}, fmt.Errorf("create pool member dir: %w", err)
+	}
+
+	args := []string{"-C", s.declaredWorktreeRoot}
+	if runtime.GOOS == "windows" {
+		args = append([]string{"-c", "core.longpaths=true"}, args...)
+	}
+	args = append(args, "worktree", "add", "--detach", checkout, baselineCommit)
+	if output, err := exec.Command("git", args...).CombinedOutput(); err != nil {
+		// Best-effort cleanup of the partially-created member dir so a failed Create does
+		// not leave a stray folder that nextPoolMemberSeq would skip over.
+		_ = os.RemoveAll(s.poolMemberDir(seq))
+		return PoolWorktree{}, fmt.Errorf("create pool worktree: %w: %s", err, strings.TrimSpace(string(output)))
+	}
+
+	recordRepo := strings.TrimSpace(repo)
+	if recordRepo == "" {
+		recordRepo = s.poolRepoSegment()
+	}
+	record := poolRecord{
+		WorktreeID:   s.poolWorktreeID(seq),
+		WorktreePath: checkout,
+		Repo:         recordRepo,
+		RunID:        "",
+	}
+	if err := s.writePoolRecord(seq, record); err != nil {
+		return PoolWorktree{}, fmt.Errorf("write pool record: %w", err)
+	}
+	return PoolWorktree{
+		WorktreeID: record.WorktreeID,
+		Status:     poolStatusIdle,
+		RepoBinding: RepoBinding{
+			Repo:         record.Repo,
+			WorktreePath: record.WorktreePath,
+		},
+	}, nil
+}
+
+// DestroyPoolWorktree removes an IDLE pool worktree from the pool: it rejects
+// (ErrPoolWorktreeAllocated, removing nothing) a member that is allocated to a live run,
+// otherwise it removes the checkout via the BUG-0002-hardened removeOwnedLaneWorktree
+// mechanics and deletes the member folder + its durable pool record. An unknown id
+// reports ErrPoolWorktreeNotFound.
+func (s *Service) DestroyPoolWorktree(worktreeID string) error {
+	memberDir, err := s.poolMemberDirForID(worktreeID)
+	if err != nil {
+		return err
+	}
+	record, ok, err := readPoolRecord(memberDir)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("%w: %s", ErrPoolWorktreeNotFound, worktreeID)
+	}
+	// Classify live: an allocated member (its bound run is still live) must be ejected
+	// first; Destroy never tears down a live run's checkout.
+	if s.classifyPoolMember(record).Status == poolStatusAllocated {
+		return fmt.Errorf("%w: %s", ErrPoolWorktreeAllocated, worktreeID)
+	}
+	checkout := record.WorktreePath
+	if checkout == "" {
+		checkout = filepath.Join(memberDir, poolCheckoutDirName)
+	}
+	if !pathWithinRoot(checkout, s.ownedLaneRoot) {
+		return fmt.Errorf("pool worktree %q is outside the backend-owned lane root", checkout)
+	}
+	if err := removeOwnedLaneWorktree(s.declaredWorktreeRoot, s.ownedLaneRoot, checkout); err != nil {
+		return err
+	}
+	// Drop the whole member folder (checkout + the durable pool record).
+	if err := os.RemoveAll(memberDir); err != nil {
+		return fmt.Errorf("remove pool member dir %s: %w", memberDir, err)
+	}
+	return nil
 }

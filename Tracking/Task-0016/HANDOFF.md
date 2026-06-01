@@ -44,7 +44,18 @@ Backend batch progress:
   Proof: [Testing/PASS-0001/PASS-0001-NOTES.md](./Testing/PASS-0001/PASS-0001-NOTES.md),
   [Testing/PASS-0001-CHECKLIST.json](./Testing/PASS-0001-CHECKLIST.json). Full
   `go test ./...` green.
-- **Next:** PASS-0002 Create + Destroy + full-pool/repos reads + route guards.
+- **PASS-0002 — Create + Destroy + full-pool/repos reads + route guards — DONE.**
+  `CreatePoolWorktree` / `DestroyPoolWorktree` / `ListRepos` / `ListFullPool` +
+  `PoolWorktree` flattened to the §8 shape
+  ([pool.go](../../backend/orchestration/internal/taskrun/pool.go)); `GET /api/v1/repos`,
+  `GET /api/v1/worktrees` (full pool), and the method/path-guarded
+  `POST /api/v1/worktrees/{create,destroy}` sub-router
+  ([mux.go](../../backend/orchestration/internal/httpapi/mux.go)). The existing REG-008
+  parked-lane `/worktrees` read stays green via the pool+active merge. Proof:
+  [Testing/PASS-0002/PASS-0002-NOTES.md](./Testing/PASS-0002/PASS-0002-NOTES.md),
+  [Testing/PASS-0002-CHECKLIST.json](./Testing/PASS-0002-CHECKLIST.json). Full
+  `go test ./...` green.
+- **Next:** PASS-0003 Assign + dispatch-path change + `queue_workers` removal.
 
 ### Original planning resume point (superseded by the approval above)
 

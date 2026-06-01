@@ -48,6 +48,12 @@ func NewMux(cfg config.Config, service *controlplane.Service, taskService *taskr
 	mux.HandleFunc("/api/v1/worktrees", func(w http.ResponseWriter, r *http.Request) {
 		handleWorktreesList(w, r, taskService)
 	})
+	mux.HandleFunc("/api/v1/worktrees/", func(w http.ResponseWriter, r *http.Request) {
+		handleWorktreeAPIRoute(w, r, taskService)
+	})
+	mux.HandleFunc("/api/v1/repos", func(w http.ResponseWriter, r *http.Request) {
+		handleReposList(w, r, cfg)
+	})
 	mux.HandleFunc("/api/v1/queue/consumer/", func(w http.ResponseWriter, r *http.Request) {
 		handleQueueConsumerRoute(w, r, cfg, consumer)
 	})
@@ -122,11 +128,14 @@ func handleTasksList(w http.ResponseWriter, r *http.Request, taskService *taskru
 	writeJSON(w, http.StatusOK, map[string]any{"tasks": tasks})
 }
 
-// handleWorktreesList serves GET /api/v1/worktrees (O6): every active owned-lane
-// worktree with its bound { repo, issue/Task, worktree path, agent session id,
-// session transcript path, run/gate state }. It SUPPLIES the raw fields needed to
-// construct a VSCodium link to the bound session but never emits a vscodium://
-// link itself (the orchestrator boundary).
+// handleWorktreesList serves GET /api/v1/worktrees: the FULL worktree pool (Task-0016)
+// — every pool member, idle and allocated, each with a stable worktree_id + status;
+// allocated entries carry the bound { repo, issue/Task, worktree path, agent session id,
+// session transcript path, run/gate state } read live from the per-run workflow. It
+// SUPPLIES the raw fields needed to construct a VSCodium link to a bound session but
+// never emits a vscodium:// link itself (the orchestrator boundary). Active non-pool
+// owned-lane worktrees are merged in (ListFullPool), so the existing REG-008 parked-lane
+// read keeps working through the dispatch-path transition.
 func handleWorktreesList(w http.ResponseWriter, r *http.Request, taskService *taskrun.Service) {
 	if r.URL.Path != "/api/v1/worktrees" {
 		http.NotFound(w, r)
@@ -136,12 +145,102 @@ func handleWorktreesList(w http.ResponseWriter, r *http.Request, taskService *ta
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	worktrees, err := taskService.ListActiveWorktrees()
+	worktrees, err := taskService.ListFullPool()
 	if err != nil {
 		writeJSONError(w, http.StatusBadGateway, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"worktrees": worktrees})
+}
+
+// handleReposList serves GET /api/v1/repos: one entry per registered repo (id +
+// local_root + task_provider_repo) read from the central registry at the configured
+// OBSIDIAN_REGISTRY_PATH, with NO queue_workers in the response (Task-0016 removes it as
+// an admission cap). It is the registry-sourced repo list the UI repo filter consumes.
+func handleReposList(w http.ResponseWriter, r *http.Request, cfg config.Config) {
+	if r.URL.Path != "/api/v1/repos" {
+		http.NotFound(w, r)
+		return
+	}
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	repos, err := taskrun.ListRepos(cfg.RegistryPath)
+	if err != nil {
+		writeJSONError(w, http.StatusBadGateway, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"repos": repos})
+}
+
+// handleWorktreeAPIRoute is the method/path-guarded sub-router for the worktree-pool
+// lifecycle operations under /api/v1/worktrees/* (Task-0016), mirroring the
+// handleTaskAPIRoute pattern: 405 on the wrong method, 404 on an unknown sub-path. It
+// hosts create + destroy in PASS-0002; assign / eject / dequeue are added in later
+// passes on the same sub-router so all pool operations share one consistent guard.
+func handleWorktreeAPIRoute(w http.ResponseWriter, r *http.Request, taskService *taskrun.Service) {
+	action := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/v1/worktrees/"), "/")
+	switch action {
+	case "create":
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		var body struct {
+			Repo string `json:"repo"`
+		}
+		if err := decodeJSONBody(r, &body); err != nil {
+			writeJSONError(w, http.StatusBadRequest, err)
+			return
+		}
+		created, err := taskService.CreatePoolWorktree(body.Repo)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, created)
+	case "destroy":
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		var body struct {
+			WorktreeID string `json:"worktree_id"`
+		}
+		if err := decodeJSONBody(r, &body); err != nil {
+			writeJSONError(w, http.StatusBadRequest, err)
+			return
+		}
+		if err := taskService.DestroyPoolWorktree(body.WorktreeID); err != nil {
+			if errors.Is(err, taskrun.ErrPoolWorktreeAllocated) {
+				writeJSONError(w, http.StatusConflict, err)
+				return
+			}
+			if errors.Is(err, taskrun.ErrPoolWorktreeNotFound) {
+				http.NotFound(w, r)
+				return
+			}
+			writeJSONError(w, http.StatusBadRequest, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"status": "destroyed", "worktree_id": body.WorktreeID})
+	default:
+		http.NotFound(w, r)
+	}
+}
+
+// decodeJSONBody decodes an optional JSON request body into v. A nil/empty body is
+// tolerated (the handlers all have safe zero-value defaults), matching the existing
+// consumer-start route's lenient body handling.
+func decodeJSONBody(r *http.Request, v any) error {
+	if r.Body == nil {
+		return nil
+	}
+	if err := json.NewDecoder(r.Body).Decode(v); err != nil && err.Error() != "EOF" {
+		return err
+	}
+	return nil
 }
 
 // handleQueueConsumerRoute starts/stops the O3 queue-drain consumer (A3.4),

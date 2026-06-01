@@ -2,8 +2,11 @@ package taskrun
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -41,6 +44,176 @@ func writeIdlePoolMember(t *testing.T, s *Service, seq int) poolRecord {
 		t.Fatalf("write pool record: %v", err)
 	}
 	return record
+}
+
+// newGitPoolTestService builds a pool Service whose declared worktree root is a REAL
+// git repo (so `git worktree add` works for Create) with its owned-lane root isolated
+// under the temp tree. Used by the Create/Destroy tests that exercise real git mechanics.
+func newGitPoolTestService(t *testing.T, repoNamespace string) *Service {
+	t.Helper()
+	root := writeGitTaskTrackingRoot(t, map[string]taskFixture{
+		"Task-0007": {
+			taskMD:    "# Task 0007\n\n## Title\n\nPool fixture.\n\n## Summary\n\nPool fixture task.\n",
+			taskState: readyTaskState("Task-0007"),
+			planMD:    "# approved plan\n",
+		},
+	})
+	service := NewService(root, filepath.Join(root, ".runs"), newFakeRuntime())
+	service.SetRepoNamespace(repoNamespace)
+	service.ownedLaneRoot = filepath.Join(root, "owned-lanes")
+	return service
+}
+
+// Task-0016 PASS-0002 / AC2: Create provisions one new IDLE worktree at a STABLE path
+// (not os.MkdirTemp), persists its pool record with run_id == "", and a follow-up
+// full-pool read lists it idle with that worktree_id + worktree_path.
+func TestCreatePoolWorktreeProvisionsIdleAtStablePath(t *testing.T) {
+	service := newGitPoolTestService(t, "obsidian")
+
+	created, err := service.CreatePoolWorktree("obsidian")
+	if err != nil {
+		t.Fatalf("create pool worktree: %v", err)
+	}
+	if created.Status != poolStatusIdle {
+		t.Fatalf("created status = %q, want idle", created.Status)
+	}
+	if created.WorktreeID != "obsidian/wt-0001" {
+		t.Fatalf("created worktree id = %q, want obsidian/wt-0001", created.WorktreeID)
+	}
+	// Stable path under the owned-lane root (NOT an os.MkdirTemp random dir): the path
+	// is exactly <ownedLaneRoot>/obsidian/wt-0001/w.
+	wantPath := service.poolCheckoutPath(1)
+	if created.WorktreePath != wantPath {
+		t.Fatalf("created worktree path = %q, want stable %q", created.WorktreePath, wantPath)
+	}
+	if _, err := os.Stat(filepath.Join(created.WorktreePath, ".git")); err != nil {
+		t.Fatalf("created worktree checkout missing a .git: %v", err)
+	}
+	if _, err := os.Stat(service.poolRecordPath(1)); err != nil {
+		t.Fatalf("durable pool record missing: %v", err)
+	}
+
+	// A follow-up full-pool read lists it idle.
+	pool, err := service.ListFullPool()
+	if err != nil {
+		t.Fatalf("list full pool: %v", err)
+	}
+	if len(pool) != 1 || pool[0].WorktreeID != "obsidian/wt-0001" || pool[0].Status != poolStatusIdle {
+		t.Fatalf("full pool after create = %#v, want one idle obsidian/wt-0001", pool)
+	}
+}
+
+// AC2 continued: a second Create allocates the next stable id (wt-0002) and the pool
+// count grows to two idle members.
+func TestCreatePoolWorktreeAllocatesNextStableID(t *testing.T) {
+	service := newGitPoolTestService(t, "obsidian")
+	if _, err := service.CreatePoolWorktree("obsidian"); err != nil {
+		t.Fatalf("create #1: %v", err)
+	}
+	second, err := service.CreatePoolWorktree("obsidian")
+	if err != nil {
+		t.Fatalf("create #2: %v", err)
+	}
+	if second.WorktreeID != "obsidian/wt-0002" {
+		t.Fatalf("second worktree id = %q, want obsidian/wt-0002", second.WorktreeID)
+	}
+	pool, err := service.ListFullPool()
+	if err != nil {
+		t.Fatalf("list full pool: %v", err)
+	}
+	if len(pool) != 2 {
+		t.Fatalf("full pool = %d members, want 2", len(pool))
+	}
+}
+
+// Task-0016 PASS-0002 / AC7: Destroy removes an IDLE worktree (folder + record gone),
+// and a follow-up read no longer lists it.
+func TestDestroyPoolWorktreeRemovesIdle(t *testing.T) {
+	service := newGitPoolTestService(t, "obsidian")
+	created, err := service.CreatePoolWorktree("obsidian")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	if err := service.DestroyPoolWorktree(created.WorktreeID); err != nil {
+		t.Fatalf("destroy idle worktree: %v", err)
+	}
+	if _, err := os.Stat(service.poolMemberDir(1)); !os.IsNotExist(err) {
+		t.Fatalf("destroyed member folder should be gone, stat err = %v", err)
+	}
+	pool, err := service.ListFullPool()
+	if err != nil {
+		t.Fatalf("list full pool after destroy: %v", err)
+	}
+	if len(pool) != 0 {
+		t.Fatalf("full pool after destroy = %d, want 0: %#v", len(pool), pool)
+	}
+}
+
+// AC7 falsifier: Destroy on an ALLOCATED worktree is rejected (ErrPoolWorktreeAllocated)
+// and removes NOTHING — the operator must Eject it first.
+func TestDestroyPoolWorktreeRejectsAllocated(t *testing.T) {
+	service := newGitPoolTestService(t, "obsidian")
+	created, err := service.CreatePoolWorktree("obsidian")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	// Mark the member allocated to a live run (the runtime reports it live).
+	liveRunID := ActiveRunIDForRepo("obsidian", "Task-0007")
+	service.runtime = poolDiscoverRuntime{liveRunID: liveRunID, liveTaskID: "Task-0007"}
+	record, _, err := readPoolRecord(service.poolMemberDir(1))
+	if err != nil {
+		t.Fatalf("read record: %v", err)
+	}
+	record.RunID = liveRunID
+	if err := service.writePoolRecord(1, record); err != nil {
+		t.Fatalf("mark allocated: %v", err)
+	}
+
+	err = service.DestroyPoolWorktree(created.WorktreeID)
+	if !errors.Is(err, ErrPoolWorktreeAllocated) {
+		t.Fatalf("destroy allocated err = %v, want ErrPoolWorktreeAllocated", err)
+	}
+	if _, statErr := os.Stat(service.poolMemberDir(1)); statErr != nil {
+		t.Fatalf("rejected destroy must remove nothing; member folder gone: %v", statErr)
+	}
+}
+
+// Task-0016 PASS-0002 / AC10: ListRepos projects id + local_root (+ task_provider_repo)
+// from the registry with NO queue_workers field in the response.
+func TestListReposProjectsRegistryWithoutQueueWorkers(t *testing.T) {
+	dir := t.TempDir()
+	registry := filepath.Join(dir, "REPO-MANIFEST.json")
+	writeFile(t, registry, `{
+  "repos": [
+    {"id": "obsidian", "local_root": "C:\\Agent\\CodexDashboard", "queue_workers": 4,
+     "task_provider": {"kind": "github_issues", "repo": "gregsemple2003/obsidian"}},
+    {"id": "demo", "local_root": "C:\\Agent\\Demo", "queue_workers": 2,
+     "task_provider": {"kind": "github_issues", "repo": "gregsemple2003/demo"}}
+  ]
+}`)
+
+	repos, err := ListRepos(registry)
+	if err != nil {
+		t.Fatalf("list repos: %v", err)
+	}
+	if len(repos) != 2 {
+		t.Fatalf("repos = %d, want 2", len(repos))
+	}
+	if repos[0].ID != "demo" || repos[1].ID != "obsidian" {
+		t.Fatalf("repos not sorted by id: %#v", repos)
+	}
+	if repos[1].LocalRoot != "C:\\Agent\\CodexDashboard" || repos[1].TaskProviderRepo != "gregsemple2003/obsidian" {
+		t.Fatalf("obsidian projection = %#v", repos[1])
+	}
+	// AC10 falsifier: the marshaled response must NOT carry queue_workers.
+	raw, err := json.Marshal(repos)
+	if err != nil {
+		t.Fatalf("marshal repos: %v", err)
+	}
+	if strings.Contains(string(raw), "queue_workers") {
+		t.Fatalf("repos response must not carry queue_workers: %s", raw)
+	}
 }
 
 func TestPoolRecordPersistsIdleMemberAndStableID(t *testing.T) {
@@ -226,8 +399,8 @@ func TestDiscoverPoolReconstructsAllocatedAndIdleAcrossRestart(t *testing.T) {
 	if gotAllocated.RunID != liveRunID {
 		t.Fatalf("allocated member run id = %q, want %q", gotAllocated.RunID, liveRunID)
 	}
-	if gotAllocated.Binding == nil || gotAllocated.Binding.TaskID != "Task-0007" {
-		t.Fatalf("allocated member must keep its bound task: %#v", gotAllocated.Binding)
+	if gotAllocated.TaskID != "Task-0007" {
+		t.Fatalf("allocated member must keep its bound task: %#v", gotAllocated)
 	}
 
 	gotIdle, ok := byID[idle.WorktreeID]
