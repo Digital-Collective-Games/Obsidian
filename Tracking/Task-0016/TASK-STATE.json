@@ -2,37 +2,41 @@
   "schema_version": 1,
   "task_id": "Task-0016",
   "status": "in_progress",
-  "phase": "implementation",
+  "phase": "closure",
   "plan_approved": true,
   "current_pass": null,
   "last_completed_pass": "PASS-0009",
-  "current_gate": "debugging",
-  "latest_audit_verdict": "not_ready",
+  "current_gate": "closure",
+  "latest_audit_verdict": "ready",
   "validation": {
     "build": "passing",
     "unit_tests": "passing",
     "regression": "passing"
   },
   "blockers": [
-    "BUG-0003 FIXED + DEPLOYED, but REG-017 (state-less-task Assign popup, human-surface) not yet executed on a lane.",
-    "Closure of issue #16 remains the human gate (the agent never self-closes)."
+    "Closure of issue #16 is the human gate (the agent never self-closes). All engineering gates are green; awaiting the human's sign-off after playing with the live WORKTREES tab."
   ],
   "production_roll": {
     "rolled_live": true,
-    "backend_release": "20260601T211118Z-07affb0",
+    "backend_release": "20260601T223712Z-354c1e1",
     "dashboard_release": "20260601T202417Z-81626e198eb1",
     "rollback_backend_release": "20260427T162803Z-3c0fabb2",
     "rollback_dashboard_release": "20260530T033551Z-8f9839bef26b",
-    "notes": "WORKTREES tab live; pool endpoints serve 200; 8 scheduled jobs intact; auto queue-drain not active on the service lane; #16 untouched (Queue=Never, OPEN)."
+    "notes": "WORKTREES tab live; all pool endpoints + /api/v1/tasks serve 200; full Assign->bind->Eject->run-terminates->tasks-200 chain verified live end-to-end; 8 scheduled jobs intact; #16 untouched (Queue=Never, OPEN); pool empty/clean."
   },
   "open_bugs": [
     "BUG-0001 FIXED + live-verified (Eject dequeues via registry-resolved provider)",
     "BUG-0002 FIXED + live-verified (pool repo-segment registry resolution)",
-    "BUG-0003 FIXED + DEPLOYED (Assign popup 502 on a state-less task)",
-    "BUG-0004 FIXED (Eject baseline now resolves the member's own repo; -count=5 stable)",
-    "BUG-0005 FIXED (Eject terminates the run's TaskRunWorkflow; unit-proven running+parked). Live REG-015 re-verify is the coordinator redeploy step.",
-    "BUG-0006 FIXED (terminated run no longer 502s GET /api/v1/tasks / the Assign popup; readTask tolerates ErrRunNotFound at the refreshRun site, terminated workflow maps to ErrRunNotFound). Unit-proven (both not-found shapes + falsifier). Live REG-018 re-verify is the coordinator redeploy step."
+    "BUG-0003 FIXED + live-verified (Assign popup 502 on a state-less task)",
+    "BUG-0004 FIXED (Eject reset wrong-repo baseline on multi-repo; was the flaky test; -count=5 stable)",
+    "BUG-0005 FIXED + live-verified (Eject terminates the run; no orphan)",
+    "BUG-0006 FIXED + live-verified (terminated run reads 404, no longer 502s /api/v1/tasks)"
   ],
+  "regression": {
+    "live_green": ["REG-007", "REG-008", "REG-009", "REG-015 (eject + dequeue + run-terminates, live)"],
+    "human_surface_cases": ["REG-010..016 (WORKTREES tab)", "REG-017 (state-less-task Assign popup)", "REG-018 (Assign popup loads after Eject terminates a run)"],
+    "go_suite": "go test ./... green @ 354c1e1"
+  },
   "live_regression_run": {
     "artifact": "Tracking/Task-0016/Testing/PASS-0009/REGRESSION-RUN-0002.md",
     "REG-007": "passing_live",
@@ -40,5 +44,5 @@
     "REG-009": "passing_live",
     "REG-015_bug0001_fix": "passing_live"
   },
-  "updated_at": "2026-06-01T23:59:00-04:00"
+  "updated_at": "2026-06-02T00:10:00-04:00"
 }
