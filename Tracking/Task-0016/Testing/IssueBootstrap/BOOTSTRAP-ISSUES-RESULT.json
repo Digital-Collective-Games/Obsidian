@@ -1,0 +1,24 @@
+{
+    "status":  "bootstrapped",
+    "provider_repo":  "Digital-Collective-Games/Obsidian",
+    "task_count":  1,
+    "start_task_number":  16,
+    "end_task_number":  16,
+    "output_dir":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0016\\Testing\\IssueBootstrap",
+    "results":  [
+                    {
+                        "task_id":  "Task-0016",
+                        "expected_issue_number":  16,
+                        "action":  "create",
+                        "provider_repo":  "Digital-Collective-Games/Obsidian",
+                        "issue_url":  "https://github.com/Digital-Collective-Games/Obsidian/issues/16",
+                        "title":  "Task-0016: Manual persistent worktree pool in the Go backend (Create / Assign / Eject / Destroy + discover-on-startup; Eject dequeues via the task provider)",
+                        "labels":  [
+
+                                   ],
+                        "body_path":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0016\\Testing\\IssueBootstrap\\Task-0016-BODY.md",
+                        "view_path":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0016\\Testing\\IssueBootstrap\\Task-0016-VIEW.json",
+                        "metadata_path":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0016\\TASK-META.json"
+                    }
+                ]
+}
