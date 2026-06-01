@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "task_id": "Task-0016",
+  "pass_id": "PASS-0007",
+  "checklist_status": "ready_for_audit",
+  "implemented": true,
+  "build": "not_applicable",
+  "unit_tests": "passing",
+  "pass_audit_written": true,
+  "audit_verdict": "unknown",
+  "audit_result_ref": "Tracking/Task-0016/Testing/PASS-0007/PASS-0007-NOTES.md",
+  "handoff_updated": true,
+  "commit_created": false,
+  "pushed_upstream": false,
+  "notify_sent": false,
+  "blockers": [],
+  "next_required_actions": [
+    "Coordinator-arranged clean-context QA verdict on the in-app WORKTREES read-only surface (REG-010/011/012 captures + [FE] AC16-19)",
+    "PASS-0009 consolidated in-app regression re-run (REG-010..016 + REG-007/008/009 under the new model; needs the human-authenticated Chrome session for the real-UI Ready flip)"
+  ],
+  "updated_at": "2026-06-01T12:30:00-04:00"
+}

@@ -92,6 +92,16 @@ Expected result:
 
 ### REG-003 Tasks Tab Committed-Work Surface
 
+**SUPERSEDED (Task-0016 D1=replace).** The committed-work `Tasks` surface this case
+describes **no longer exists**: Task-0016 renamed the `TASKS` tab to `WORKTREES` and
+replaced its content (the task stream / detail / dispatch-pause-poke widgets were
+removed). The task lifecycle now lives on the **GitHub Issues queue surface** (the
+queue-drain consumer), not a dashboard `Tasks` tab. The new `WORKTREES` tab is covered
+by **REG-010…REG-016** below. This case is retained for history; it is **not** a current
+closure gate and must not be run against the removed `Tasks` tab. (See
+[Tracking/Task-0016/HUMAN-DIRECTIVES-FOR-WORKER.md](./Tracking/Task-0016/HUMAN-DIRECTIVES-FOR-WORKER.md)
+UPDATE 4.)
+
 Goal:
 
 Confirm the real desktop app can switch from the default `Usage` surface to the committed-work `Tasks` surface, render backend-shaped task readback from an isolated lane or task-owned fixture, and communicate task state without exposing unpromoted candidates or false progress bars.
@@ -136,6 +146,17 @@ Expected result:
 - the validation lane or fixture can be exercised without using the persistent service lane, the human's dashboard config, the human's active database, or live Codex data
 
 ### REG-004 Semantic Dashboard State Reconciliation
+
+**SUPERSEDED (Task-0016 D1=replace).** This case reconciles the **`Tasks` surface**
+(visible task rows, summary counts, completed/human-wait/run-control semantics) that
+Task-0016 **removed** — the `TASKS` tab is now `WORKTREES` and its task-stream content is
+gone (the task lifecycle lives on the **GitHub Issues queue surface**). The semantic
+reconciliation for the new `WORKTREES` tab (allocated/idle state, repo, path, bound
+task/run/gate, and each mutating interaction) is covered by **REG-010…REG-016** below.
+This case is retained for history; it is **not** a current closure gate and must not be
+run against the removed `Tasks` surface. (See
+[Tracking/Task-0016/HUMAN-DIRECTIVES-FOR-WORKER.md](./Tracking/Task-0016/HUMAN-DIRECTIVES-FOR-WORKER.md)
+UPDATE 4.)
 
 Goal:
 

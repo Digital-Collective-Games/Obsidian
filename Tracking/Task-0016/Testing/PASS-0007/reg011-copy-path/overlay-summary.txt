@@ -1,0 +1,6 @@
+action=copy
+target_worktree=repo-435f219730fe/wt-0001
+backend_worktree_path=C:\Users\gregs\AppData\Local\Temp\cdxow\repo-435f219730fe\wt-0001\wt-0001
+clipboard_contents=C:\Users\gregs\AppData\Local\Temp\cdxow\repo-435f219730fe\wt-0001\wt-0001
+clipboard_matches_backend_path=True
+status=Copied worktree path to clipboard: C:\Users\gregs\AppData\Local\Temp\cdxow\repo-435f219730fe\wt-0001\wt-0001

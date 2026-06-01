@@ -221,41 +221,60 @@ class DesktopSupportTests(unittest.TestCase):
         app._render_active_tab.assert_called_once_with()
         app.refresh_jobs_data.assert_not_called()
 
-    def test_select_tab_primes_tasks_snapshot_without_control_actions(self) -> None:
+    def test_select_tab_primes_worktrees_snapshot_without_control_actions(self) -> None:
         app = SimpleNamespace(
             active_tab="usage",
             _prime_jobs_snapshot=mock.Mock(),
-            _prime_tasks_snapshot=mock.Mock(),
+            _prime_worktrees_snapshot=mock.Mock(),
             _render_active_tab=mock.Mock(),
             _apply_overlay_geometry=mock.Mock(),
         )
 
-        DashboardApp.select_tab(app, "tasks")
+        DashboardApp.select_tab(app, "worktrees")
 
-        self.assertEqual(app.active_tab, "tasks")
-        app._prime_tasks_snapshot.assert_called_once_with()
+        self.assertEqual(app.active_tab, "worktrees")
+        app._prime_worktrees_snapshot.assert_called_once_with()
         app._prime_jobs_snapshot.assert_not_called()
         app._render_active_tab.assert_called_once_with()
 
-    def test_prime_tasks_snapshot_uses_backend_snapshot(self) -> None:
-        snapshot = {
-            "status": "ok",
-            "summary": {"needs_you": 1},
-            "tasks": [{"task_id": "Task-0009"}],
-        }
+    def test_prime_worktrees_snapshot_reloads_when_empty(self) -> None:
         app = SimpleNamespace(
-            tasks_snapshot={"tasks": []},
-            tasks_status_message="",
-            tasks_backend_url="http://127.0.0.1:14318",
-            _render_tasks_snapshot=mock.Mock(),
+            worktrees_snapshot={"worktrees": []},
+            _reload_worktrees_snapshot=mock.Mock(),
+            _render_worktrees_snapshot=mock.Mock(),
         )
 
-        with mock.patch("app.codex_dashboard.ui.fetch_tasks_snapshot", return_value=snapshot):
-            DashboardApp._prime_tasks_snapshot(app)
+        DashboardApp._prime_worktrees_snapshot(app)
 
-        self.assertEqual(app.tasks_snapshot, snapshot)
-        self.assertEqual(app.tasks_status_message, "Tasks state loaded from orchestration backend.")
-        app._render_tasks_snapshot.assert_called_once_with()
+        app._reload_worktrees_snapshot.assert_called_once_with(refreshed=False)
+        app._render_worktrees_snapshot.assert_called_once_with()
+
+    def test_reload_worktrees_snapshot_uses_backend_pool_and_repos(self) -> None:
+        snapshot = {
+            "status": "ok",
+            "worktrees": [{"worktree_id": "obsidian/wt-0001", "status": "idle"}],
+            "message": "Worktree pool loaded from orchestration backend.",
+        }
+        app = SimpleNamespace(
+            worktrees_snapshot={"worktrees": []},
+            worktrees_status_message="",
+            worktrees_backend_url="http://127.0.0.1:14318",
+            worktrees_repos=[],
+            worktrees_repo_filter="All repos",
+            active_tab="usage",
+            status_label=mock.Mock(),
+            _refresh_repo_filter_options=mock.Mock(),
+        )
+
+        with mock.patch("app.codex_dashboard.ui.fetch_pool_snapshot", return_value=snapshot), mock.patch(
+            "app.codex_dashboard.ui.fetch_repos", return_value=[{"id": "obsidian", "local_root": "C:\\x"}]
+        ):
+            DashboardApp._reload_worktrees_snapshot(app, refreshed=False)
+
+        self.assertEqual(app.worktrees_snapshot, snapshot)
+        self.assertEqual(app.worktrees_status_message, "Worktree pool loaded from orchestration backend.")
+        self.assertEqual(app.worktrees_repos, [{"id": "obsidian", "local_root": "C:\\x"}])
+        app._refresh_repo_filter_options.assert_called_once_with()
 
     def test_prime_jobs_snapshot_uses_backend_snapshot(self) -> None:
         snapshot = {
@@ -368,110 +387,59 @@ class DesktopSupportTests(unittest.TestCase):
         app.status_label.configure.assert_called_once()
         app._render_jobs_snapshot.assert_called_once_with()
 
-    def test_execute_task_pause_calls_backend_interrupt_and_refreshes_snapshot(self) -> None:
-        refreshed_snapshot = {"summary": {"needs_you": 1}, "tasks": []}
+    def _worktrees_action_app(self) -> SimpleNamespace:
         app = SimpleNamespace(
-            tasks_backend_url="http://127.0.0.1:14318",
-            tasks_snapshot={},
-            tasks_status_message="",
-            status_label=mock.Mock(),
-            _render_tasks_snapshot=mock.Mock(),
+            worktrees_backend_url="http://127.0.0.1:14318",
+            worktrees_snapshot={"worktrees": []},
+            worktrees_status_message="",
+            worktrees_repos=[],
+            worktrees_repo_filter="All repos",
+            _reload_worktrees_snapshot=mock.Mock(),
+            _render_worktrees_snapshot=mock.Mock(),
         )
+        # _set_worktrees_status just records the message; bind a real recorder so the
+        # action tests can assert the surfaced message without a Tk widget.
+        def set_status(message: str) -> None:
+            app.worktrees_status_message = message
 
-        with mock.patch("app.codex_dashboard.ui.pause_task_run") as pause_run, mock.patch(
-            "app.codex_dashboard.ui.fetch_tasks_snapshot",
-            return_value=refreshed_snapshot,
+        app._set_worktrees_status = set_status
+        # _selected_repo_id is the real resolution helper (filter selection / sole repo).
+        app._selected_repo_id = lambda: DashboardApp._selected_repo_id(app)
+        return app
+
+    def test_eject_worktree_action_calls_backend_and_reloads(self) -> None:
+        app = self._worktrees_action_app()
+        with mock.patch("app.codex_dashboard.ui.eject_worktree") as eject:
+            DashboardApp.eject_worktree_action(app, "taskrun--Task-0007--active", "obsidian/wt-0001")
+
+        eject.assert_called_once_with(
+            "taskrun--Task-0007--active", "obsidian/wt-0001", "http://127.0.0.1:14318"
+        )
+        self.assertIn("Ejected", app.worktrees_status_message)
+        app._reload_worktrees_snapshot.assert_called_once_with(refreshed=True, keep_status=True)
+        app._render_worktrees_snapshot.assert_called_once_with()
+
+    def test_destroy_worktree_action_surfaces_backend_error(self) -> None:
+        from app.codex_dashboard.worktrees_backend import WorktreesBackendError
+
+        app = self._worktrees_action_app()
+        with mock.patch(
+            "app.codex_dashboard.ui.destroy_worktree",
+            side_effect=WorktreesBackendError("HTTP 409: worktree is allocated; eject it before destroy"),
         ):
-            DashboardApp.execute_task_action(
-                app,
-                {
-                    "label": "Pause",
-                    "backend_action": "interrupt",
-                    "run_id": "taskrun--Task-0009--active",
-                    "allowed": True,
-                },
-            )
+            DashboardApp.destroy_worktree_action(app, "obsidian/wt-0001")
 
-        pause_run.assert_called_once_with("taskrun--Task-0009--active", "http://127.0.0.1:14318")
-        self.assertEqual(app.tasks_snapshot, refreshed_snapshot)
-        self.assertEqual(app.tasks_status_message, "Pause requested for taskrun--Task-0009--active.")
-        app.status_label.configure.assert_called_once_with(text=app.tasks_status_message)
-        app._render_tasks_snapshot.assert_called_once_with()
+        self.assertIn("Destroy failed", app.worktrees_status_message)
+        self.assertIn("allocated", app.worktrees_status_message)
 
-    def test_execute_task_open_uses_backend_launch_target(self) -> None:
-        app = SimpleNamespace(
-            tasks_backend_url="http://127.0.0.1:14318",
-            tasks_snapshot={},
-            tasks_status_message="",
-            status_label=mock.Mock(),
-            _render_tasks_snapshot=mock.Mock(),
-            _open_task_launch_target=mock.Mock(),
-        )
-        target = {"kind": "working_context", "uri": "C:/Agent/CodexDashboard"}
+    def test_dequeue_task_action_calls_backend_without_eject(self) -> None:
+        app = self._worktrees_action_app()
+        app.worktrees_repos = [{"id": "obsidian", "local_root": "C:\\x"}]
+        with mock.patch("app.codex_dashboard.ui.dequeue_task") as dequeue:
+            DashboardApp.dequeue_task_action(app, "Task-0007")
 
-        DashboardApp.execute_task_action(
-            app,
-            {
-                "label": "Open Working Context",
-                "backend_action": "open",
-                "target": target,
-                "allowed": True,
-            },
-        )
-
-        app._open_task_launch_target.assert_called_once_with(target)
-        self.assertEqual(app.tasks_status_message, "Open Working Context opened.")
-        app.status_label.configure.assert_called_once_with(text=app.tasks_status_message)
-        app._render_tasks_snapshot.assert_called_once_with()
-
-    def test_launch_target_allows_vscodium_commands_only(self) -> None:
-        self.assertTrue(DashboardApp._is_allowed_launch_command("codium.cmd"))
-        self.assertTrue(DashboardApp._is_allowed_launch_command("C:/Program Files/VSCodium/VSCodium.exe"))
-        self.assertFalse(DashboardApp._is_allowed_launch_command("powershell.exe"))
-
-    def test_open_task_launch_target_falls_back_from_code_to_vscodium(self) -> None:
-        app = SimpleNamespace()
-
-        def fake_which(name: str) -> str | None:
-            if name == "codium":
-                return "C:/Program Files/VSCodium/bin/codium.cmd"
-            return None
-
-        with mock.patch("app.codex_dashboard.ui.shutil.which", side_effect=fake_which), mock.patch(
-            "app.codex_dashboard.ui.subprocess.Popen"
-        ) as popen:
-            DashboardApp._open_task_launch_target(
-                app,
-                {
-                    "command": ["code", "C:\\Agent\\CodexDashboard\\Tracking\\Task-0011\\PLAN.md"],
-                    "uri": "file:///C:/Agent/CodexDashboard/Tracking/Task-0011/PLAN.md",
-                },
-            )
-
-        popen.assert_called_once()
-        self.assertEqual(
-            popen.call_args.args[0],
-            ["C:/Program Files/VSCodium/bin/codium.cmd", "C:\\Agent\\CodexDashboard\\Tracking\\Task-0011\\PLAN.md"],
-        )
-
-    def test_open_task_launch_target_falls_back_to_normalized_file_uri(self) -> None:
-        app = SimpleNamespace()
-
-        with mock.patch("app.codex_dashboard.ui.shutil.which", return_value=None), mock.patch(
-            "app.codex_dashboard.ui.subprocess.Popen"
-        ) as popen, mock.patch("app.codex_dashboard.ui.os.startfile", create=True) as startfile:
-            DashboardApp._open_task_launch_target(
-                app,
-                {
-                    "command": ["code", "C:\\Agent\\CodexDashboard\\Tracking\\Task-0011\\PLAN.md"],
-                    "uri": "file:///C:/Agent/CodexDashboard/Tracking/Task-0011/PLAN.md",
-                },
-            )
-
-        popen.assert_not_called()
-        startfile.assert_called_once()
-        opened = startfile.call_args.args[0].replace("\\", "/")
-        self.assertEqual(opened, "C:/Agent/CodexDashboard/Tracking/Task-0011/PLAN.md")
+        dequeue.assert_called_once_with("obsidian", "Task-0007", "http://127.0.0.1:14318")
+        self.assertIn("Dequeued", app.worktrees_status_message)
 
     def test_write_overlay_capture_uses_window_bounds(self) -> None:
         overlay = SimpleNamespace(

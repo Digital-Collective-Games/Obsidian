@@ -19,7 +19,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--print-summary", action="store_true")
     parser.add_argument("--no-ui", action="store_true")
     parser.add_argument("--smoke-artifact-dir", type=Path, default=None)
-    parser.add_argument("--smoke-tab", choices=("usage", "jobs", "tasks"), default=None)
+    parser.add_argument("--smoke-tab", choices=("usage", "jobs", "worktrees"), default=None)
     parser.add_argument("--release-id", default=None, help=argparse.SUPPRESS)
     parser.add_argument("--release-root", type=Path, default=None, help=argparse.SUPPRESS)
     parser.add_argument("--db-path", type=Path, default=None)

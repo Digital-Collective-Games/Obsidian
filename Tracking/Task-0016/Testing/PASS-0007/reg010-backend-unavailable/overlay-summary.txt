@@ -1,0 +1,13 @@
+active_tab=worktrees
+Worktrees error: GET http://127.0.0.1:24318/api/v1/worktrees failed: the worktrees backend is not reachable at http://127.0.0.1:24318. Start the orchestration backend or set CODEX_DASHBOARD_WORKTREES_BACKEND_URL to a running isolated lane.
+hotkey_triggered=True
+overlay_fallback=False
+worktrees_backend=http://127.0.0.1:24318
+worktrees_repo_filter=All repos
+worktrees_repo_options=All repos
+worktrees_total=00
+worktrees_allocated=00
+worktrees_idle=00
+worktrees_ids=
+worktrees_allocated_ids=
+worktrees_idle_ids=

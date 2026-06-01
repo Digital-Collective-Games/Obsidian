@@ -11,7 +11,6 @@ import tkinter as tk
 from datetime import UTC, datetime, timedelta, tzinfo
 from pathlib import Path
 from tkinter import ttk
-from urllib.parse import unquote, urlparse
 
 from .aggregation import (
     INTERVAL_SECONDS,
@@ -49,16 +48,30 @@ from .storage import (
     load_session_context_markers,
     sum_total_tokens_by_source_since,
 )
-from .tasks_backend import (
-    configured_tasks_backend_url,
-    dispatch_task,
-    fetch_tasks_snapshot,
-    pause_task_run,
-    poke_task_run,
-    retry_task_run_workload,
-    tasks_backend_error_snapshot,
+from .tasks_backend import fetch_tasks_snapshot
+from .worktrees_backend import (
+    assign_worktree,
+    configured_worktrees_backend_url,
+    create_worktree,
+    dequeue_task,
+    destroy_worktree,
+    eject_worktree,
+    fetch_pool_snapshot,
+    fetch_repos,
+    worktrees_backend_error_snapshot,
 )
-from .tasks_tab import TASK_SUMMARY_CARDS, first_task_id, group_tasks_for_stream, task_detail_sections, task_state_color
+from .worktrees_tab import (
+    ALL_REPOS_OPTION,
+    filter_worktrees_by_repo,
+    is_allocated,
+    open_task_options,
+    repo_filter_options,
+    worktree_detail_lines,
+    worktree_status_background,
+    worktree_status_color,
+    worktree_status_label,
+    worktree_summary_counts,
+)
 
 
 INTERVAL_TITLES = {
@@ -101,21 +114,6 @@ TAB_ACTIVE_FOREGROUND = "#c3f5ff"
 TAB_INACTIVE_FOREGROUND = "#9fbdcc"
 TAB_ACTIVE_UNDERLINE = "#00e5ff"
 HEADER_BACKGROUND = "#181c22"
-ALLOWED_LAUNCH_COMMANDS = {
-    "code",
-    "code.cmd",
-    "codium",
-    "codium.cmd",
-    "vscodium",
-    "vscodium.cmd",
-    "vscodium.exe",
-    "code.exe",
-}
-LAUNCH_COMMAND_FALLBACKS = {
-    "code": ("codium", "codium.cmd", "vscodium", "vscodium.cmd", "vscodium.exe"),
-    "code.cmd": ("codium.cmd", "codium", "vscodium.cmd", "vscodium", "vscodium.exe"),
-    "code.exe": ("codium", "codium.cmd", "vscodium", "vscodium.cmd", "vscodium.exe"),
-}
 
 
 def load_private_font_assets() -> list[Path]:
@@ -336,7 +334,7 @@ def compute_overlay_geometry(
     """Pure, tab-aware overlay geometry. Returns a Tk ``"WxH+X+Y"`` string.
 
     Task-0014: every tab is repositioned into the usable work area (taskbar
-    excluded) with its top one ``pad`` below the work-area top; the Jobs and Tasks
+    excluded) with its top one ``pad`` below the work-area top; the Jobs and Worktrees
     tabs additionally grow to fill the usable height minus ``pad`` at top and
     bottom, so the taskbar is never covered. The Usage (default) tab keeps its
     current size. Width stays the current 980 clamp (never widened) and is
@@ -351,7 +349,7 @@ def compute_overlay_geometry(
     margin_x = 40
 
     width = min(980, max(860, usable_width - 80))
-    if tab_id in ("jobs", "tasks"):
+    if tab_id in ("jobs", "worktrees"):
         # Tall layout: fill the usable height minus top/bottom pad. The 620 floor
         # only triggers for a misconfigured (degenerate) pad_fraction; for any sane
         # value the canonical usable_height - 2*pad applies and bottom == wa_bottom
@@ -419,16 +417,15 @@ class DashboardApp:
         self.jobs_status_message = (
             "Refresh rereads backend state. Apply Desired State updates Temporal to match Git job specs."
         )
-        self.tasks_backend_url = configured_tasks_backend_url()
-        self.tasks_snapshot: dict[str, object] = {
+        self.worktrees_backend_url = configured_worktrees_backend_url()
+        self.worktrees_snapshot: dict[str, object] = {
             "status": "loading",
-            "generated_at": None,
-            "summary": {},
-            "tasks": [],
-            "message": "Open Tasks to load committed-work state.",
+            "worktrees": [],
+            "message": "Open Worktrees to load the backend worktree pool.",
         }
-        self.tasks_detail_task_id: str | None = None
-        self.tasks_status_message = "Refresh rereads committed task state from the orchestration backend."
+        self.worktrees_repos: list[dict[str, object]] = []
+        self.worktrees_repo_filter = ALL_REPOS_OPTION
+        self.worktrees_status_message = "Refresh rereads the worktree pool from the orchestration backend."
         self.debug_log_path = self.config_path.parent / "dashboard-debug.log"
         self._append_debug_log("dashboard_started")
 
@@ -650,6 +647,26 @@ class DashboardApp:
             background=[("active", "#374555")],
             arrowcolor=[("active", "#c3f5ff")],
         )
+        # Task-0016 WORKTREES tab: a dark-palette repo-filter dropdown matching the cockpit.
+        style.configure(
+            "Worktrees.TCombobox",
+            fieldbackground="#10141a",
+            background="#303743",
+            foreground="#dfe2eb",
+            arrowcolor="#9fbdcc",
+            bordercolor="#39424d",
+            lightcolor="#39424d",
+            darkcolor="#10141a",
+            selectbackground="#173a44",
+            selectforeground="#c3f5ff",
+            font=("Inter", 9),
+        )
+        style.map(
+            "Worktrees.TCombobox",
+            fieldbackground=[("readonly", "#10141a")],
+            foreground=[("readonly", "#dfe2eb")],
+            arrowcolor=[("active", "#c3f5ff")],
+        )
 
     def _build_overlay(self) -> None:
         self.container = ttk.Frame(self.overlay, style="Overlay.TFrame", padding=28)
@@ -668,7 +685,7 @@ class DashboardApp:
         self.tab_underlines: dict[str, tk.Frame] = {}
         nav_row = ttk.Frame(brand_row, style="Header.TFrame")
         nav_row.pack(side="left", padx=(24, 0))
-        for tab_id, label in (("usage", "Usage"), ("jobs", "Jobs"), ("tasks", "Tasks")):
+        for tab_id, label in (("usage", "Usage"), ("jobs", "Jobs"), ("worktrees", "Worktrees")):
             tab_shell = tk.Frame(nav_row, bg=HEADER_BACKGROUND)
             tab_shell.pack(side="left", padx=(0, 20))
             tab_label = tk.Label(
@@ -899,7 +916,7 @@ class DashboardApp:
         self._refresh_chart_mode_buttons()
         self._refresh_metric_mode_buttons()
         self._build_jobs_lane()
-        self._build_tasks_lane()
+        self._build_worktrees_lane()
         self._refresh_tab_buttons()
         self._render_active_tab()
 
@@ -1021,107 +1038,94 @@ class DashboardApp:
         self.jobs_rows_container.pack(fill="both", expand=True)
         self.jobs_rows_container.bind("<MouseWheel>", self._on_jobs_mousewheel)
 
-    def _build_tasks_lane(self) -> None:
-        self.tasks_body = ttk.Frame(self.content_stack, style="BodyPanel.TFrame", padding=(16, 14))
+    def _build_worktrees_lane(self) -> None:
+        # Task-0016 (D1=replace): this lane replaces the old TASKS tab's task
+        # stream/detail/dispatch-pause-poke surface with the worktree-pool management
+        # surface. The task lifecycle now lives on the GitHub Issues queue surface; this
+        # tab is the backend worktree pool the operator drives.
+        self.worktrees_body = ttk.Frame(self.content_stack, style="BodyPanel.TFrame", padding=(16, 14))
 
-        header = ttk.Frame(self.tasks_body, style="BodyPanel.TFrame")
+        header = ttk.Frame(self.worktrees_body, style="BodyPanel.TFrame")
         header.pack(fill="x", pady=(0, 12))
         header.columnconfigure(0, weight=1)
         title_copy = ttk.Frame(header, style="BodyPanel.TFrame")
         title_copy.grid(row=0, column=0, sticky="w")
-        ttk.Label(title_copy, text="Tasks", style="ChartTitle.TLabel").pack(anchor="w")
-        self.tasks_freshness_label = ttk.Label(
+        ttk.Label(title_copy, text="Worktrees", style="ChartTitle.TLabel").pack(anchor="w")
+        self.worktrees_freshness_label = ttk.Label(
             title_copy,
-            text="Committed work has not been refreshed yet.",
+            text="The worktree pool has not been refreshed yet.",
             style="Status.TLabel",
         )
-        self.tasks_freshness_label.pack(anchor="w", pady=(4, 0))
-        self.tasks_refresh_button = ttk.Button(
+        self.worktrees_freshness_label.pack(anchor="w", pady=(4, 0))
+        self.worktrees_refresh_button = ttk.Button(
             header,
             text="REFRESH STATUS",
             style="Quiet.TButton",
-            command=self.refresh_tasks_data,
+            command=self.refresh_worktrees_data,
         )
-        self.tasks_refresh_button.grid(row=0, column=1, sticky="e")
+        self.worktrees_refresh_button.grid(row=0, column=1, sticky="e")
 
-        summary_row = ttk.Frame(self.tasks_body, style="BodyPanel.TFrame")
+        toolbar = ttk.Frame(self.worktrees_body, style="Shell.TFrame", padding=(10, 10))
+        toolbar.pack(fill="x", pady=(0, 12))
+        ttk.Label(toolbar, text="REPO", style="Tiny.TLabel").pack(side="left", padx=(0, 6))
+        self.worktrees_repo_filter_var = tk.StringVar(value=ALL_REPOS_OPTION)
+        self.worktrees_repo_combo = ttk.Combobox(
+            toolbar,
+            textvariable=self.worktrees_repo_filter_var,
+            state="readonly",
+            width=28,
+            style="Worktrees.TCombobox",
+            values=[ALL_REPOS_OPTION],
+        )
+        self.worktrees_repo_combo.pack(side="left", padx=(0, 12))
+        self.worktrees_repo_combo.bind("<<ComboboxSelected>>", self._on_worktrees_repo_filter_changed)
+        self.worktrees_create_button = ttk.Button(
+            toolbar,
+            text="CREATE WORKTREE",
+            style="Accent.TButton",
+            command=self.create_worktree_for_selected_repo,
+        )
+        self.worktrees_create_button.pack(side="right")
+
+        summary_row = ttk.Frame(self.worktrees_body, style="BodyPanel.TFrame")
         summary_row.pack(fill="x", pady=(0, 12))
-        self.tasks_summary_values: dict[str, ttk.Label] = {}
-        for column, (key, title) in enumerate(TASK_SUMMARY_CARDS):
+        self.worktrees_summary_values: dict[str, ttk.Label] = {}
+        for column, (key, title) in enumerate(
+            (("total", "POOL SIZE"), ("allocated", "ALLOCATED"), ("idle", "IDLE"))
+        ):
             summary_row.columnconfigure(column, weight=1)
-            self.tasks_summary_values[key] = self._build_tasks_summary_card(summary_row, column, title, "0")
+            self.worktrees_summary_values[key] = self._build_worktrees_summary_card(
+                summary_row, column, title, "0"
+            )
 
-        self.tasks_split = ttk.Frame(self.tasks_body, style="BodyPanel.TFrame")
-        self.tasks_split.pack(fill="both", expand=True)
-        self.tasks_split.columnconfigure(0, weight=3)
-        self.tasks_split.columnconfigure(1, weight=2)
-        self.tasks_split.rowconfigure(0, weight=1)
-
-        self.tasks_stream_shell = ttk.Frame(self.tasks_split, style="Shell.TFrame", padding=(10, 10))
-        self.tasks_stream_shell.grid(row=0, column=0, sticky="nsew", padx=(0, 12))
-        self.tasks_scroll_canvas = tk.Canvas(
-            self.tasks_stream_shell,
+        stream_shell = ttk.Frame(self.worktrees_body, style="Shell.TFrame", padding=(10, 10))
+        stream_shell.pack(fill="both", expand=True)
+        self.worktrees_scroll_canvas = tk.Canvas(
+            stream_shell,
             bg="#1c2026",
             highlightthickness=0,
             borderwidth=0,
         )
-        self.tasks_scroll_canvas.pack(side="left", fill="both", expand=True)
-        self.tasks_scrollbar = ttk.Scrollbar(
-            self.tasks_stream_shell,
+        self.worktrees_scroll_canvas.pack(side="left", fill="both", expand=True)
+        self.worktrees_scrollbar = ttk.Scrollbar(
+            stream_shell,
             orient="vertical",
-            command=self.tasks_scroll_canvas.yview,
+            command=self.worktrees_scroll_canvas.yview,
         )
-        self.tasks_scrollbar.pack(side="right", fill="y")
-        self.tasks_scroll_canvas.configure(yscrollcommand=self.tasks_scrollbar.set)
-        self.tasks_rows_content = ttk.Frame(self.tasks_scroll_canvas, style="Shell.TFrame")
-        self.tasks_scroll_window = self.tasks_scroll_canvas.create_window(
+        self.worktrees_scrollbar.pack(side="right", fill="y")
+        self.worktrees_scroll_canvas.configure(yscrollcommand=self.worktrees_scrollbar.set)
+        self.worktrees_rows_content = ttk.Frame(self.worktrees_scroll_canvas, style="Shell.TFrame")
+        self.worktrees_scroll_window = self.worktrees_scroll_canvas.create_window(
             (0, 0),
-            window=self.tasks_rows_content,
+            window=self.worktrees_rows_content,
             anchor="nw",
         )
-        self.tasks_rows_content.bind("<Configure>", self._refresh_tasks_scroll_region)
-        self.tasks_scroll_canvas.bind("<Configure>", self._resize_tasks_scroll_content)
-        self.tasks_scroll_canvas.bind("<MouseWheel>", self._on_tasks_mousewheel)
-        self.tasks_rows_content.bind("<MouseWheel>", self._on_tasks_mousewheel)
+        self.worktrees_rows_content.bind("<Configure>", self._refresh_worktrees_scroll_region)
+        self.worktrees_scroll_canvas.bind("<Configure>", self._resize_worktrees_scroll_content)
+        self.worktrees_scroll_canvas.bind("<MouseWheel>", self._on_worktrees_mousewheel)
+        self.worktrees_rows_content.bind("<MouseWheel>", self._on_worktrees_mousewheel)
 
-        self.tasks_detail_shell = ttk.Frame(self.tasks_split, style="Shell.TFrame", padding=(14, 12))
-        self.tasks_detail_shell.grid(row=0, column=1, sticky="nsew")
-        self.tasks_detail_title = ttk.Label(self.tasks_detail_shell, text="Select a task", style="ChartTitle.TLabel")
-        self.tasks_detail_title.pack(anchor="w")
-        self.tasks_detail_meta = ttk.Label(
-            self.tasks_detail_shell,
-            text="Committed task details will appear here.",
-            style="Status.TLabel",
-            wraplength=330,
-            justify="left",
-        )
-        self.tasks_detail_meta.pack(anchor="w", pady=(4, 12))
-        self.tasks_detail_canvas = tk.Canvas(
-            self.tasks_detail_shell,
-            bg="#1c2026",
-            highlightthickness=0,
-            borderwidth=0,
-        )
-        self.tasks_detail_canvas.pack(side="left", fill="both", expand=True)
-        self.tasks_detail_scrollbar = ttk.Scrollbar(
-            self.tasks_detail_shell,
-            orient="vertical",
-            command=self.tasks_detail_canvas.yview,
-        )
-        self.tasks_detail_scrollbar.pack(side="right", fill="y")
-        self.tasks_detail_canvas.configure(yscrollcommand=self.tasks_detail_scrollbar.set)
-        self.tasks_detail_content = ttk.Frame(self.tasks_detail_canvas, style="Shell.TFrame")
-        self.tasks_detail_window = self.tasks_detail_canvas.create_window(
-            (0, 0),
-            window=self.tasks_detail_content,
-            anchor="nw",
-        )
-        self.tasks_detail_content.bind("<Configure>", self._refresh_tasks_detail_scroll_region)
-        self.tasks_detail_canvas.bind("<Configure>", self._resize_tasks_detail_content)
-        self.tasks_detail_canvas.bind("<MouseWheel>", self._on_tasks_mousewheel)
-        self.tasks_detail_content.bind("<MouseWheel>", self._on_tasks_mousewheel)
-
-    def _build_tasks_summary_card(
+    def _build_worktrees_summary_card(
         self,
         parent: ttk.Frame,
         column: int,
@@ -1129,7 +1133,7 @@ class DashboardApp:
         value: str,
     ) -> ttk.Label:
         card = ttk.Frame(parent, style="Card.TFrame", padding=(12, 10))
-        card.grid(row=0, column=column, sticky="nsew", padx=(0, 10) if column < len(TASK_SUMMARY_CARDS) - 1 else (0, 0))
+        card.grid(row=0, column=column, sticky="nsew", padx=(0, 10) if column < 2 else (0, 0))
         ttk.Label(card, text=title, style="MetricTitle.TLabel").pack(anchor="w")
         value_label = ttk.Label(card, text=value, style="MetricValue.TLabel")
         value_label.pack(anchor="w", pady=(8, 0))
@@ -1153,8 +1157,8 @@ class DashboardApp:
         self.active_tab = tab_id
         if tab_id == "jobs":
             self._prime_jobs_snapshot()
-        if tab_id == "tasks":
-            self._prime_tasks_snapshot()
+        if tab_id == "worktrees":
+            self._prime_worktrees_snapshot()
         # Task-0014: re-apply the tab-aware geometry on every tab change. This is a
         # cheap geometry-only call and must NOT rebuild, re-aggregate, or re-fetch
         # tab data (Task-0013 cheap show/hide behavior is preserved).
@@ -1165,16 +1169,16 @@ class DashboardApp:
         self._refresh_tab_buttons()
         if self.active_tab == "jobs":
             self.usage_body.pack_forget()
-            self.tasks_body.pack_forget()
+            self.worktrees_body.pack_forget()
             self.jobs_body.pack(fill="both", expand=True)
             return
-        if self.active_tab == "tasks":
+        if self.active_tab == "worktrees":
             self.usage_body.pack_forget()
             self.jobs_body.pack_forget()
-            self.tasks_body.pack(fill="both", expand=True)
+            self.worktrees_body.pack(fill="both", expand=True)
             return
         self.jobs_body.pack_forget()
-        self.tasks_body.pack_forget()
+        self.worktrees_body.pack_forget()
         self.usage_body.pack(fill="both", expand=True)
 
     def _refresh_tab_buttons(self) -> None:
@@ -1187,323 +1191,355 @@ class DashboardApp:
                 bg=TAB_ACTIVE_UNDERLINE if is_active else HEADER_BACKGROUND,
             )
 
-    def refresh_tasks_data(self) -> None:
-        try:
-            self.tasks_snapshot = fetch_tasks_snapshot(self.tasks_backend_url)
-            self.tasks_status_message = "Tasks state refreshed from orchestration backend."
-            if self.active_tab == "tasks":
-                self.status_label.configure(text=self.tasks_status_message)
-        except Exception as exc:
-            self.tasks_snapshot = tasks_backend_error_snapshot(str(exc))
-            self.tasks_status_message = f"Tasks error: {exc}"
-            self.status_label.configure(text=self.tasks_status_message)
-        self._render_tasks_snapshot()
+    def refresh_worktrees_data(self) -> None:
+        self._reload_worktrees_snapshot(refreshed=True)
+        self._render_worktrees_snapshot()
 
-    def _prime_tasks_snapshot(self) -> None:
-        existing_tasks = list(self.tasks_snapshot.get("tasks", []))
-        if existing_tasks:
+    def _prime_worktrees_snapshot(self) -> None:
+        if list(self.worktrees_snapshot.get("worktrees", [])):
+            self._render_worktrees_snapshot()
             return
-        try:
-            self.tasks_snapshot = fetch_tasks_snapshot(self.tasks_backend_url)
-            self.tasks_status_message = "Tasks state loaded from orchestration backend."
-        except Exception as exc:
-            self.tasks_snapshot = tasks_backend_error_snapshot(str(exc))
-            self.tasks_status_message = f"Tasks error: {exc}"
-        self._render_tasks_snapshot()
+        self._reload_worktrees_snapshot(refreshed=False)
+        self._render_worktrees_snapshot()
 
-    def _render_tasks_snapshot(self) -> None:
-        snapshot = self.tasks_snapshot
-        summary = dict(snapshot.get("summary", {}))
-        tasks = [task for task in list(snapshot.get("tasks", [])) if isinstance(task, dict)]
-        for key, _title in TASK_SUMMARY_CARDS:
-            self.tasks_summary_values[key].configure(text=f"{int(summary.get(key, 0)):02d}")
-        self.tasks_freshness_label.configure(
-            text=f"{snapshot.get('message', self.tasks_status_message)} Last refresh: {format_tasks_timestamp(snapshot.get('last_refreshed_at') or snapshot.get('generated_at'))}."
+    def _reload_worktrees_snapshot(self, refreshed: bool, keep_status: bool = False) -> None:
+        # keep_status=True is used after a mutating action so the action's own outcome
+        # message (e.g. an allocated-Destroy rejection) is NOT overwritten by a generic
+        # "pool refreshed" line; the action sets the status itself after the reload.
+        try:
+            self.worktrees_snapshot = fetch_pool_snapshot(self.worktrees_backend_url)
+            if not keep_status:
+                self.worktrees_status_message = (
+                    "Worktree pool refreshed from orchestration backend."
+                    if refreshed
+                    else "Worktree pool loaded from orchestration backend."
+                )
+        except Exception as exc:
+            self.worktrees_snapshot = worktrees_backend_error_snapshot(str(exc))
+            if not keep_status:
+                self.worktrees_status_message = f"Worktrees error: {exc}"
+        # The repo filter is sourced from the registry; reload it alongside the pool. A
+        # repo-list failure leaves the pool readable with an All-repos-only dropdown.
+        try:
+            self.worktrees_repos = fetch_repos(self.worktrees_backend_url)
+        except Exception:
+            self.worktrees_repos = []
+        self._refresh_repo_filter_options()
+        if self.active_tab == "worktrees" and not keep_status:
+            self.status_label.configure(text=self.worktrees_status_message)
+
+    def _refresh_repo_filter_options(self) -> None:
+        options = repo_filter_options(self.worktrees_repos)
+        self.worktrees_repo_combo.configure(values=options)
+        if self.worktrees_repo_filter not in options:
+            self.worktrees_repo_filter = ALL_REPOS_OPTION
+        self.worktrees_repo_filter_var.set(self.worktrees_repo_filter)
+
+    def _on_worktrees_repo_filter_changed(self, _event=None) -> None:
+        self.worktrees_repo_filter = self.worktrees_repo_filter_var.get()
+        # Filtering is a view-only re-render of the already-loaded snapshot; it performs
+        # no backend mutation.
+        self._render_worktrees_snapshot()
+
+    def _visible_worktrees(self) -> list[dict[str, object]]:
+        worktrees = [
+            worktree
+            for worktree in list(self.worktrees_snapshot.get("worktrees", []))
+            if isinstance(worktree, dict)
+        ]
+        return filter_worktrees_by_repo(worktrees, self.worktrees_repo_filter, self.worktrees_repos)
+
+    def _render_worktrees_snapshot(self) -> None:
+        visible = self._visible_worktrees()
+        counts = worktree_summary_counts(visible)
+        for key in ("total", "allocated", "idle"):
+            self.worktrees_summary_values[key].configure(text=f"{int(counts.get(key, 0)):02d}")
+        self.worktrees_freshness_label.configure(
+            text=str(self.worktrees_snapshot.get("message", self.worktrees_status_message))
         )
 
-        for child in self.tasks_rows_content.winfo_children():
+        for child in self.worktrees_rows_content.winfo_children():
             child.destroy()
 
-        if not tasks:
+        if not visible:
             ttk.Label(
-                self.tasks_rows_content,
-                text=self.tasks_status_message,
+                self.worktrees_rows_content,
+                text=self.worktrees_status_message,
                 style="Status.TLabel",
-                wraplength=500,
+                wraplength=760,
                 justify="left",
             ).pack(anchor="w", padx=12, pady=(12, 0))
-            self.tasks_detail_task_id = None
-            self._show_empty_task_details()
             return
 
-        if self.tasks_detail_task_id not in {str(task.get("task_id")) for task in tasks}:
-            self.tasks_detail_task_id = first_task_id(tasks)
+        for worktree in visible:
+            self._build_worktree_row(worktree)
 
-        selected_task = None
-        for group, group_tasks in group_tasks_for_stream(tasks).items():
-            group_label = ttk.Label(self.tasks_rows_content, text=group.upper(), style="Tiny.TLabel")
-            group_label.pack(anchor="w", padx=4, pady=(4, 6))
-            group_label.bind("<MouseWheel>", self._on_tasks_mousewheel)
-            for task in group_tasks:
-                if str(task.get("task_id")) == self.tasks_detail_task_id:
-                    selected_task = task
-                self._build_task_row(task)
-
-        if selected_task is not None:
-            self._show_task_details(selected_task)
-        else:
-            self._show_empty_task_details()
-
-    def _build_task_row(self, task: dict[str, object]) -> None:
-        is_selected = str(task.get("task_id")) == self.tasks_detail_task_id
-        row_bg = "#202833" if is_selected else "#181c22"
-        row = tk.Frame(self.tasks_rows_content, bg=row_bg, padx=10, pady=9)
+    def _build_worktree_row(self, worktree: dict[str, object]) -> None:
+        # Allocated vs idle is a perceivable background-color distinction (REG-010), not
+        # just a text label.
+        row_bg = worktree_status_background(worktree)
+        accent_color = worktree_status_color(worktree)
+        row = tk.Frame(self.worktrees_rows_content, bg=row_bg, padx=10, pady=9)
         row.pack(fill="x", pady=(0, 8))
-        row.bind("<Button-1>", lambda _event, payload=task: self.select_task_detail(payload))
-        row.bind("<MouseWheel>", self._on_tasks_mousewheel)
+        row.bind("<MouseWheel>", self._on_worktrees_mousewheel)
 
-        accent = tk.Frame(row, bg=task_state_color(task), width=3)
+        accent = tk.Frame(row, bg=accent_color, width=3)
         accent.pack(side="left", fill="y", padx=(0, 10))
-        accent.bind("<Button-1>", lambda _event, payload=task: self.select_task_detail(payload))
-        accent.bind("<MouseWheel>", self._on_tasks_mousewheel)
+        accent.bind("<MouseWheel>", self._on_worktrees_mousewheel)
 
         content = tk.Frame(row, bg=row_bg)
         content.pack(side="left", fill="both", expand=True)
-        title = tk.Label(
-            content,
-            text=str(task.get("title") or task.get("task_id")),
-            bg=row_bg,
-            fg="#dfe2eb",
-            font=("Space Grotesk", 11, "bold"),
-            anchor="w",
-            justify="left",
-            wraplength=300,
-        )
-        title.pack(anchor="w", fill="x")
+
+        head = tk.Frame(content, bg=row_bg)
+        head.pack(anchor="w", fill="x")
         chip = tk.Label(
-            content,
-            text=str(task.get("state_label", "Unknown")).upper(),
+            head,
+            text=worktree_status_label(worktree),
             bg="#10141a",
-            fg=task_state_color(task),
+            fg=accent_color,
             padx=8,
             pady=3,
             font=("Space Grotesk", 8, "bold"),
         )
-        chip.pack(anchor="w", pady=(5, 0))
-        summary = tk.Label(
-            content,
-            text=str(task.get("meaning_summary") or ""),
+        chip.pack(side="left")
+        repo_label = tk.Label(
+            head,
+            text=str(worktree.get("repo") or "unknown repo"),
             bg=row_bg,
-            fg="#9fbdcc",
-            font=("Inter", 9),
+            fg="#dfe2eb",
+            font=("Space Grotesk", 11, "bold"),
             anchor="w",
-            justify="left",
-            wraplength=300,
         )
-        summary.pack(anchor="w", pady=(4, 0), fill="x")
-        meta_text = f"{task.get('provenance_label', 'Authored')} | {task.get('freshness_label', 'Freshness unknown')} | {task.get('reason', '')}"
-        meta = tk.Label(
-            content,
-            text=meta_text,
-            bg=row_bg,
-            fg="#6e8798",
-            font=("Inter", 8),
-            anchor="w",
-            justify="left",
-            wraplength=300,
-        )
-        meta.pack(anchor="w", pady=(5, 0), fill="x")
-        for widget in (content, title, summary, meta, chip):
-            widget.bind("<Button-1>", lambda _event, payload=task: self.select_task_detail(payload))
-            widget.bind("<MouseWheel>", self._on_tasks_mousewheel)
+        repo_label.pack(side="left", padx=(10, 0))
 
-    def select_task_detail(self, task: dict[str, object]) -> None:
-        self.tasks_detail_task_id = str(task.get("task_id") or "")
-        self._render_tasks_snapshot()
-
-    def _show_empty_task_details(self) -> None:
-        self.tasks_detail_title.configure(text="No committed task selected")
-        self.tasks_detail_meta.configure(text="The Tasks tab will show committed task context when backend readback is available.")
-        for child in self.tasks_detail_content.winfo_children():
-            child.destroy()
-        ttk.Label(
-            self.tasks_detail_content,
-            text="Backend unavailable, stale, loading, and empty states keep the cockpit visible without pretending unknown state is healthy.",
-            style="Status.TLabel",
-            wraplength=330,
-            justify="left",
-        ).pack(anchor="w")
-
-    def _show_task_details(self, task: dict[str, object]) -> None:
-        self.tasks_detail_title.configure(text=str(task.get("title") or task.get("task_id")))
-        self.tasks_detail_meta.configure(
-            text=f"{task.get('task_id', '')} | {task.get('provenance_label', 'Authored')} | {task.get('state_label', 'Unknown')}"
-        )
-        for child in self.tasks_detail_content.winfo_children():
-            child.destroy()
-
-        for title, value in task_detail_sections(task):
-            section = ttk.Frame(self.tasks_detail_content, style="Shell.TFrame")
-            section.pack(fill="x", pady=(0, 10))
-            ttk.Label(section, text=title.upper(), style="Tiny.TLabel").pack(anchor="w")
-            ttk.Label(
-                section,
-                text=value,
-                style="Status.TLabel",
-                wraplength=330,
+        for label, value in worktree_detail_lines(worktree):
+            line = tk.Label(
+                content,
+                text=f"{label}: {value}",
+                bg=row_bg,
+                fg="#9fbdcc" if label in ("Repo", "Local dir", "ID") else "#c3f5ff",
+                font=("Inter", 9),
+                anchor="w",
                 justify="left",
-            ).pack(anchor="w", pady=(3, 0))
-
-        artifacts = [artifact for artifact in list(task.get("artifacts", [])) if isinstance(artifact, dict)]
-        if artifacts:
-            artifact_section = ttk.Frame(self.tasks_detail_content, style="Shell.TFrame")
-            artifact_section.pack(fill="x", pady=(0, 10))
-            ttk.Label(artifact_section, text="ARTIFACTS", style="Tiny.TLabel").pack(anchor="w")
-            for artifact in artifacts[:5]:
-                ttk.Label(
-                    artifact_section,
-                    text=f"{artifact.get('label', 'Artifact')}: {artifact.get('uri', '')}",
-                    style="Status.TLabel",
-                    wraplength=330,
-                    justify="left",
-                ).pack(anchor="w", pady=(3, 0))
-
-        action_section = ttk.Frame(self.tasks_detail_content, style="Shell.TFrame")
-        action_section.pack(fill="x")
-        ttk.Label(action_section, text="ACTIONS", style="Tiny.TLabel").pack(anchor="w", pady=(0, 6))
-        for action in [item for item in list(task.get("actions", [])) if isinstance(item, dict)]:
-            button = ttk.Button(
-                action_section,
-                text=str(action.get("label", "Action")),
-                style="Quiet.TButton",
-                command=lambda payload=action: self.execute_task_action(payload),
+                wraplength=720,
             )
-            if not bool(action.get("allowed")):
-                button.state(["disabled"])
-            button.pack(side="left", padx=(0, 6), pady=(0, 6))
+            line.pack(anchor="w", pady=(4, 0), fill="x")
+            line.bind("<MouseWheel>", self._on_worktrees_mousewheel)
 
-    def execute_task_action(self, action: dict[str, object]) -> None:
-        label = str(action.get("label") or "Action")
-        backend_action = str(action.get("backend_action") or "")
-        try:
-            if backend_action == "dispatch":
-                task_id = str(action.get("task_id") or "")
-                if not task_id:
-                    raise ValueError("Dispatch requires a task id.")
-                dispatch_task(task_id, self.tasks_backend_url)
-                self.tasks_snapshot = fetch_tasks_snapshot(self.tasks_backend_url)
-                self.tasks_status_message = f"Dispatch requested for {task_id}."
-            elif backend_action in {"poke", "interrupt", "retry-workload"}:
-                run_id = str(action.get("run_id") or "")
-                if not run_id:
-                    raise ValueError(f"{label} requires an active task-run id.")
-                if backend_action == "poke":
-                    poke_task_run(run_id, self.tasks_backend_url)
-                elif backend_action == "interrupt":
-                    pause_task_run(run_id, self.tasks_backend_url)
-                else:
-                    retry_task_run_workload(run_id, self.tasks_backend_url)
-                self.tasks_snapshot = fetch_tasks_snapshot(self.tasks_backend_url)
-                self.tasks_status_message = f"{label} requested for {run_id}."
-            elif backend_action == "open":
-                self._open_task_launch_target(dict(action.get("target", {})))
-                self.tasks_status_message = f"{label} opened."
-            else:
-                reason = str(action.get("reason") or "Backend did not expose a concrete action contract.")
-                self.tasks_status_message = f"{label}: {reason}"
-        except Exception as exc:
-            self.tasks_status_message = f"{label} failed: {exc}"
-            try:
-                self.tasks_snapshot = fetch_tasks_snapshot(self.tasks_backend_url)
-            except Exception:
-                pass
-        self.status_label.configure(text=self.tasks_status_message)
-        self._render_tasks_snapshot()
+        controls = tk.Frame(content, bg=row_bg)
+        controls.pack(anchor="w", pady=(8, 0), fill="x")
+        self._build_worktree_row_controls(controls, worktree)
 
-    def _open_task_launch_target(self, target: dict[str, object]) -> None:
-        command = target.get("command")
-        uri = str(target.get("uri") or "").strip()
-        launch_error: Exception | None = None
-        if isinstance(command, list) and command:
-            argv = [str(part) for part in command if str(part).strip()]
-            if argv and DashboardApp._is_allowed_launch_command(argv[0]):
-                resolved = DashboardApp._resolve_allowed_launch_command(argv[0])
-                if resolved:
-                    launch_argv = [resolved, *argv[1:]]
-                    kwargs: dict[str, object] = {}
-                    if hasattr(subprocess, "CREATE_NO_WINDOW"):
-                        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
-                    try:
-                        subprocess.Popen(launch_argv, **kwargs)
-                        return
-                    except OSError as exc:
-                        launch_error = exc
-        if uri:
-            uri = DashboardApp._normalize_launch_uri(uri)
-            if hasattr(os, "startfile"):
-                os.startfile(uri)  # type: ignore[attr-defined]
-                return
-            subprocess.Popen(["xdg-open", uri])
+        for widget in (content, head, chip, repo_label, controls):
+            widget.bind("<MouseWheel>", self._on_worktrees_mousewheel)
+
+    def _build_worktree_row_controls(self, parent: tk.Frame, worktree: dict[str, object]) -> None:
+        worktree_id = str(worktree.get("worktree_id") or "")
+        worktree_path = str(worktree.get("worktree_path") or "")
+        ttk.Button(
+            parent,
+            text="COPY PATH",
+            style="Quiet.TButton",
+            command=lambda path=worktree_path: self.copy_worktree_path(path),
+        ).pack(side="left", padx=(0, 6))
+
+        if is_allocated(worktree):
+            run_id = str(worktree.get("run_id") or "")
+            task_id = str(worktree.get("task_id") or "")
+            ttk.Button(
+                parent,
+                text="EJECT",
+                style="Quiet.TButton",
+                command=lambda rid=run_id, wid=worktree_id: self.eject_worktree_action(rid, wid),
+            ).pack(side="left", padx=(0, 6))
+            dequeue_button = ttk.Button(
+                parent,
+                text="DEQUEUE",
+                style="Quiet.TButton",
+                command=lambda tid=task_id: self.dequeue_task_action(tid),
+            )
+            if not task_id:
+                dequeue_button.state(["disabled"])
+            dequeue_button.pack(side="left", padx=(0, 6))
+        else:
+            ttk.Button(
+                parent,
+                text="ASSIGN TASK",
+                style="Accent.TButton",
+                command=lambda wt=dict(worktree): self.open_assign_popup(wt),
+            ).pack(side="left", padx=(0, 6))
+            ttk.Button(
+                parent,
+                text="DESTROY",
+                style="Quiet.TButton",
+                command=lambda wid=worktree_id: self.destroy_worktree_action(wid),
+            ).pack(side="left", padx=(0, 6))
+
+    def copy_worktree_path(self, path: str) -> None:
+        if not path:
+            self._set_worktrees_status("No worktree path to copy.")
             return
-        if launch_error is not None:
-            raise launch_error
-        raise ValueError("No launch target URI or allowed command was provided.")
+        self.overlay.clipboard_clear()
+        self.overlay.clipboard_append(path)
+        self._set_worktrees_status(f"Copied worktree path to clipboard: {path}")
 
-    @staticmethod
-    def _is_allowed_launch_command(executable: str) -> bool:
-        name = Path(executable).name.lower()
-        return name in ALLOWED_LAUNCH_COMMANDS
+    def create_worktree_for_selected_repo(self) -> None:
+        repo_id = self._selected_repo_id()
+        if not repo_id:
+            self._set_worktrees_status("Select a repo in the filter before creating a worktree.")
+            return
+        try:
+            create_worktree(repo_id, self.worktrees_backend_url)
+            self._reload_worktrees_snapshot(refreshed=True, keep_status=True)
+            self._set_worktrees_status(f"Created a new idle worktree in {repo_id}.")
+        except Exception as exc:
+            self._reload_worktrees_snapshot(refreshed=True, keep_status=True)
+            self._set_worktrees_status(f"Create failed: {exc}")
+        self._render_worktrees_snapshot()
 
-    @staticmethod
-    def _resolve_allowed_launch_command(executable: str) -> str:
-        name = Path(executable).name.lower()
-        if name not in ALLOWED_LAUNCH_COMMANDS:
-            return ""
-        if Path(executable).exists():
-            return executable
-        resolved = shutil.which(executable)
-        if resolved:
-            return resolved
-        for fallback in LAUNCH_COMMAND_FALLBACKS.get(name, ()):
-            resolved = shutil.which(fallback)
-            if resolved:
-                return resolved
+    def eject_worktree_action(self, run_id: str, worktree_id: str) -> None:
+        try:
+            eject_worktree(run_id, worktree_id, self.worktrees_backend_url)
+            self._reload_worktrees_snapshot(refreshed=True, keep_status=True)
+            self._set_worktrees_status(f"Ejected {worktree_id}; it is idle and the task is dequeued.")
+        except Exception as exc:
+            self._reload_worktrees_snapshot(refreshed=True, keep_status=True)
+            self._set_worktrees_status(f"Eject failed: {exc}")
+        self._render_worktrees_snapshot()
+
+    def destroy_worktree_action(self, worktree_id: str) -> None:
+        try:
+            destroy_worktree(worktree_id, self.worktrees_backend_url)
+            self._reload_worktrees_snapshot(refreshed=True, keep_status=True)
+            self._set_worktrees_status(f"Destroyed idle worktree {worktree_id}.")
+        except Exception as exc:
+            # The backend rejects destroying an allocated worktree (409); surface it.
+            self._reload_worktrees_snapshot(refreshed=True, keep_status=True)
+            self._set_worktrees_status(f"Destroy failed: {exc}")
+        self._render_worktrees_snapshot()
+
+    def dequeue_task_action(self, task_id: str) -> None:
+        if not task_id:
+            self._set_worktrees_status("No task is bound to dequeue.")
+            return
+        repo_id = self._selected_repo_id()
+        try:
+            dequeue_task(repo_id, task_id, self.worktrees_backend_url)
+            self._reload_worktrees_snapshot(refreshed=True, keep_status=True)
+            self._set_worktrees_status(f"Dequeued {task_id} (Queue=Never); the issue stays open.")
+        except Exception as exc:
+            self._reload_worktrees_snapshot(refreshed=True, keep_status=True)
+            self._set_worktrees_status(f"Dequeue failed: {exc}")
+        self._render_worktrees_snapshot()
+
+    def open_assign_popup(self, worktree: dict[str, object]) -> None:
+        worktree_id = str(worktree.get("worktree_id") or "")
+        repo_for_assign = self._selected_repo_id() or str(worktree.get("repo") or "")
+        try:
+            tasks_snapshot = fetch_tasks_snapshot(self.worktrees_backend_url)
+        except Exception as exc:
+            self._set_worktrees_status(f"Could not load open tasks: {exc}")
+            return
+        options = open_task_options(tasks_snapshot)
+
+        popup = tk.Toplevel(self.overlay)
+        popup.title("Assign Task")
+        popup.configure(bg="#1c2026")
+        popup.transient(self.overlay)
+        popup.attributes("-topmost", True)
+        popup.geometry("420x420")
+
+        ttk.Label(
+            popup,
+            text=f"ASSIGN A TASK TO {worktree_id}",
+            style="Tiny.TLabel",
+        ).pack(anchor="w", padx=16, pady=(16, 4))
+
+        if not options:
+            ttk.Label(
+                popup,
+                text="No open tasks were returned by the backend (GET /api/v1/tasks).",
+                style="Status.TLabel",
+                wraplength=380,
+                justify="left",
+            ).pack(anchor="w", padx=16, pady=(8, 0))
+            ttk.Button(popup, text="CLOSE", style="Quiet.TButton", command=popup.destroy).pack(
+                anchor="e", padx=16, pady=12
+            )
+            return
+
+        list_shell = tk.Frame(popup, bg="#10141a")
+        list_shell.pack(fill="both", expand=True, padx=16, pady=(8, 8))
+        selection = tk.StringVar(value=options[0]["task_id"])
+        for option in options:
+            text = f"{option['task_id']}  -  {option['title']}"
+            if option["state"]:
+                text += f"  [{option['state']}]"
+            tk.Radiobutton(
+                list_shell,
+                text=text,
+                value=option["task_id"],
+                variable=selection,
+                bg="#10141a",
+                fg="#dfe2eb",
+                selectcolor="#173a44",
+                activebackground="#10141a",
+                activeforeground="#c3f5ff",
+                anchor="w",
+                justify="left",
+                wraplength=360,
+                font=("Inter", 9),
+            ).pack(anchor="w", fill="x", padx=8, pady=2)
+
+        button_row = tk.Frame(popup, bg="#1c2026")
+        button_row.pack(fill="x", padx=16, pady=(0, 14))
+        ttk.Button(button_row, text="CANCEL", style="Quiet.TButton", command=popup.destroy).pack(side="right")
+        ttk.Button(
+            button_row,
+            text="ASSIGN",
+            style="Accent.TButton",
+            command=lambda: self._confirm_assign(popup, selection.get(), repo_for_assign, worktree_id),
+        ).pack(side="right", padx=(0, 8))
+
+    def _confirm_assign(self, popup: tk.Toplevel, task_id: str, repo: str, worktree_id: str) -> None:
+        popup.destroy()
+        if not task_id:
+            self._set_worktrees_status("Select a task to assign.")
+            return
+        try:
+            assign_worktree(task_id, repo, worktree_id, self.worktrees_backend_url)
+            self._reload_worktrees_snapshot(refreshed=True, keep_status=True)
+            self._set_worktrees_status(f"Assigned {task_id} to {worktree_id}; it is now allocated.")
+        except Exception as exc:
+            self._reload_worktrees_snapshot(refreshed=True, keep_status=True)
+            self._set_worktrees_status(f"Assign failed: {exc}")
+        self._render_worktrees_snapshot()
+
+    def _selected_repo_id(self) -> str:
+        selected = self.worktrees_repo_filter
+        if selected and selected != ALL_REPOS_OPTION:
+            return selected
+        if len(self.worktrees_repos) == 1:
+            return str(self.worktrees_repos[0].get("id") or "")
         return ""
 
-    @staticmethod
-    def _normalize_launch_uri(uri: str) -> str:
-        parsed = urlparse(uri)
-        if parsed.scheme.lower() != "file":
-            return uri
-        if parsed.netloc and parsed.netloc.lower() != "localhost":
-            path = f"//{parsed.netloc}{parsed.path}"
-        else:
-            path = parsed.path
-        path = unquote(path)
-        if len(path) >= 3 and path[0] == "/" and path[2] == ":":
-            path = path[1:]
-        return path.replace("/", os.sep)
+    def _set_worktrees_status(self, message: str) -> None:
+        self.worktrees_status_message = message
+        self.status_label.configure(text=message)
 
-    def _refresh_tasks_scroll_region(self, _event=None) -> None:
-        self.tasks_scroll_canvas.configure(scrollregion=self.tasks_scroll_canvas.bbox("all"))
+    def _refresh_worktrees_scroll_region(self, _event=None) -> None:
+        self.worktrees_scroll_canvas.configure(scrollregion=self.worktrees_scroll_canvas.bbox("all"))
 
-    def _resize_tasks_scroll_content(self, event) -> None:
-        self.tasks_scroll_canvas.itemconfigure(self.tasks_scroll_window, width=event.width)
+    def _resize_worktrees_scroll_content(self, event) -> None:
+        self.worktrees_scroll_canvas.itemconfigure(self.worktrees_scroll_window, width=event.width)
 
-    def _refresh_tasks_detail_scroll_region(self, _event=None) -> None:
-        self.tasks_detail_canvas.configure(scrollregion=self.tasks_detail_canvas.bbox("all"))
-
-    def _resize_tasks_detail_content(self, event) -> None:
-        self.tasks_detail_canvas.itemconfigure(self.tasks_detail_window, width=event.width)
-
-    def _on_tasks_mousewheel(self, event) -> str:
-        if self.active_tab != "tasks":
+    def _on_worktrees_mousewheel(self, event) -> str:
+        if self.active_tab != "worktrees":
             return "break"
         delta = event.delta
         if delta == 0:
             return "break"
-        target = self.tasks_detail_canvas if self._event_from_widget(event.widget, self.tasks_detail_shell) else self.tasks_scroll_canvas
-        target.yview_scroll(int(-delta / 120), "units")
+        self.worktrees_scroll_canvas.yview_scroll(int(-delta / 120), "units")
         return "break"
 
     def _event_from_widget(self, widget, ancestor) -> bool:
@@ -2560,7 +2596,7 @@ class DashboardApp:
         if artifact_dir is None:
             return
         artifact_dir.mkdir(parents=True, exist_ok=True)
-        if self.smoke_tab in {"usage", "jobs", "tasks"}:
+        if self.smoke_tab in {"usage", "jobs", "worktrees"}:
             self.select_tab(self.smoke_tab)
         if self.smoke_tab == "jobs":
             self.jobs_sync_button.invoke()
@@ -2617,35 +2653,27 @@ class DashboardApp:
                 ]
             )
         else:
-            selected_task = next(
-                (
-                    task
-                    for task in list(self.tasks_snapshot.get("tasks", []))
-                    if isinstance(task, dict) and str(task.get("task_id")) == str(self.tasks_detail_task_id)
-                ),
-                {},
-            )
-            action_labels = [
-                str(action.get("label"))
-                for action in list(selected_task.get("actions", []))
-                if isinstance(action, dict)
+            visible = self._visible_worktrees()
+            worktree_ids = [str(worktree.get("worktree_id") or "") for worktree in visible]
+            allocated_ids = [
+                str(worktree.get("worktree_id") or "") for worktree in visible if is_allocated(worktree)
             ]
-            provenance_labels = [
-                str(task.get("provenance_label"))
-                for task in list(self.tasks_snapshot.get("tasks", []))
-                if isinstance(task, dict)
+            idle_ids = [
+                str(worktree.get("worktree_id") or "")
+                for worktree in visible
+                if str(worktree.get("status") or "").lower() == "idle"
             ]
             summary_lines.extend(
                 [
-                    f"tasks_backend={self.tasks_backend_url}",
-                    f"tasks_needs_you={self.tasks_summary_values['needs_you'].cget('text')}",
-                    f"tasks_sleeping={self.tasks_summary_values['sleeping'].cget('text')}",
-                    f"tasks_running={self.tasks_summary_values['running'].cget('text')}",
-                    f"tasks_blocked={self.tasks_summary_values['blocked'].cget('text')}",
-                    f"tasks_ready={self.tasks_summary_values['ready'].cget('text')}",
-                    f"tasks_selected={self.tasks_detail_task_id}",
-                    f"tasks_selected_actions={','.join(action_labels)}",
-                    f"tasks_provenance_labels={','.join(provenance_labels)}",
+                    f"worktrees_backend={self.worktrees_backend_url}",
+                    f"worktrees_repo_filter={self.worktrees_repo_filter}",
+                    f"worktrees_repo_options={','.join(repo_filter_options(self.worktrees_repos))}",
+                    f"worktrees_total={self.worktrees_summary_values['total'].cget('text')}",
+                    f"worktrees_allocated={self.worktrees_summary_values['allocated'].cget('text')}",
+                    f"worktrees_idle={self.worktrees_summary_values['idle'].cget('text')}",
+                    f"worktrees_ids={','.join(worktree_ids)}",
+                    f"worktrees_allocated_ids={','.join(allocated_ids)}",
+                    f"worktrees_idle_ids={','.join(idle_ids)}",
                 ]
             )
         summary = "\n".join(summary_lines)

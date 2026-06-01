@@ -59,7 +59,7 @@ class ComputeOverlayGeometryTests(unittest.TestCase):
         # AC3
         pad = round(0.05 * SCREEN_H)
         expected = (WORK_AREA[3] - WORK_AREA[1]) - 2 * pad
-        for tab in ("jobs", "tasks"):
+        for tab in ("jobs", "worktrees"):
             _, height, _, _ = _parse(
                 compute_overlay_geometry(SCREEN_W, SCREEN_H, WORK_AREA, tab, 0.05)
             )
@@ -69,17 +69,17 @@ class ComputeOverlayGeometryTests(unittest.TestCase):
         # AC4: use a top-docked taskbar so wa_top != 0 (catches ignoring wa_top).
         work_area = (0, 48, 1920, 1080)
         pad = round(0.05 * SCREEN_H)
-        for tab in ("usage", "jobs", "tasks"):
+        for tab in ("usage", "jobs", "worktrees"):
             _, _, _, y = _parse(
                 compute_overlay_geometry(SCREEN_W, SCREEN_H, work_area, tab, 0.05)
             )
             self.assertEqual(y, work_area[1] + pad, tab)
 
     def test_taskbar_never_covered(self) -> None:
-        # AC5: jobs/tasks bottom == wa_bottom - pad <= wa_bottom (positive gap).
+        # AC5: jobs/worktrees bottom == wa_bottom - pad <= wa_bottom (positive gap).
         pad = round(0.05 * SCREEN_H)
         wa_bottom = WORK_AREA[3]
-        for tab in ("jobs", "tasks"):
+        for tab in ("jobs", "worktrees"):
             _, height, _, y = _parse(
                 compute_overlay_geometry(SCREEN_W, SCREEN_H, WORK_AREA, tab, 0.05)
             )
@@ -105,7 +105,7 @@ class ComputeOverlayGeometryTests(unittest.TestCase):
 
     def test_width_stays_980_for_all_tabs(self) -> None:
         # AC7: width is the 980 clamp on a wide screen and is never widened past it.
-        for tab in ("usage", "jobs", "tasks"):
+        for tab in ("usage", "jobs", "worktrees"):
             width, _, _, _ = _parse(
                 compute_overlay_geometry(SCREEN_W, SCREEN_H, WORK_AREA, tab, 0.05)
             )
@@ -113,7 +113,7 @@ class ComputeOverlayGeometryTests(unittest.TestCase):
         # On a narrow work area the width drops to the clamp value (min(980, ...)),
         # proving 980 is a ceiling and not a hardcoded constant.
         narrow = (0, 0, 900, 1080)
-        for tab in ("usage", "jobs", "tasks"):
+        for tab in ("usage", "jobs", "worktrees"):
             width, _, _, _ = _parse(
                 compute_overlay_geometry(900, SCREEN_H, narrow, tab, 0.05)
             )
@@ -138,7 +138,7 @@ class ComputeOverlayGeometryTests(unittest.TestCase):
         # screen_width (1920) into the x computation: that would yield x=900, not 780.
         work_area = (0, 0, 1800, 1080)
         margin_x = 40
-        for tab in ("usage", "jobs", "tasks"):
+        for tab in ("usage", "jobs", "worktrees"):
             width, _, x, _ = _parse(
                 compute_overlay_geometry(SCREEN_W, SCREEN_H, work_area, tab, 0.05)
             )
@@ -152,7 +152,7 @@ class SelectTabGeometryTests(unittest.TestCase):
         app = SimpleNamespace(
             active_tab="usage",
             _prime_jobs_snapshot=mock.Mock(),
-            _prime_tasks_snapshot=mock.Mock(),
+            _prime_worktrees_snapshot=mock.Mock(),
             _render_active_tab=mock.Mock(),
             _apply_overlay_geometry=mock.Mock(),
             refresh_data=mock.Mock(),
