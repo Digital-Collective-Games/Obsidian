@@ -1,0 +1,2 @@
+action=assign-popup
+idle_worktree=RepoX/wt-0002

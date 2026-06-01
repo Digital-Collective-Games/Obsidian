@@ -1,0 +1,3 @@
+action=details
+worktree=RepoX/wt-0001
+status=allocated

@@ -1,0 +1,12 @@
+action=copy
+target_worktree=RepoX/wt-0001
+backend_worktree_path=C:\Agent\CodexDashboard\Tracking\Task-0016\Testing\Runtime\reg-lane-fix\temp\cdxow\RepoX\wt-0001\wt-0001
+clipboard_contents=C:\Agent\CodexDashboard\Tracking\Task-0016\Testing\Runtime\reg-lane-fix\temp\cdxow\RepoX\wt-0001\wt-0001
+clipboard_matches_backend_path=True
+repo_filter=All repos
+repo_options=All repos,RepoX,RepoY
+visible_total=02
+visible_allocated=01
+visible_idle=01
+visible_ids=RepoX/wt-0001,RepoX/wt-0002
+status=Copied worktree path to clipboard: C:\Agent\CodexDashboard\Tracking\Task-0016\Testing\Runtime\reg-lane-fix\temp\cdxow\RepoX\wt-0001\wt-0001

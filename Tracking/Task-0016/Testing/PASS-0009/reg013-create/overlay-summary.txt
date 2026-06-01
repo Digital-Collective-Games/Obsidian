@@ -1,0 +1,10 @@
+action=create
+repo=RepoX
+new_worktree_ids=RepoX/wt-0003
+repo_filter=RepoX
+repo_options=All repos,RepoX,RepoY
+visible_total=03
+visible_allocated=01
+visible_idle=02
+visible_ids=RepoX/wt-0001,RepoX/wt-0002,RepoX/wt-0003
+status=Created a new idle worktree in RepoX.

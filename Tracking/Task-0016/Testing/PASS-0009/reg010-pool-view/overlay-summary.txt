@@ -1,0 +1,8 @@
+action=pool
+repo_filter=All repos
+repo_options=All repos,RepoX,RepoY
+visible_total=02
+visible_allocated=01
+visible_idle=01
+visible_ids=RepoX/wt-0001,RepoX/wt-0002
+status=Worktree pool loaded from orchestration backend.

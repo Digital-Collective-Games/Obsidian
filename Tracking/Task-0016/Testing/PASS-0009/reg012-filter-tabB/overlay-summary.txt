@@ -1,0 +1,8 @@
+action=filter
+repo_filter=RepoY
+repo_options=All repos,RepoX,RepoY
+visible_total=00
+visible_allocated=00
+visible_idle=00
+visible_ids=
+status=Worktree pool loaded from orchestration backend.
