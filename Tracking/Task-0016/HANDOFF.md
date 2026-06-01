@@ -84,7 +84,43 @@ Backend batch progress:
   no-bounce-back seam dequeues so the next poll does NOT re-dispatch, with a load-bearing
   variant that DOES bounce when the dequeue is skipped (AC13); endpoint Eject returns idle +
   dequeues #8. Full `go test ./...` green.
-- **Next:** PASS-0006 backend cross-cut (full `go test ./...` + server-only smoke).
+- **PASS-0006 — Backend cross-cut (full Go suite + server-only smoke) — DONE.** Full
+  `go test ./...` green under `backend/orchestration` (gofmt clean); a server-only smoke
+  ran Create → list → Assign → list → Eject → list → Dequeue → Destroy → list + repos read
+  on the isolated validation lane (`http://127.0.0.1:14318`) against a **throwaway** testbed
+  repo/registry (never the human's repo/data). Proof:
+  [Testing/PASS-0006/SERVER-ONLY-SMOKE.txt](./Testing/PASS-0006/SERVER-ONLY-SMOKE.txt),
+  [Testing/PASS-0006/PASS-0006-NOTES.md](./Testing/PASS-0006/PASS-0006-NOTES.md),
+  [Testing/PASS-0006-CHECKLIST.json](./Testing/PASS-0006-CHECKLIST.json). Live-confirmed:
+  Assign reuses the existing idle worktree (no fresh dir), Eject keeps the folder + returns
+  idle, Destroy removes the idle folder, repos read carries no `queue_workers`.
+
+## Backend batch checkpoint (PASS-0000…PASS-0006 complete)
+
+The backend half of Task-0016 is implemented, unit-tested green, server-smoke green, and
+committed/pushed on `master`. This run STOPS here for a **coordinator-arranged
+clean-context QA verdict on the backend batch** before the UI passes begin (the worker
+cannot create a clean QA lane; see "Process gaps"). The independent QA verdict is NOT
+claimed by this producer.
+
+**Remaining (UI passes, a later coordinator-arranged run):**
+
+- **PASS-0007** — Frontend foundation: rename `TASKS`→`WORKTREES`, replace the tab content,
+  `worktrees_backend.py` HTTP client + `worktrees_tab.py` pure helpers, read-only pool view
+  (allocated/idle color + repo + path), copy-path control, registry-sourced repo filter
+  (REG-010/011/012).
+- **PASS-0008** — Frontend mutating controls: Create / Assign popup / Eject / Destroy /
+  Dequeue wired to the [BE] endpoints (REG-013/014/015/016).
+- **PASS-0009** — Cross-cutting closure: the in-app `WORKTREES`-tab regression run
+  (REG-010…REG-016) + the REG-007/008/009 in-app re-run under the new model, on the
+  isolated validation / reg007 lanes; REG-003/REG-004 retirement note in `REGRESSION.md`
+  (UPDATE 4). These need a confirmed runnable Tk environment + a clean-context QA verdict
+  (coordinator-arranged) and the human-authenticated Chrome debug session for the REG-007
+  Ready flip.
+
+The new [BE] endpoints the UI consumes (verified live in the PASS-0006 smoke):
+`GET /api/v1/repos`, `GET /api/v1/worktrees` (full pool, §8 flat shape),
+`POST /api/v1/worktrees/{create,assign,eject,destroy,dequeue}`.
 
 ### Original planning resume point (superseded by the approval above)
 

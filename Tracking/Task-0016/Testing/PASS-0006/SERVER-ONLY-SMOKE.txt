@@ -1,0 +1,57 @@
+### 1. GET /api/v1/repos (registry-sourced, no queue_workers)  -> HTTP 502
+Response status code does not indicate success: 502 (Bad Gateway).
+
+### 2. GET /api/v1/worktrees (empty pool)  -> HTTP 200
+{"worktrees":[]}
+
+
+### 3. POST /api/v1/worktrees/create (idle wt-0001)  -> HTTP 201
+{"worktree_id":"repo-f00efa25ab1f/wt-0001","status":"idle","repo":"smoke","task_id":"","worktree_path":"C:\\Users\\gregs\\AppData\\Local\\Temp\\cdxow\\repo-f00efa25ab1f\\wt-0001\\wt-0001","run_gate_state":""}
+
+
+### 4. POST /api/v1/worktrees/create (idle wt-0002)  -> HTTP 201
+{"worktree_id":"repo-f00efa25ab1f/wt-0002","status":"idle","repo":"smoke","task_id":"","worktree_path":"C:\\Users\\gregs\\AppData\\Local\\Temp\\cdxow\\repo-f00efa25ab1f\\wt-0002\\wt-0002","run_gate_state":""}
+
+
+### 5. GET /api/v1/worktrees (two idle)  -> HTTP 200
+{"worktrees":[{"worktree_id":"repo-f00efa25ab1f/wt-0001","status":"idle","repo":"smoke","task_id":"","worktree_path":"C:\\Users\\gregs\\AppData\\Local\\Temp\\cdxow\\repo-f00efa25ab1f\\wt-0001\\wt-0001","run_gate_state":""},{"worktree_id":"repo-f00efa25ab1f/wt-0002","status":"idle","repo":"smoke","task_id":"","worktree_path":"C:\\Users\\gregs\\AppData\\Local\\Temp\\cdxow\\repo-f00efa25ab1f\\wt-0002\\wt-0002","run_gate_state":""}]}
+
+
+captured wt-0001 id=repo-f00efa25ab1f/wt-0001 path=C:\Users\gregs\AppData\Local\Temp\cdxow\repo-f00efa25ab1f\wt-0001\wt-0001
+### 6. POST /api/v1/worktrees/assign Task-0007 -> wt-0001  -> HTTP 202
+{"run_id":"taskrun--Task-0007--active","task_id":"Task-0007","workflow_id":"taskrun--Task-0007--active","temporal_execution_run_id":"019e83c6-3f79-7716-ae0d-633ce6a344b2","status":"active","state_envelope":{"state":"running","reason_code":"owned_lane_bootstrapped","state_summary":"Run bootstrapped the owned checkout and is ready for backend execution.","next_owner":"backend_worker","next_expected_event":"Execution worker records the next progress checkpoint.","suspicious_after":"2026-06-01T15:36:08.9898774Z","action_block_reasons":{"dispatch":[{"code":"active_run_exists","summary":"Dispatch is blocked while this run owns the current live story."}],"interrupt":null,"poke":[{"code":"run_not_suspicious_yet","summary":"Poke stays blocked until the run misses its next expected progress deadline."}]}},"meaning_summary":"Throwaway task for the Task-0016 server-only smoke.","attention":{"attention_level":"watch","attention_reason":"Run is active after owned-lane bootstrap.","attention_sort_key":"45-owned_lane_bootstrapped"},"actions":{"dispatch":{"allowed":false,"block_reasons":[{"code":"active_run_exists","summary":"Dispatch is blocked while this run owns the current live story."}]},"interrupt":{"allowed":true},"poke":{"allowed":false,"block_reasons":[{"code":"run_not_suspicious_yet","summary":"Poke stays blocked until the run misses its next expected progress deadline."}]}},"repo_lane":{"owned_repo_root":"C:\\Users\\gregs\\AppData\\Local\\Temp\\cdxow\\repo-f00efa25ab1f\\wt-0001\\wt-0001","checkout_mode":"git_worktree_detached","baseline_commit":"e4695482e23a92232298cf1c664678d74c006552","current_commit":"e4695482e23a92232298cf1c664678d74c006552","approved_restore_commit":"e4695482e23a92232298cf1c664678d74c006552","run_artifact_root":"C:\\Agent\\CodexDashboard\\Tracking\\Task-0016\\Testing\\Runtime\\smoke-testbed\\.runs\\taskruns\\Task-0007\\taskrun--Task-0007--active","bootstrap_artifact_path":"C:\\Agent\\CodexDashboard\\Tracking\\Task-0016\\Testing\\Runtime\\smoke-testbed\\.runs\\taskruns\\Task-0007\\taskrun--Task-0007--active\\owned-lane-bootstrap.json","reset_status":"restored","last_reset_target_commit":"e4695482e23a92232298cf1c664678d74c006552","last_reset_at":"2026-06-01T15:21:08.912116Z","binding":{"repo":"C:\\Agent\\CodexDashboard\\Tracking\\Task-0016\\Testing\\Runtime\\smoke-testbed","task_id":"Task-0007","worktree_path":"C:\\Users\\gregs\\AppData\\Local\\Temp\\cdxow\\repo-f00efa25ab1f\\wt-0001\\wt-0001","run_gate_state":"running"}},"last_progress_at":"2026-06-01T15:21:08.9898774Z","last_progress_summary":"Bootstrapped the owned checkout and recorded its current commit.","captured_task_snapshot":{"declared_worktree_root":"C:\\Agent\\CodexDashboard\\Tracking\\Task-0016\\Testing\\Runtime\\smoke-testbed","declared_task_root":"C:\\Agent\\CodexDashboard\\Tracking\\Task-0016\\Testing\\Runtime\\smoke-testbed\\Tracking\\Task-0007","declared_task_revision":"2e79e738614423b3422de256141877e68970f5af2d672de3033b35b8a326cd5b","declared_git_revision":"e4695482e23a92232298cf1c664678d74c006552","captured_at":"2026-06-01T15:21:09.0232008Z","files":[{"relative_path":"TASK.md","sha256":"4f9cff3adbbd668735850f546c9563ddff8ef3695a5c4de52b75b31c5d870196"},{"relative_path":"PLAN.md","sha256":"49a1235ae4495464e7caaf0f604fbfbbfdc5e3475e004ae9544bf400bba6ec36"},{"relative_path":"TASK-STATE.json","sha256":"128c4244d2dffacf5bb873b02f446e0cbae03a36a7514b8c7ebf108e0e88677e"}]},"doc_runtime_divergence_status":"in_sync","doc_runtime_divergence_summary":"Runtime task snapshot matches the declared task docs captured at dispatch.","deep_context":{"preferred_launch_target":{"kind":"task_artifact","label":"Task","uri":"file:///C:/Agent/CodexDashboard/Tracking/Task-0016/Testing/Runtime/smoke-testbed/Tracking/Task-0007/TASK.md","command":["code","C:\\Agent\\CodexDashboard\\Tracking\\Task-0016\\Testing\\Runtime\\smoke-testbed\\Tracking\\Task-0007\\TASK.md"],"preferred":true},"launch_targets":[{"kind":"task_artifact","label":"Task","uri":"file:///C:/Agent/CodexDashboard/Tracking/Task-0016/Testing/Runtime/smoke-testbed/Tracking/Task-0007/TASK.md","command":["code","C:\\Agent\\CodexDashboard\\Tracking\\Task-0016\\Testing\\Runtime\\smoke-testbed\\Tracking\\Task-0007\\TASK.md"],"preferred":true},{"kind":"task_artifact","label":"Task plan","uri":"file:///C:/Agent/CodexDashboard/Tracking/Task-0016/Testing/Runtime/smoke-testbed/Tracking/Task-0007/PLAN.md","command":["code","C:\\Agent\\CodexDashboard\\Tracking\\Task-0016\\Testing\\Runtime\\smoke-testbed\\Tracking\\Task-0007\\PLAN.md"]},{"kind":"owned_checkout","label":"Owned checkout","uri":"file:///C:/Users/gregs/AppData/Local/Temp/cdxow/repo-f00efa25ab1f/wt-0001/wt-0001","command":["code","C:\\Users\\gregs\\AppData\\Local\\Temp\\cdxow\\repo-f00efa25ab1f\\wt-0001\\wt-0001"]},{"kind":"run_artifact","label":"Run artifacts","uri":"file:///C:/Agent/CodexDashboard/Tracking/Task-0016/Testing/Runtime/smoke-testbed/.runs/taskruns/Task-0007/taskrun--Task-0007--active","command":["code","C:\\Agent\\CodexDashboard\\Tracking\\Task-0016\\Testing\\Runtime\\smoke-testbed\\.runs\\taskruns\\Task-0007\\taskrun--Task-0007--active"]},{"kind":"api_resource","label":"Active run API resource","uri":"api://api/v1/task-runs/taskrun--Task-0007--active"}]}}
+
+
+### 7. GET /api/v1/worktrees (wt-0001 allocated, same path reused)  -> HTTP 200
+{"worktrees":[{"worktree_id":"repo-f00efa25ab1f/wt-0001","status":"allocated","run_id":"taskrun--Task-0007--active","repo":"C:\\Agent\\CodexDashboard\\Tracking\\Task-0016\\Testing\\Runtime\\smoke-testbed","task_id":"Task-0007","worktree_path":"C:\\Users\\gregs\\AppData\\Local\\Temp\\cdxow\\repo-f00efa25ab1f\\wt-0001\\wt-0001","run_gate_state":"running"},{"worktree_id":"repo-f00efa25ab1f/wt-0002","status":"idle","repo":"smoke","task_id":"","worktree_path":"C:\\Users\\gregs\\AppData\\Local\\Temp\\cdxow\\repo-f00efa25ab1f\\wt-0002\\wt-0002","run_gate_state":""}]}
+
+
+assigned run_id=taskrun--Task-0007--active owned_root=C:\Users\gregs\AppData\Local\Temp\cdxow\repo-f00efa25ab1f\wt-0001\wt-0001
+REUSE-CHECK: assigned owned_root == created wt-0001 path : True
+### 8. POST /api/v1/worktrees/eject (run -> idle, folder kept, dequeue)  -> HTTP 200
+{"worktree_id":"repo-f00efa25ab1f/wt-0001","status":"idle","repo":"smoke","task_id":"","worktree_path":"C:\\Users\\gregs\\AppData\\Local\\Temp\\cdxow\\repo-f00efa25ab1f\\wt-0001\\wt-0001","run_gate_state":""}
+
+
+### 9. GET /api/v1/worktrees (wt-0001 back to idle)  -> HTTP 200
+{"worktrees":[{"worktree_id":"repo-f00efa25ab1f/wt-0001","status":"idle","repo":"smoke","task_id":"","worktree_path":"C:\\Users\\gregs\\AppData\\Local\\Temp\\cdxow\\repo-f00efa25ab1f\\wt-0001\\wt-0001","run_gate_state":""},{"worktree_id":"repo-f00efa25ab1f/wt-0002","status":"idle","repo":"smoke","task_id":"","worktree_path":"C:\\Users\\gregs\\AppData\\Local\\Temp\\cdxow\\repo-f00efa25ab1f\\wt-0002\\wt-0002","run_gate_state":""}]}
+
+
+EJECT-KEEPS-FOLDER: wt-0001 checkout still on disk after eject : True
+### 10. POST /api/v1/worktrees/dequeue (standalone, no eject)  -> HTTP 200
+{"status":"dequeued","task_id":"Task-0007"}
+
+
+### 11. POST /api/v1/worktrees/destroy wt-0001 (idle removed)  -> HTTP 200
+{"status":"destroyed","worktree_id":"repo-f00efa25ab1f/wt-0001"}
+
+
+DESTROY-REMOVES-FOLDER: wt-0001 checkout gone after destroy : True
+### 12. GET /api/v1/worktrees (wt-0001 gone, wt-0002 remains)  -> HTTP 200
+{"worktrees":[{"worktree_id":"repo-f00efa25ab1f/wt-0002","status":"idle","repo":"smoke","task_id":"","worktree_path":"C:\\Users\\gregs\\AppData\\Local\\Temp\\cdxow\\repo-f00efa25ab1f\\wt-0002\\wt-0002","run_gate_state":""}]}
+
+
+
+### 1b. GET /api/v1/repos (after correcting the throwaway registry's JSON escaping) -> HTTP 200
+{"repos":[{"id":"smoke","local_root":"C:\\Agent\\CodexDashboard\\Tracking\\Task-0016\\Testing\\Runtime\\smoke-testbed","task_provider_repo":"Digital-Collective-Games/QueueDrainTestbed"}]}
+
+(no queue_workers in the response)
