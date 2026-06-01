@@ -2,7 +2,35 @@
 
 ## Title
 
-Manual persistent worktree pool in the Go backend (Create / Assign / Eject / Destroy + discover-on-startup; Eject dequeues via the task provider)
+Manual persistent worktree pool + the desktop WORKTREES tab that drives it (Go backend lifecycle: Create / Assign / Eject / Destroy / Dequeue + discover-on-startup; Eject dequeues via the task provider — AND the Tkinter WORKTREES-tab UI that consumes it; done = the working in-app human surface)
+
+## Scope (UPDATE 3 — the Tk UI is back in; "done" is the working human surface)
+
+This is **ONE testable chunk** delivering **both** halves and closed as one unit
+(per [HUMAN-DIRECTIVES-FOR-WORKER.md](./HUMAN-DIRECTIVES-FOR-WORKER.md) UPDATE 3,
+the latest authoritative directive):
+
+- **[BE] the Go backend** manual worktree-pool lifecycle (Create / Assign / Eject /
+  Destroy / Dequeue + discover-on-startup; `queue_workers` removed; Eject dequeues
+  via the task provider), and
+- **[FE] the Tkinter desktop UI** — the `TASKS` tab is **renamed to `WORKTREES`**
+  and its content is **replaced** (D1 = replace) with a worktree-management surface
+  that **consumes the [BE] endpoints** and actually works against real backend data.
+
+**"Done" requires the human surface to be WORKING** (Human-Facing Outcome Rule): the
+operator opens the desktop app's `WORKTREES` tab and the worktree-management surface
+actually performs each interaction against the live backend. Backend endpoints plus
+unit/server-smoke proof do **not** satisfy "done" on their own — the working in-app
+surface plus its **named in-app regression cases passing** do. The Stitch HTML mockup
+(`C:\Users\gregs\Downloads\stitch_codex_token_velocity_overlay (4)`) is a **structural
+guide only** (Q1 = a): re-implement in the existing Python/Tkinter app, reusing the
+app's existing `ttk` styles and dark cyan/navy palette — **not** a web migration.
+
+Mockup exclusions **E2–E7** still stand (drag-to-bind / Task Browser pane, Register
+New Task, agent-model chip, animated transitional states, decorative progress bars,
+top-nav chrome changes). **E1 is reversed** — manual Create/Destroy are in scope as
+the visible Create / Destroy controls. The UI also surfaces the standalone **Dequeue**
+and reflects the **Eject-dequeue** behavior (UPDATE 2).
 
 ## Summary
 
@@ -19,18 +47,41 @@ read through [`RepoSlotLimit()`](../../backend/orchestration/internal/taskrun/se
 and enforced by [`EvaluateSlot`](../../backend/orchestration/internal/queue/slots.go#L39)
 inside the queue-drain consumer ([`consumer.go` L141/L205](../../backend/orchestration/internal/queue/consumer.go#L141)).
 
-This task replaces that model in the **Go backend only** with a **manually-managed,
-persistent worktree pool per repo**. An operator pre-creates worktrees as real
-on-disk folders with **stable paths and stable ids**; those folders persist as
-**idle** pool members until assigned, and an Eject cleans an allocated worktree
+This task replaces that model with a **manually-managed, persistent worktree pool
+per repo** in the **Go backend**, and **surfaces that pool in the desktop app's
+`WORKTREES` tab** so a human operates it directly. An operator pre-creates worktrees
+as real on-disk folders with **stable paths and stable ids**; those folders persist
+as **idle** pool members until assigned, and an Eject cleans an allocated worktree
 back to idle **without deleting the folder**. Concurrency is then bounded **by the
 number of idle worktrees in the pool, by construction** — `queue_workers` is
 removed entirely. Both the manual **Assign** action and the autonomous queue-drain
 consumer **draw from the same shared pool**; an empty pool means Ready issues wait
 (no auto-create).
 
-**Operator-perceived outcome (state this first):** an operator can, via headless
-HTTP calls against the backend (`http://127.0.0.1:4318`):
+**Human-perceived outcome (state this first — this is the "done" bar):** an operator
+opens the desktop app, switches to the **`WORKTREES`** tab (renamed from `TASKS`), and
+the tab actually works against the live backend:
+
+- it **shows the whole pool** — every worktree across all registered repos — with a
+  **visibly different background color** for allocated vs idle, plus the **repo**, the
+  **local dir** (with a **copy-path control**), and (for allocated ones) the bound
+  task / run / status;
+- a **repo filter dropdown** (sourced from the **repo registry**, not hardcoded) filters
+  the pool view to one repo;
+- a **Create** control provisions a new idle worktree into the selected repo's pool and
+  it appears in the view;
+- an **Assign Task** popup queries the open tasks, and selecting one **binds** it onto a
+  chosen idle worktree (which flips to allocated);
+- an **Eject** control stops the agent, cleans the worktree back to idle (folder kept),
+  and **dequeues** the freed task so it is not re-dispatched;
+- a **Destroy** control removes an idle worktree (rejected, with a clear message, if it
+  is allocated);
+- a **Dequeue** control takes a task out of the queue without ejecting.
+
+The backend is authoritative over worktree allocation/assignment/ejection; the UI
+reads and acts **through the HTTP endpoints**. Under the hood, the same operator can
+also drive every action via headless HTTP calls against the backend
+(`http://127.0.0.1:4318`):
 
 - **pre-create** one or more idle worktrees for a repo (`POST /api/v1/worktrees/create`),
 - **see the whole pool** — every worktree the backend owns across all registered
@@ -80,21 +131,26 @@ across a restart, would look adjacent but is **not** this task.
 
 ## Why these mechanisms belong in one task (earned merge)
 
-This task bundles six backend mechanisms: (a) removing `queue_workers`, (b) the
-durable pool record + stable identity, (c) discover-on-startup, (d) the four
-lifecycle operations (Create / Assign / Eject / Destroy) with their endpoints,
-(e) the dispatch-path change from per-dispatch-provision to pool-draw, and (f) the
-task-provider **dequeue write** (set `Queue=Never`) that Eject and a standalone
-endpoint call. They belong in one first task because they are **one model swap**:
-the pool record is the thing discover reconstructs, the thing the four operations
-mutate, and the thing the dispatch path draws from — and removing `queue_workers`
-is only safe *because* the pool's idle count is now the cap. The dequeue write
-belongs in the same task because **Eject is only correct if it dequeues**: without
-it, an Ejected-but-still-`Ready` task is re-dispatched on the next pool-draw poll,
-so the pool-draw model and the dequeue write are two halves of one freed-slot
-contract. Splitting them would leave the backend in a contradictory half-state
-(e.g. a pool with no cap-replacement, operations with no durable record to act on,
-or an Eject that frees a slot only for the consumer to immediately re-take it).
+This task bundles the backend mechanisms and the UI that consumes them: (a) removing
+`queue_workers`, (b) the durable pool record + stable identity, (c)
+discover-on-startup, (d) the four lifecycle operations (Create / Assign / Eject /
+Destroy) with their endpoints, (e) the dispatch-path change from per-dispatch-provision
+to pool-draw, (f) the task-provider **dequeue write** (set `Queue=Never`) that Eject and
+a standalone endpoint call, and (g) the **desktop `WORKTREES` tab** that renders the pool
+and drives every operation. They belong in one task because they are **one model swap**
+with **one human surface for it**: the pool record is the thing discover reconstructs,
+the thing the four operations mutate, the thing the dispatch path draws from, and the
+thing the `WORKTREES` tab displays and acts on — and removing `queue_workers` is only
+safe *because* the pool's idle count is now the cap. The dequeue write belongs in the
+same task because **Eject is only correct if it dequeues**: without it, an
+Ejected-but-still-`Ready` task is re-dispatched on the next pool-draw poll, so the
+pool-draw model and the dequeue write are two halves of one freed-slot contract. The UI
+belongs in the same task because the human directive (UPDATE 3) makes the **working
+in-app surface** the definition of done — backend endpoints with no working tab would
+fail the "done" bar. Splitting them would leave a contradictory half-state (a pool with
+no cap-replacement, operations with no durable record to act on, an Eject that frees a
+slot only for the consumer to immediately re-take it, or a backend lifecycle no human
+can actually drive).
 
 They stay internally separable for implementation and proof:
 
@@ -116,9 +172,17 @@ They stay internally separable for implementation and proof:
   state to not-ready (and never closed the issue) — no real GitHub access. Eject's
   use of it and the eject-then-no-redispatch behavior are proven on the
   consumer+service seam with the same fake provider.
+- **Desktop `WORKTREES` tab** — the `TASKS` tab renamed and its content replaced
+  ([ui.py L671](../../app/codex_dashboard/ui.py#L671) nav tuple; the
+  `select_tab`/`_render_active_tab` dispatch); a small worktrees HTTP client mirroring
+  [`tasks_backend.py`](../../app/codex_dashboard/tasks_backend.py); pure render/format
+  helpers (mirroring [`tasks_tab.py`](../../app/codex_dashboard/tasks_tab.py)) unit-tested;
+  and the human-facing interactions proven by **named in-app regression cases**
+  (REG-010…REG-016 below), run on the isolated validation lane against the live backend.
 
-Every acceptance criterion below is tagged **[BE]** because this task is
-backend-only.
+Acceptance criteria are tagged **[BE]** (backend) or **[FE]** (the desktop
+`WORKTREES` tab). Both halves ship in this one task; **"done" is gated on the
+working [FE] surface plus its in-app regression cases**, not on [BE] endpoints alone.
 
 ## Goals
 
@@ -202,17 +266,71 @@ backend-only.
     Eject (Goal 6) and the standalone dequeue endpoint (Goal 11) both call it.
 11. **[BE] Standalone dequeue endpoint.** `POST /api/v1/worktrees/dequeue` invokes
     the provider dequeue (Goal 10) **without** ejecting, so the operator can take a
-    task out of the queue while leaving the run alone, and Task-0017's UI has the
-    seam. Method-guarded like the other handlers. Does **not** close the issue.
+    task out of the queue while leaving the run alone, and the `WORKTREES` tab's
+    Dequeue control (Goal 18) has the seam. Method-guarded like the other handlers.
+    Does **not** close the issue.
+
+### Frontend goals — the desktop `WORKTREES` tab (the "done" surface)
+
+All [FE] goals are in the existing Python/Tkinter app
+([`app/codex_dashboard/`](../../app/codex_dashboard/)), reuse the existing `ttk`
+styles + dark cyan/navy palette, and consume the [BE] HTTP endpoints above. The
+Stitch mockup is a **structural guide only** (Q1 = a; D1 = replace). The tab **must
+actually work against the live backend** — backend-shaped fixtures are fine for unit
+tests, but the "done" bar is the live in-app surface (REG-010…REG-016).
+
+12. **[FE] Rename `TASKS` → `WORKTREES` and replace its content.** Rename the nav tab
+    label at [ui.py L671](../../app/codex_dashboard/ui.py#L671) (the
+    `(tab_id, label)` tuple) from `Tasks` to `Worktrees` and rewire the
+    `select_tab`/`_render_active_tab` dispatch so the tab renders the worktree-management
+    surface (D1 = replace: the old task-stream / detail / dispatch-pause-poke content of
+    the `TASKS` tab is **removed** from this tab — that lifecycle now lives on the GitHub
+    Issues queue surface). Switching tabs stays read-only (no backend mutation on tab
+    switch, like REG-003/REG-006). The `Usage` and `Jobs` tabs are unchanged.
+13. **[FE] Full-pool view with allocated/idle distinction.** The tab shows **every
+    worktree** the backend owns (from `GET /api/v1/worktrees`), each row showing the
+    **repo**, the **local dir** (`worktree_path`), a stable identifier, and — for
+    allocated ones — the bound `task_id` / `run_id` / `run_gate_state`. **Allocated
+    rows have a visibly different background color** from idle rows (reuse the existing
+    palette; the allocated/idle distinction must be perceivable, not just a text label).
+    A backend-unavailable state shows a clear human-facing message (mirroring
+    [`tasks_backend_error_snapshot`](../../app/codex_dashboard/tasks_backend.py#L58)).
+14. **[FE] Copy-path control.** Each worktree row exposes a **copy control** that copies
+    that worktree's local directory path to the clipboard (the mockup's copy icon). It
+    copies the exact `worktree_path` string.
+15. **[FE] Repo filter dropdown sourced from the registry.** A dropdown lists the
+    registered repos from `GET /api/v1/repos` (the **repo registry**, not a hardcoded
+    list) plus an "All repos" option; selecting a repo filters the pool view to that
+    repo. The dropdown options reload when the repo list reloads.
+16. **[FE] Create control.** A visible control provisions a new idle worktree into the
+    currently-selected repo's pool via `POST /api/v1/worktrees/create`; after it
+    succeeds the new idle worktree appears in the view (a refresh of the pool read). If
+    no specific repo is selected, the control prompts for / requires choosing one.
+17. **[FE] Assign-Task popup → bind.** An **Assign** control on an **idle** worktree
+    opens a popup that **queries the open tasks** and lists each task's id + title +
+    state (mockup exclusion **E6**: no progress bars / file-ref lines). Selecting a task
+    and confirming calls `POST /api/v1/worktrees/assign` with that `task_id` + the
+    chosen idle `worktree_id`; on success the worktree flips to **allocated** bound to
+    that task. **The open-tasks source is pinned to the existing
+    `GET /api/v1/tasks`** (local committed tasks bound to issues; consistent with
+    "GitHub Issues is the task surface") via the existing
+    [`tasks_backend.fetch_tasks_snapshot`](../../app/codex_dashboard/tasks_backend.py#L29)
+    client — resolving the [Open Questions](#open-questions) Assign-source decision.
+18. **[FE] Eject, Destroy, and standalone Dequeue controls.**
+    - **Eject** (on an **allocated** worktree) calls `POST /api/v1/worktrees/eject`;
+      on success the worktree returns to **idle** in the view (same row, idle color)
+      and the freed task is dequeued (UPDATE 2 behavior — reflected because a
+      subsequent pool read shows it idle and the task no longer `Ready`).
+    - **Destroy** (on an **idle** worktree) calls `POST /api/v1/worktrees/destroy`; on
+      success the worktree disappears from the view. Attempting Destroy on an
+      **allocated** worktree surfaces the backend's rejection as a clear human-facing
+      message (it is not silently dropped, and the worktree is **not** removed).
+    - **Dequeue** — a standalone control takes a task out of the queue (via
+      `POST /api/v1/worktrees/dequeue`) **without** ejecting (the run keeps going / the
+      worktree stays allocated); it does **not** close the issue.
 
 ## Non-Goals
 
-- **The Tkinter UI redesign is deferred to a future Task-0017.** Task-0016 does
-  **not** touch [`app/codex_dashboard/*`](../../app/codex_dashboard/) — no Tk code,
-  no changes to `ui.py` / `tasks_tab.py` / `tasks_backend.py`. The worktree-pool
-  UI (the worktree-management view, D1=replace) is a follow-on task to be drafted
-  separately; Task-0016 only adds the HTTP endpoints so the lifecycle is
-  drivable/testable headlessly and Task-0017 has a backend seam.
 - **No auto-create / auto-seed.** The backend never grows the pool on its own; an
   empty pool defers Ready issues. Capacity is operator-owned (the human explicitly
   accepts this).
@@ -230,16 +348,30 @@ backend-only.
   logic is unchanged; the new dequeue is a Service/provider **write** invoked by
   Eject and the dequeue endpoint, not a new consumer decision branch. The consumer
   remains read-only in its own poll path (it still only *reads* `Queue`).
-- **No change to the Usage or Jobs tabs**, or to any other endpoint.
-- The original Stitch-mockup UI exclusions **E2–E7** still stand (drag-to-bind /
-  Task Browser pane, Register New Task, model chip, animated transitional states,
-  decorative progress bars, top-nav chrome changes) — but they are Task-0017's
-  concern, not this task's. **E1 (manual worktree create/destroy) is reversed: it
-  is now in scope** as the Create / Destroy operations above.
+- **No change to the Usage or Jobs tabs**, or to any other endpoint. Only the
+  `TASKS` tab is renamed/replaced (becomes `WORKTREES`); `Usage` and `Jobs` are
+  untouched.
+- The original Stitch-mockup UI exclusions **E2–E7** still stand and are **out of
+  scope** for the `WORKTREES` tab: **E2** drag-to-bind / the persistent left Task
+  Browser pane / the drag banner (replaced by the explicit Assign-Task popup);
+  **E3** Register New Task; **E4** the agent-model chip (the backend binding has no
+  model name — omit, or at most show the cheap launch-agent kind if trivially
+  available); **E5** animated transitional states / pulsing drop-zones (a static
+  running/parked/idle status chip is sufficient); **E6** per-task progress bars and
+  file-ref metadata lines in task cards (the Assign popup lists task id + title +
+  state instead); **E7** top-nav chrome changes (search box, a Review tab, settings /
+  terminal / notifications icons). **E1 (manual worktree create/destroy) is reversed:
+  it is now in scope** as the visible Create / Destroy controls.
+- **No new product backend that the UI bypasses.** The `WORKTREES` tab acts only
+  through the [BE] HTTP endpoints in this task (the backend is authoritative); it
+  does not reach into git or the Temporal workflow directly.
 
 ## Implementation Home
 
-The Go backend is the only implementation home for this task:
+Two homes: the **Go backend** (the worktree-pool authority + endpoints) and the
+**Python/Tkinter desktop app** (the `WORKTREES` tab that consumes them).
+
+### Backend (Go)
 
 - **Routes:**
   [`backend/orchestration/internal/httpapi/mux.go`](../../backend/orchestration/internal/httpapi/mux.go)
@@ -283,12 +415,46 @@ The Go backend is the only implementation home for this task:
   the dequeue endpoint to call). Implement the write on the provider, never inline in
   Eject.
 
-This is the right home because the human split the scope: Task-0016 is the backend
-lifecycle and the backend is authoritative over worktree assignment; the UI is
-Task-0017. The dequeue write lives on the provider because that is where the
-symmetric `Queue`-field read and the existing `CloseIssue` write already live, and
-keeping it there (not inline in Eject) keeps the provider the single task-provider
-surface.
+### Frontend (Python / Tkinter desktop app)
+
+- **Tab nav + dispatch:**
+  [`app/codex_dashboard/ui.py`](../../app/codex_dashboard/ui.py) — rename the
+  `("tasks", "Tasks")` entry in the nav tuple at
+  [L671](../../app/codex_dashboard/ui.py#L671) to `("worktrees", "Worktrees")` (the
+  human-visible label becomes `WORKTREES`; keep one `tab_id` consistently), and rewire
+  `select_tab` / `_render_active_tab` (around [L1152](../../app/codex_dashboard/ui.py#L1152)/[L1164](../../app/codex_dashboard/ui.py#L1164))
+  so the renamed tab builds and renders the worktree-management surface instead of the
+  committed-task stream/detail. The old task-stream / detail / dispatch-pause-poke
+  widgets and their render methods are removed from this tab (D1 = replace). Reuse the
+  existing styles defined in `_configure_styles` and the palette constants
+  (`#0a0e14` / `#1c2026` surfaces, `#00e5ff` / `#c3f5ff` cyan accents,
+  `TAB_ACTIVE_FOREGROUND` etc.). The allocated/idle background distinction (Goal 13)
+  reuses that palette (an allocated-row background style alongside the idle one).
+- **Worktrees HTTP client:** a new module
+  [`app/codex_dashboard/worktrees_backend.py`](../../app/codex_dashboard/worktrees_backend.py)
+  (new file) mirroring [`tasks_backend.py`](../../app/codex_dashboard/tasks_backend.py):
+  `configured_*_backend_url()`, `fetch_pool_snapshot()` (GET `/api/v1/worktrees`),
+  `fetch_repos()` (GET `/api/v1/repos`), and `create_worktree` / `assign_worktree` /
+  `eject_worktree` / `destroy_worktree` / `dequeue_task` POST helpers, with the same
+  `urllib`-based `_request_json` and the same backend-unavailable error snapshot shape.
+  The Assign popup's open-task list reuses the existing
+  [`tasks_backend.fetch_tasks_snapshot`](../../app/codex_dashboard/tasks_backend.py#L29)
+  (`GET /api/v1/tasks`) — no new task-source backend.
+- **Pure render/format helpers:** a new module
+  [`app/codex_dashboard/worktrees_tab.py`](../../app/codex_dashboard/worktrees_tab.py)
+  (new file) mirroring [`tasks_tab.py`](../../app/codex_dashboard/tasks_tab.py) for the
+  unit-testable pure logic: group/sort worktrees, allocated-vs-idle color selection,
+  per-row detail formatting, and the Assign-popup open-task projection. These are the
+  unit-test target ([FE] unit proof), distinct from the in-app regression cases.
+
+The backend home is right because the backend is authoritative over worktree
+assignment; the dequeue write lives on the provider because that is where the symmetric
+`Queue`-field read and the existing `CloseIssue` write already live, and keeping it
+there (not inline in Eject) keeps the provider the single task-provider surface. The
+frontend home is right because the human directive (UPDATE 3) reinstates the original
+desktop-app `TASKS`-tab redesign (Q1 = a: reuse the existing Python/Tkinter app; D1 = a:
+replace) — and "done" is the working in-app surface, so the UI must live in the shipped
+desktop app, not a separate prototype.
 
 ## Proposed Changes
 
@@ -538,22 +704,68 @@ Request: `{ "repo": "obsidian", "task_id": "Task-0007" }` (or `{ "worktree_id": 
 resolving to its bound task). New `Service.DequeueTask(repo, taskID)` that calls the
 provider dequeue (section 10) **without** stopping the agent, cleaning the checkout,
 or unbinding the run — so an operator can take a task out of the queue while leaving
-the run alone, and Task-0017's UI has the seam. It does **not** close the issue.
-Registered as a method-guarded sub-path on `handleWorktreeAPIRoute` alongside
-create/assign/eject/destroy (405 on the wrong method, 404 on unknown sub-paths).
-Response: HTTP 200.
+the run alone, and the `WORKTREES` tab's Dequeue control has the seam. It does **not**
+close the issue. Registered as a method-guarded sub-path on `handleWorktreeAPIRoute`
+alongside create/assign/eject/destroy (405 on the wrong method, 404 on unknown
+sub-paths). Response: HTTP 200.
 
 The route is on the `/api/v1/worktrees/*` surface (not `/api/v1/tasks/{id}/dequeue`)
 because dequeue is part of the same worktree-management lane as create/assign/eject/
-destroy — the operator surface Task-0017 builds — and it shares the worktree
+destroy — the operator surface the `WORKTREES` tab drives — and it shares the worktree
 handler's method/path guards; keeping it under `/worktrees/*` keeps all five pool
 operations on one consistent, method-guarded sub-router rather than splitting one
 operation onto the separate task router.
 
+### 12. Desktop `WORKTREES` tab (replaces the `TASKS` tab content)
+
+The renamed tab consumes the endpoints above. All against the configured backend URL
+(default `http://127.0.0.1:4318`; the regression lane overrides it to
+`http://127.0.0.1:14318`).
+
+- **Rename + replace.** [ui.py L671](../../app/codex_dashboard/ui.py#L671) nav tuple
+  `("tasks", "Tasks")` → `("worktrees", "Worktrees")`; `select_tab` /
+  `_render_active_tab` build the worktree surface; the old committed-task
+  stream/detail/dispatch widgets are removed from this tab (D1 = replace). Tab switch
+  stays read-only (no backend write on switch).
+- **Pool view.** On tab activation (and on a refresh control), `GET /api/v1/worktrees`
+  → render one row per worktree with repo, `worktree_path`, identifier, and (allocated)
+  `task_id` / `run_gate_state`. **Allocated rows use a distinct background** vs idle
+  rows (reuse the palette). Backend-unavailable → a clear message, no crash.
+- **Copy-path.** Per-row copy control writes `worktree_path` to the clipboard.
+- **Repo filter.** `GET /api/v1/repos` populates a dropdown (registry-sourced) + "All
+  repos"; selecting filters the view.
+- **Create.** A control → `POST /api/v1/worktrees/create {repo}` for the selected repo
+  → refresh → the new idle worktree appears.
+- **Assign popup.** On an idle worktree, a popup lists open tasks
+  (`tasks_backend.fetch_tasks_snapshot` → `GET /api/v1/tasks`) as id + title + state
+  (no progress bars — E6); confirm → `POST /api/v1/worktrees/assign {task_id, repo,
+  worktree_id}` → the worktree flips to allocated.
+- **Eject.** On an allocated worktree → `POST /api/v1/worktrees/eject {run_id}` → the
+  worktree returns to idle in the view; the freed task is dequeued (reflected by the
+  refreshed read).
+- **Destroy.** On an idle worktree → `POST /api/v1/worktrees/destroy {worktree_id}` →
+  it disappears. On an allocated worktree the backend's 409 rejection is shown as a
+  clear message; nothing is removed.
+- **Dequeue.** A standalone control → `POST /api/v1/worktrees/dequeue {repo, task_id}`
+  without ejecting; does not close the issue.
+
+The pure helpers (grouping, color selection, row/popup formatting) live in
+`worktrees_tab.py` (unit-tested); the HTTP calls live in `worktrees_backend.py`
+(mirroring `tasks_backend.py`); the Tk widget wiring lives in `ui.py`.
+
 ## Expected Resolution
 
-After this task, against a backend with a two-repo registry (`obsidian`, `demo`),
-an operator working purely over HTTP can:
+After this task, the operator opens the desktop app, clicks the **`WORKTREES`** tab,
+and the surface works: the pool view shows every worktree (allocated rows visibly
+distinct from idle), a registry-sourced repo filter narrows it, the copy control puts a
+worktree's path on the clipboard, **Create** adds an idle worktree, the **Assign** popup
+binds an open task onto an idle one (it flips allocated), **Eject** returns an allocated
+worktree to idle (and dequeues its task), **Destroy** removes an idle one (and refuses an
+allocated one with a clear message), and **Dequeue** takes a task out of the queue
+without ejecting. The named in-app cases REG-010…REG-016 pass on the validation lane.
+
+Equivalently, against a backend with a two-repo registry (`obsidian`, `demo`),
+an operator working purely over HTTP (the same endpoints the tab calls) can:
 
 1. `POST /api/v1/worktrees/create {repo:"obsidian"}` twice → two idle worktrees
    `obsidian/wt-0001`, `obsidian/wt-0002` appear in `GET /api/v1/worktrees` as
@@ -582,7 +794,9 @@ one repo never touches the other.
 
 ## Acceptance Criteria
 
-Each criterion is pass/fail. All are **[BE]** (backend-only).
+Each criterion is pass/fail. Criteria 1–15 are **[BE]** (backend); 16–22 are **[FE]**
+(the desktop `WORKTREES` tab). **"Done" is gated on the [FE] criteria plus the named
+in-app regression cases (REG-010…REG-016) passing — not on the [BE] criteria alone.**
 
 1. **queue_workers removed.** `QueueWorkers` no longer exists on
    [`RepoEntry`](../../backend/orchestration/internal/queue/manifest.go#L29), and
@@ -667,20 +881,62 @@ Each criterion is pass/fail. All are **[BE]** (backend-only).
     method/path guards return 405 on the wrong method and 404 on unknown sub-paths.
     Asserted in `mux_test.go` + a service test with a fake provider.
 
+### Frontend acceptance criteria (the desktop `WORKTREES` tab)
+
+Each [FE] criterion is pass/fail and is proven **in the running app** against the live
+backend on the validation lane (the named regression case in parentheses), with pure
+helpers also covered by Python unit tests. A criterion satisfied only by a unit test,
+backend endpoint, or screenshot of a non-functional widget does **not** pass.
+
+16. **[FE] Tab renamed + replaced.** The desktop nav shows a **`WORKTREES`** tab where
+    `TASKS` used to be; clicking it renders the worktree-management surface (not the old
+    task stream/detail/dispatch widgets), and the switch performs no backend mutation.
+    `Usage` and `Jobs` are unchanged. (REG-010)
+17. **[FE] Full-pool view with allocated/idle color.** The tab lists every worktree from
+    `GET /api/v1/worktrees`, each showing repo + local dir + identifier (+ bound
+    task/run/status for allocated), and **allocated rows are a visibly different
+    background color** from idle rows. A view that shows allocated vs idle only as
+    identical-looking text **fails**. (REG-010)
+18. **[FE] Copy-path control.** Clicking a row's copy control places that worktree's
+    exact `worktree_path` on the system clipboard. (REG-011)
+19. **[FE] Registry-sourced repo filter.** The repo filter dropdown is populated from
+    `GET /api/v1/repos` (the registry) — not a hardcoded list — and selecting a repo
+    narrows the pool view to that repo; "All repos" restores the full view. A hardcoded
+    repo list **fails**. (REG-012)
+20. **[FE] Create from the UI.** The Create control calls
+    `POST /api/v1/worktrees/create` for the selected repo and, after success, the new
+    idle worktree appears in the view. (REG-013)
+21. **[FE] Assign popup binds an open task.** The Assign control on an idle worktree
+    opens a popup listing open tasks (from `GET /api/v1/tasks`, id + title + state);
+    confirming a selection calls `POST /api/v1/worktrees/assign` and the worktree flips
+    to **allocated** bound to that task in the view. A popup whose list is empty/hardcoded
+    or that does not actually bind **fails**. (REG-014)
+22. **[FE] Eject, Destroy, and Dequeue from the UI.** From the tab: **Eject** on an
+    allocated worktree returns it to **idle** in the view (folder kept; the task is
+    dequeued); **Destroy** on an idle worktree removes it from the view, while Destroy on
+    an allocated worktree surfaces the backend's rejection as a clear message and removes
+    nothing; **Dequeue** takes a task out of the queue without ejecting (the worktree
+    stays allocated, the issue stays open). (REG-015 Eject; REG-016 Destroy + Dequeue)
+
 **Regression [must not break]:** `REG-007`, `REG-008`, `REG-009` in
-[`REGRESSION.md`](../../REGRESSION.md#L325) re-run **green under the new model**,
+[`REGRESSION.md`](../../REGRESSION.md) re-run **green under the new model**,
 with the pool **seeded (via Create) before the drain can dispatch**:
 
 - **REG-007** — "cap=1" is now "**a pool of 1**": with one idle worktree, the
   consumer dispatches exactly one Ready issue and the second **waits for an idle
-  worktree**; on close/eject the freed worktree is reused. (The
-  [REG-007 cap=1 sub-scenario](../../REGRESSION.md#L438) is reinterpreted: one idle
-  pool worktree, not `queue_workers=1`.)
+  worktree**; on close/eject the freed worktree is reused. (The REG-007 cap=1
+  sub-scenario is reinterpreted: one idle pool worktree, not `queue_workers=1`.)
 - **REG-008** — durable state survives a backend restart: the parked lane is still
   reported from the workflow, and the pool's allocated-vs-idle classification is
   reconstructed by **discover-on-startup**.
 - **REG-009** — each repo's pool is independent: a Create/Assign/Eject/Destroy or a
   close on repo A never touches repo B's pool worktrees.
+
+**New in-app regression [must pass for closure]:** the new desktop `WORKTREES`-tab
+cases **REG-010 … REG-016** in [`REGRESSION.md`](../../REGRESSION.md) — one per new
+human surface (pool view + allocated/idle color + repo + path + copy; repo filter;
+Create; Assign popup → bind; Eject; Destroy; Dequeue) — must **pass in-app on the
+isolated validation lane** against the live backend before closure.
 
 ## What Does Not Count
 
@@ -707,11 +963,26 @@ with the pool **seeded (via Create) before the drain can dispatch**:
   first).
 - **Auto-creating** a worktree to satisfy a Ready issue instead of deferring on an
   empty pool.
-- **Any Tk / frontend work** — touching
-  [`app/codex_dashboard/*`](../../app/codex_dashboard/). That is Task-0017.
 - A backend that emits a `vscodium://` link itself rather than supplying the raw
   fields (the O6 orchestrator boundary in
   [types.go L177–L208](../../backend/orchestration/internal/taskrun/types.go#L177)).
+- **[FE] Backend-only "done."** Treating the task as done because the endpoints exist
+  and pass unit/server-smoke, while the desktop `WORKTREES` tab does not actually work
+  in-app. The working in-app surface (REG-010…REG-016) is the closure bar.
+- **[FE] A non-functional or fake UI.** A tab that renders rows but whose controls do
+  not call the real endpoints; a repo filter from a **hardcoded** list instead of
+  `GET /api/v1/repos`; an Assign popup with an empty/hardcoded task list or that does
+  not actually bind; allocated vs idle shown only as identical-looking text with **no
+  visible color distinction**; or a copy control that copies the wrong/no path.
+- **[FE] A web migration / new frontend stack.** Porting to HTML/Tailwind or a new
+  framework instead of re-implementing in the existing Python/Tkinter app reusing its
+  styles (Q1 = a). The Stitch HTML is a structural guide, not a port target.
+- **[FE] Implementing an excluded mockup element** (E2–E7): drag-to-bind / a persistent
+  Task Browser pane, Register New Task, a fabricated agent-model chip, animated
+  transitional states, decorative per-task progress bars, or top-nav chrome changes.
+- **[FE] Keeping the old `TASKS` surface.** Leaving the old task stream/detail/
+  dispatch-pause-poke content on this tab (D1 = replace requires removing it), or not
+  renaming the tab to `WORKTREES`.
 
 ## Proof Plan
 
@@ -737,6 +1008,18 @@ with the pool **seeded (via Create) before the drain can dispatch**:
   Destroy → list with `curl`/PowerShell, asserting the JSON shapes and that the
   Ejected folder persists on disk and the Destroyed one is gone. (This is a
   `server-only smoke`, supporting proof, not a regression.)
+- **[FE] Python unit tests (no app):** add `tests/test_worktrees_tab.py` (mirroring the
+  existing tab tests) for the pure `worktrees_tab.py` helpers — worktree grouping/sort,
+  allocated-vs-idle color selection, per-row + Assign-popup formatting — and
+  `worktrees_backend.py` mapping/error-snapshot logic against backend-shaped fixtures.
+  Run via `python -m unittest discover -s tests -p "test_*.py"` ([TESTING.md](../../TESTING.md)).
+  This supports but does **not** replace the in-app cases.
+- **[FE] In-app regression (the closure bar):** run **REG-010 … REG-016** in the
+  **running desktop app** on the isolated validation lane (`CODEX_DASHBOARD_*_BACKEND_URL`
+  → `http://127.0.0.1:14318`, task-owned config + SQLite per [TESTING.md](../../TESTING.md)),
+  against the live backend, seeding the pool via Create. Capture an app-surface artifact
+  per case under `Tracking/Task-0016/Testing/`. These are **real in-app cases** (the UI is
+  in scope), not server-only smoke.
 - **REG-007 / REG-008 / REG-009 re-run (in-app):** on the isolated `reg007` lane
   against the throwaway testbed repos, drive the GitHub web surface + consumer as
   the existing cases require, but with the **pool seeded via Create** first
@@ -774,7 +1057,7 @@ keep without re-litigating scope:
 - **Standalone dequeue route — `/api/v1/worktrees/dequeue` vs
   `/api/v1/tasks/{taskID}/dequeue`.** Chosen: **`POST /api/v1/worktrees/dequeue`**.
   Rationale: dequeue is part of the same worktree-management operator lane as
-  create/assign/eject/destroy (the surface Task-0017 builds), it shares the
+  create/assign/eject/destroy (the surface the `WORKTREES` tab drives), it shares the
   worktree handler's method/path guards, and keeping all five pool operations on one
   `/worktrees/*` sub-router is more consistent than splitting one onto the separate
   task router. This is a route-placement choice, not a scope decision; the dequeue
@@ -785,6 +1068,16 @@ keep without re-litigating scope:
   (equivalently `SetQueueState(repo, number, QueueNever)`); the exact name is an
   implementation detail, not a scope decision. Either way it is a provider WRITE that
   sets `Queue=Never` and never closes the issue.
+- **[FE] Assign-popup open-tasks source — RESOLVED.** The popup queries the existing
+  **`GET /api/v1/tasks`** (local committed tasks bound to issues) via the existing
+  [`tasks_backend.fetch_tasks_snapshot`](../../app/codex_dashboard/tasks_backend.py#L29)
+  client, consistent with "GitHub Issues is the task surface." This resolves the
+  original [Open implementation detail](#) the writer was asked to pin; it is not an
+  open question anymore.
+- **[FE] `worktree_id` vs `run_id` from the UI.** For Eject the tab has the allocated
+  worktree's `run_id` from the pool read, so it keys Eject on `run_id` (the [BE]
+  default); for Destroy/Assign it uses `worktree_id`. Non-blocking; both are accepted
+  request keys per the [BE] handlers.
 
 ## References
 
@@ -823,17 +1116,25 @@ keep without re-litigating scope:
 - Worktree model + Task-0015 durable-state authority:
   [`WORKTREES.md`](../../../../Users/gregs/.codex/Orchestration/WORKTREES.md),
   [`QUEUE-DRAIN-DURABLE-STATE-REDESIGN.md`](../Task-0015/Design/QUEUE-DRAIN-DURABLE-STATE-REDESIGN.md)
-- Regression cases that must not break:
-  [`REGRESSION.md` REG-007/008/009](../../REGRESSION.md#L325)
-- Follow-on (not drafted here): **Task-0017** — the Tkinter worktree-management UI
-  redesign (D1=replace, mockup exclusions E2–E7), consuming these endpoints. The
-  follow-on also **renames the desktop nav tab `TASKS` → `WORKTREES`**
-  ([ui.py L671](../../app/codex_dashboard/ui.py#L671)) to match the new territory.
+- Regression cases that must not break, and the new in-app cases authored for this
+  task: [`REGRESSION.md`](../../REGRESSION.md) (REG-007/008/009 must stay green;
+  REG-010…REG-016 are the new `WORKTREES`-tab cases that must pass for closure).
+- Frontend home (the desktop `WORKTREES` tab, in scope per UPDATE 3):
+  [`app/codex_dashboard/ui.py`](../../app/codex_dashboard/ui.py)
+  (nav tuple L671, `select_tab` L1152, `_render_active_tab` L1164, `_configure_styles`
+  + palette constants L100-102),
+  [`app/codex_dashboard/tasks_backend.py`](../../app/codex_dashboard/tasks_backend.py)
+  (HTTP-client pattern to mirror; `fetch_tasks_snapshot` L29 reused by the Assign popup),
+  [`app/codex_dashboard/tasks_tab.py`](../../app/codex_dashboard/tasks_tab.py)
+  (pure-helper pattern to mirror). New files:
+  `app/codex_dashboard/worktrees_backend.py`, `app/codex_dashboard/worktrees_tab.py`,
+  `tests/test_worktrees_tab.py`.
+- UI mockup (structural guide only, Q1 = a):
+  `C:\Users\gregs\Downloads\stitch_codex_token_velocity_overlay (4)`.
 
 ## Audit status
 
-Local draft awaiting coordinator review. Not yet human-audited or agent-audited;
-not yet enqueue-ready (the GitHub-issue provider binding and `TASK-META.json` are a
-separate TaskCreate provider-binding gate, not done here).
-</content>
-</invoke>
+Revised for the **UPDATE 3 scope reversal** (the Tk `WORKTREES` tab is back in scope;
+"done" = the working in-app surface). Local draft awaiting coordinator review and the
+human PLAN-approval gate. Not yet human-audited or agent-audited. `TASK-META.json` is
+already bound to GitHub issue #16 (TaskCreate provider-binding gate done earlier).

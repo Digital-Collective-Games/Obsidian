@@ -3,6 +3,86 @@
 These are the human's explicit decisions for this task. They outrank any
 writeup-standard preference. Do not narrow or re-sequence the scope below.
 
+## UPDATE 4 — 2026-06-01 — PLAN APPROVED + REG-003/REG-004 retirement decision (authoritative; LATEST)
+
+The human approved the implementation plan and confirmed the coordinator's
+recommendations.
+
+- **Plan approved.** [PLAN.md](./PLAN.md) **PASS-0000 → PASS-0009** (the full reversed
+  scope: the Go backend manual worktree-pool lifecycle **and** the desktop `WORKTREES`-tab
+  UI that consumes it) is APPROVED for implementation. Proceed; do not re-litigate scope.
+  All proof stays on the isolated validation (`http://127.0.0.1:14318`) / `reg007` lanes,
+  task-owned config + isolated SQLite, and throwaway testbed repos only. Approval does NOT
+  authorize work against the human's production repo / service lane / live Codex data /
+  human dashboard config, publishing a pinned dashboard release to the human lane, or
+  closing issue #16 (closure stays a separate human gate; the agent never self-closes).
+- **REG-003 / REG-004 retirement (confirmed).** Because D1=replace removes the old `TASKS`
+  committed-work surface, the existing `REGRESSION.md` cases **REG-003** (Tasks Tab
+  Committed-Work Surface) and **REG-004** (Semantic Dashboard State Reconciliation for the
+  Tasks surface) describe a surface that no longer exists. Retire/supersede them in
+  `REGRESSION.md` (as part of PASS-0007) with an explicit note: *superseded by Task-0016
+  D1=replace — the committed-work `Tasks` surface is removed; the task lifecycle now lives
+  on the GitHub Issues queue surface; the new `WORKTREES` tab is covered by
+  REG-010…REG-016.* Do not delete the case history — mark them superseded with the
+  rationale and the pointer; do not leave stale cases silently pointing at a removed tab.
+- **QA + Tk-env are coordinator-arranged.** Clean-context QA verdicts (especially for the
+  UI passes PASS-0007/0008, on the real in-app surface) and any per-pass implementation
+  lanes are arranged by the TaskDispatch coordinator, not producer self-review. If the
+  runtime cannot drive the real Tk surface for the in-app regression cases
+  (REG-010…REG-016), surface that as a blocker to the coordinator — do **not** downgrade
+  the "done = working human surface" bar to endpoint/unit proof.
+
+## UPDATE 3 — 2026-05-31 — SCOPE REVERSAL: the Tk UI is BACK IN Task-0016 (authoritative; LATEST; supersedes the "Scope split — BACKEND-ONLY" text in the DESIGN PIVOT below)
+
+This is the latest human directive and outranks the backend-only split recorded
+in the 2026-05-31 DESIGN PIVOT section below. Verbatim human directive:
+
+> Alright, well I don't remember deferring it, did you log task 17? I think you
+> should include it in this task. That was the original human guidance. You can
+> make as many passes as you want, but this is one testable chunk, and "done"
+> requires that the human surface is working.
+
+Governing decisions:
+
+- **The Tkinter UI redesign is IN scope for Task-0016.** The "backend-only" split
+  and the deferral to a future "Task-0017" are RESCINDED. No Task-0017 was ever
+  created (no GitHub issue, no Tracking dir); it was only a proposed follow-on. Do
+  NOT split this work into a separate task and do NOT defer the UI.
+- **Task-0016 is ONE testable chunk.** It delivers BOTH the Go backend manual
+  worktree-pool lifecycle AND the Tkinter WORKTREES-tab UI that consumes it. You
+  may use as many internal passes as you want, but the deliverable is planned,
+  proven, and closed as ONE unit.
+- **"Done" requires the human surface to be WORKING** (Human-Facing Outcome Rule).
+  The operator opens the desktop app's WORKTREES tab and the worktree-management
+  surface actually works against real backend data. Backend endpoints plus
+  unit/server-smoke proof do NOT satisfy "done" on their own — the working in-app
+  surface does.
+- **The original UI spec is reinstated.** The five functional bullets in "Verbatim
+  original request" below and **D1 = a (replace)** govern the UI. Q1 = a still
+  governs the STACK only (re-implement in the existing Python/Tkinter app; the
+  Stitch HTML is a structural guide, not a port or a web migration). The
+  **TASKS → WORKTREES** tab rename is part of THIS task. Exclusions **E2–E7** still
+  stand; **E1 remains reversed** (manual Create/Destroy in scope). The UI must also
+  surface the standalone Dequeue and reflect the Eject-dequeue behavior from
+  UPDATE 2.
+- **New in-app REGRESSION.md cases are MANDATORY, one per new human surface.** Per
+  the repo Canonical Rule in repo-root `REGRESSION.md`, every new human-facing
+  interaction in the WORKTREES tab must be covered by a NAMED, in-app
+  desktop-app-surface regression case in `REGRESSION.md`: the full-pool view
+  (allocated-vs-idle color, repo, local dir + copy-path control), the repo filter
+  dropdown (sourced from the registry), Create, Assign (open-task popup → bind),
+  Eject, Destroy, and Dequeue. These are REAL in-app cases (the UI is in scope) —
+  not server-only smoke — and they must PASS in-app on the isolated validation lane
+  before closure. The queue-drain dispatch behavior change stays covered by the
+  updated REG-007 "pool of 1".
+
+Everything else in this file remains in force: the manual-pool MODEL (the
+UPDATE 2026-05-31 DESIGN PIVOT — `queue_workers` removed; Create/Assign/Eject/
+Destroy + discover-on-startup; pool-draw dispatch) and UPDATE 2 (Eject dequeues
+through the task provider; dequeue ≠ close; human-only closure). The ONLY thing
+UPDATE 3 changes: the Tk UI is folded back in, and "done" is gated on the working
+human surface plus its in-app regression cases.
+
 ## UPDATE 2026-05-31 — DESIGN PIVOT (authoritative; supersedes the capacity model and E1 below)
 
 After the first draft, the human pivoted the model and split the scope. The
@@ -10,7 +90,7 @@ following is now governing; where it conflicts with anything later in this file
 (the "capacity model", "no idle directories", or exclusion **E1**), THIS section
 wins.
 
-**Scope split — Task-0016 is now BACKEND-ONLY.** Q1 = a (split). Task-0016 is the
+**Scope split — Task-0016 is now BACKEND-ONLY.** **[RESCINDED 2026-05-31 by UPDATE 3 at the top of this file — the Tk UI is BACK IN scope for Task-0016; ignore the "backend-only" framing and the Task-0017 deferral in this bullet. The manual-pool MODEL described below still stands.]** Q1 = a (split). Task-0016 is the
 **manual worktree-pool lifecycle** in the Go backend, proven green against
 REG-007/008/009. The Tkinter UI redesign (the original frontend work, D1=replace)
 moves to a **future Task-0017** — do NOT draft Task-0017 and do NOT touch

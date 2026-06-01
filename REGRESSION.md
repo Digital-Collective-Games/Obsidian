@@ -455,6 +455,18 @@ Proof of all three (live, registry-driven, `queue_workers=2`):
   — UI Ready-flip → dispatch → launched agent ran; `wt<=1` throughout; autoclose → reclaim →
   slot reuse → 0, all on a multi-repo registry with the BUG-0003 fix in place.
 
+- **Pool-of-1 reinterpretation under the manual worktree-pool model (Task-0016):** once the
+  manual worktree-pool model lands (Task-0016 removes the `queue_workers` cap; concurrency is
+  bounded by the number of idle pool worktrees by construction), the "cap=1" sub-scenario above
+  is exercised as a **pool of 1**: the testbed repo's pool is **seeded via the Create action to
+  exactly one idle worktree** before the drain can dispatch, then TWO of its issues are flipped
+  `Queue=Ready` at the real UI. Expected behavior is unchanged in human terms — the consumer
+  dispatches EXACTLY ONE (the one idle worktree is drawn), DEFERS the other with NO worktree
+  (empty pool ⇒ wait, no auto-create), and on close/Eject the freed worktree is REUSED for the
+  deferred issue. The surface and Disqualifiers above still apply (real-UI Ready flip via the
+  Chrome debug session; never the production repo or the real `default` namespace). This is a
+  reinterpretation of the same case under the new model, not a new lane.
+
 ### REG-008 Queue-Drain Durable State In Temporal + Backend-Restart Survival
 
 Goal:
@@ -552,6 +564,339 @@ closing `QueueDrainTestbed#1` reclaimed ONLY its lane (`reclaimed [Task-0001]`, 
 on the Landing-1 code earlier
 ([PASS-0010](./Tracking/Task-0015/Testing/PASS-0010/REG-007-BUG-0003-FIX-PROOF.md), the
 [BUG-0003](./Tracking/Task-0015/BUG-0003.md) fix).
+
+### REG-010 WORKTREES Tab Pool View (Allocated/Idle Color + Repo + Path)
+
+Goal:
+
+Confirm the real desktop app exposes the Task-0016 `WORKTREES` tab (renamed from
+`TASKS`, content replaced), that it shows the whole worktree pool from the backend
+with allocated worktrees visibly distinguished from idle ones by background color, and
+that each row shows the repo and the local directory path. This is the canonical pool
+view case; it is not satisfied by a backend `/worktrees` JSON response or by a
+screenshot of an empty tab.
+
+Surface:
+
+The real desktop overlay `WORKTREES` tab, backed by the orchestration backend's
+`GET /api/v1/worktrees` on the isolated validation lane.
+
+Steps:
+
+1. Launch the real app from repo root on an isolated lane with a task-owned config and
+   isolated SQLite database as documented in [TESTING.md](./TESTING.md). Do not use
+   `C:\Users\gregs\.codex` or the human's dashboard config/database.
+2. Start the separate validation-lane orchestration backend
+   (`http://127.0.0.1:14318`) and point the app's worktrees readback at it
+   (`CODEX_DASHBOARD_*_BACKEND_URL`), without disturbing the always-on service lane.
+3. Seed the pool against the validation lane so it contains at least one ALLOCATED
+   worktree (an assigned/dispatched task) and at least one IDLE worktree, in a repo
+   registered in the validation-lane registry.
+4. Trigger the real overlay path.
+5. Confirm the nav shows a `WORKTREES` tab where `TASKS` used to be, and no `TASKS`
+   tab remains.
+6. Click the `WORKTREES` tab and verify the switch completes immediately and does not
+   dispatch, assign, eject, destroy, dequeue, or otherwise change backend state by
+   switching tabs.
+7. Verify the surface lists every worktree the backend reports, each row showing the
+   repo, the local directory path, a stable identifier, and — for allocated rows — the
+   bound task/run/status.
+8. Verify allocated rows render with a visibly different background color than idle
+   rows (the distinction is perceivable, not only a text label).
+9. Stop the validation-lane backend and confirm the tab shows a clear human-facing
+   backend-unavailable message rather than crashing or showing a blank surface; restart
+   the backend and confirm the pool view recovers.
+10. Capture an artifact from the running app surface showing the `WORKTREES` tab active
+    with both an allocated (colored) and an idle row.
+11. Exit cleanly.
+
+Expected result:
+
+- the nav shows `WORKTREES` (not `TASKS`); the old task stream/detail/dispatch content
+  is gone from this tab
+- switching to `WORKTREES` is read-only and does not mutate backend state
+- the pool view renders every backend-reported worktree with repo + local dir +
+  identifier, and allocated rows are a visibly different background color than idle rows
+- a backend-unavailable state shows a clear message and does not crash
+- no extra console or app windows are spawned by the interaction
+
+Interpretation:
+
+- this is the canonical regression for the Task-0016 `WORKTREES`-tab pool view
+- unit coverage of the pure render/color helpers lives in
+  `tests/test_worktrees_tab.py`; that unit proof supports but does not replace this
+  app-surface case
+- the desktop frontend does not change for the human until a new pinned release is
+  published and the overlay restarted (see [TESTING.md](./TESTING.md) and
+  `scripts/Publish-DashboardRelease.ps1`); that publish + restart is a separate
+  human-gated step
+
+### REG-011 WORKTREES Tab Copy-Path Control
+
+Goal:
+
+Confirm the `WORKTREES` tab's per-row copy control copies that worktree's exact local
+directory path to the system clipboard (the mockup's copy icon).
+
+Surface:
+
+The real desktop overlay `WORKTREES` tab copy control, backed by
+`GET /api/v1/worktrees` on the isolated validation lane.
+
+Steps:
+
+1. Launch the real app and validation-lane backend as in REG-010 (isolated lane,
+   task-owned config/SQLite); seed at least one worktree.
+2. Trigger the real overlay path and open the `WORKTREES` tab.
+3. Click the copy-path control on a worktree row.
+4. Read the system clipboard and compare it to the `worktree_path` the backend reports
+   for that worktree (via `GET /api/v1/worktrees`).
+5. Capture an artifact from the running app surface showing the copy control and the
+   clipboard contents matching the row's path.
+6. Exit cleanly.
+
+Expected result:
+
+- clicking the copy control places the exact `worktree_path` string for that row on the
+  system clipboard
+- the interaction does not mutate backend state or spawn extra windows
+
+Interpretation:
+
+- this is the canonical regression for the Task-0016 copy-path control
+- comparing the clipboard to the backend-reported path is the proof; a screenshot of the
+  icon alone does not satisfy this case
+
+### REG-012 WORKTREES Tab Repo Filter (Registry-Sourced Dropdown)
+
+Goal:
+
+Confirm the `WORKTREES` tab's repo filter dropdown is populated from the repo registry
+(`GET /api/v1/repos`), not a hardcoded list, and that selecting a repo narrows the pool
+view to that repo while "All repos" restores the full view.
+
+Surface:
+
+The real desktop overlay `WORKTREES` tab repo filter, backed by `GET /api/v1/repos` and
+`GET /api/v1/worktrees` on the isolated validation lane.
+
+Steps:
+
+1. Launch the real app and validation-lane backend as in REG-010, with a validation-lane
+   registry that registers AT LEAST TWO repos, each holding at least one worktree.
+2. Trigger the real overlay path and open the `WORKTREES` tab.
+3. Open the repo filter dropdown and confirm its options match the repos returned by
+   `GET /api/v1/repos` (plus an "All repos" option) — not a fixed/hardcoded set.
+4. Select the first repo and confirm the pool view shows only that repo's worktrees.
+5. Select the second repo and confirm the pool view shows only the second repo's
+   worktrees.
+6. Select "All repos" and confirm the full pool returns.
+7. Capture an artifact from the running app surface showing the dropdown options and the
+   filtered view for one repo.
+8. Exit cleanly.
+
+Expected result:
+
+- the dropdown options equal the registry repos from `GET /api/v1/repos` plus "All repos"
+- selecting a repo filters the pool view to that repo; "All repos" restores the full view
+- a hardcoded repo list, or a dropdown that does not actually filter, fails this case
+- the interaction does not mutate backend state or spawn extra windows
+
+Interpretation:
+
+- this is the canonical regression for the Task-0016 registry-sourced repo filter
+- the registry-sourced requirement is load-bearing: the proof must show the options
+  changing with the validation-lane registry, not a static list
+
+### REG-013 WORKTREES Tab Create Control
+
+Goal:
+
+Confirm the `WORKTREES` tab's Create control provisions a new idle worktree into the
+selected repo's pool via the backend and that the new idle worktree then appears in the
+pool view.
+
+Surface:
+
+The real desktop overlay `WORKTREES` tab Create control, backed by
+`POST /api/v1/worktrees/create` + `GET /api/v1/worktrees` on the isolated validation
+lane.
+
+Steps:
+
+1. Launch the real app and validation-lane backend as in REG-010 (isolated lane,
+   task-owned config/SQLite) against a validation-lane registry with at least one repo.
+2. Trigger the real overlay path and open the `WORKTREES` tab. Note the current idle
+   worktree count for the target repo.
+3. Select the target repo (via the repo filter / create affordance) and click Create.
+4. Confirm the surface refreshes and a NEW idle worktree for that repo now appears in
+   the pool view (idle color, real local-dir path), increasing the repo's idle count by
+   one.
+5. Cross-check `GET /api/v1/worktrees` shows the same new idle worktree on a stable path
+   (not an `os.MkdirTemp` random dir).
+6. Capture an artifact from the running app surface showing the newly created idle
+   worktree in the view.
+7. Tear down the created worktree (Destroy from the UI, or backend cleanup) so the proof
+   can be re-run.
+8. Exit cleanly.
+
+Expected result:
+
+- clicking Create provisions one new idle worktree into the selected repo's pool and it
+  appears in the view as idle with a real path
+- the new worktree is at a stable pool path, persisted, with no task bound
+- the interaction acts only through the backend endpoint and spawns no extra windows
+
+Interpretation:
+
+- this is the canonical regression for the Task-0016 Create control
+- proof that the worktree appears in the running app's view is required; a 201 from the
+  endpoint alone does not satisfy this case
+
+### REG-014 WORKTREES Tab Assign Popup Binds An Open Task
+
+Goal:
+
+Confirm the `WORKTREES` tab's Assign control on an idle worktree opens a popup that
+queries the open tasks (id + title + state, no progress bars) and that selecting a task
+binds it onto the chosen idle worktree, which then flips to allocated in the view.
+
+Surface:
+
+The real desktop overlay `WORKTREES` tab Assign popup, backed by `GET /api/v1/tasks`
+(open-task list) and `POST /api/v1/worktrees/assign` on the isolated validation lane.
+
+Steps:
+
+1. Launch the real app and validation-lane backend as in REG-010, with at least one IDLE
+   worktree in the pool and at least one open task readable from `GET /api/v1/tasks`
+   (isolated lane / task-owned fixture per [TESTING.md](./TESTING.md)).
+2. Trigger the real overlay path and open the `WORKTREES` tab.
+3. Click Assign on an idle worktree row.
+4. Verify the popup lists open tasks with task id + title + state, and does NOT show
+   per-task progress bars or file-ref metadata lines (mockup exclusion E6).
+5. Select a task and confirm.
+6. Verify the chosen worktree flips to ALLOCATED in the view (allocated color), bound to
+   the selected task, with a running status, and that the SAME worktree path is reused
+   (no new directory is created).
+7. Cross-check `GET /api/v1/worktrees` shows that worktree allocated to the task.
+8. Capture an artifact from the running app surface showing the populated Assign popup
+   and the worktree allocated afterward.
+9. Eject/clean up so the proof can be re-run.
+10. Exit cleanly.
+
+Expected result:
+
+- the Assign popup lists open tasks (id + title + state) from `GET /api/v1/tasks`, with
+  no progress bars or file-ref lines
+- confirming a selection binds that task onto the chosen idle worktree, which flips to
+  allocated in the view, reusing the same folder
+- an empty/hardcoded popup list, or a popup that does not actually bind, fails this case
+- the interaction acts only through backend endpoints and spawns no extra windows
+
+Interpretation:
+
+- this is the canonical regression for the Task-0016 Assign popup → bind interaction
+- the open-task source is the existing `GET /api/v1/tasks`; the proof must show real
+  open tasks in the popup and a real allocation result, not just the popup opening
+
+### REG-015 WORKTREES Tab Eject Returns Idle And Dequeues
+
+Goal:
+
+Confirm the `WORKTREES` tab's Eject control on an allocated worktree stops the agent,
+cleans the worktree back to baseline, returns the SAME folder to idle in the view, and
+dequeues the freed task so it is not re-dispatched (the Task-0016 UPDATE 2 behavior).
+
+Surface:
+
+The real desktop overlay `WORKTREES` tab Eject control, backed by
+`POST /api/v1/worktrees/eject` + `GET /api/v1/worktrees` on the isolated validation lane.
+
+Steps:
+
+1. Launch the real app and validation-lane backend as in REG-010, with an ALLOCATED
+   worktree bound to a task whose provider queue state is `Ready` (use a throwaway
+   testbed task on the isolated lane; never a production issue).
+2. Trigger the real overlay path and open the `WORKTREES` tab.
+3. Click Eject on the allocated worktree row.
+4. Verify the worktree returns to IDLE in the view (idle color), the bound task is no
+   longer shown, and the SAME local-dir path is still present (the folder was kept, not
+   deleted).
+5. Verify the freed task is dequeued: the pool read no longer re-allocates it on a
+   subsequent refresh / consumer poll (its provider queue state is `Never`, not `Ready`),
+   so it is not re-dispatched (no bounce-back). The task's issue remains open.
+6. Capture an artifact from the running app surface showing the worktree idle after Eject
+   and the task no longer bound/re-dispatched.
+7. Exit cleanly.
+
+Expected result:
+
+- clicking Eject returns the allocated worktree to idle in the view with the same folder
+  retained (Eject never deletes the folder)
+- the freed task is dequeued (`Queue=Never`, issue still open) and is not re-dispatched
+  on the next poll
+- the interaction acts only through the backend endpoint and spawns no extra windows
+
+Interpretation:
+
+- this is the canonical regression for the Task-0016 Eject (keep-folder + return-idle +
+  dequeue) interaction at the desktop surface
+- the no-bounce-back consequence is exercised in-app here; the backend-seam no-redispatch
+  unit proof supports but does not replace this case
+- run only against throwaway testbed tasks on the isolated lane; the dequeue is a backend
+  provider write and must never touch a production-owned queue
+
+### REG-016 WORKTREES Tab Destroy (Idle Only) And Standalone Dequeue
+
+Goal:
+
+Confirm the `WORKTREES` tab's Destroy control removes an idle worktree from the view,
+rejects Destroy on an allocated worktree with a clear human-facing message (removing
+nothing), and that the standalone Dequeue control takes a task out of the queue without
+ejecting (the run keeps going; the issue stays open).
+
+Surface:
+
+The real desktop overlay `WORKTREES` tab Destroy + Dequeue controls, backed by
+`POST /api/v1/worktrees/destroy`, `POST /api/v1/worktrees/dequeue`, and
+`GET /api/v1/worktrees` on the isolated validation lane.
+
+Steps:
+
+1. Launch the real app and validation-lane backend as in REG-010, with BOTH an idle
+   worktree and an allocated worktree in the pool (the allocated one bound to a throwaway
+   testbed task on the isolated lane).
+2. Trigger the real overlay path and open the `WORKTREES` tab.
+3. Click Destroy on the IDLE worktree and confirm it disappears from the view and from
+   `GET /api/v1/worktrees`.
+4. Click Destroy on the ALLOCATED worktree and confirm the surface shows a clear
+   human-facing rejection message (operator must Eject first), the worktree is NOT
+   removed, and it remains allocated.
+5. Click the standalone Dequeue control for the allocated worktree's task and confirm:
+   the worktree stays ALLOCATED (the run is not stopped, the worktree is not returned to
+   idle), the task's provider queue state becomes `Never` (it will not be re-dispatched),
+   and the issue stays OPEN (Dequeue is not Close).
+6. Capture an artifact from the running app surface showing the idle worktree removed, the
+   allocated-Destroy rejection message, and the post-Dequeue allocated-but-not-queued
+   state.
+7. Exit cleanly.
+
+Expected result:
+
+- Destroy removes an idle worktree from the view; Destroy on an allocated worktree is
+  rejected with a clear message and removes nothing
+- standalone Dequeue takes the task out of the queue without ejecting (worktree stays
+  allocated, run continues) and does not close the issue
+- the interactions act only through backend endpoints and spawn no extra windows
+
+Interpretation:
+
+- this is the canonical regression for the Task-0016 Destroy (idle-only) and standalone
+  Dequeue controls at the desktop surface
+- the allocated-Destroy rejection and the dequeue-is-not-close behavior are load-bearing;
+  a Destroy that deletes an allocated worktree, or a Dequeue that closes the issue, fails
+- run only against throwaway testbed tasks on the isolated lane
 
 ## Supporting Smoke
 
