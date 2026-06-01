@@ -347,6 +347,45 @@ Create the durable backend task-run contract so later clients do not guess state
 	}
 }
 
+func TestListTasksToleratesMissingTaskState(t *testing.T) {
+	// BUG-0003: a Tracking/Task-* directory without TASK-STATE.json must not fail the
+	// whole task list (which 502s GET /api/v1/tasks and breaks the WORKTREES tab's
+	// Assign popup). The stateless task must still appear, with its id from the dir name.
+	worktreeRoot := writeTaskTrackingRoot(t, map[string]taskFixture{
+		"Task-0008": {
+			taskMD:    "# Task 0008\n\n## Title\n\nBuild the backend dispatch layer.\n\n## Summary\n\nDurable contract.\n",
+			taskState: `{"task_id":"Task-0008","status":"in_progress","phase":"implementation","plan_approved":true,"current_pass":"PASS-0000","current_gate":"implementation","blockers":[],"updated_at":"2026-04-24T16:27:00-04:00"}`,
+		},
+		"Task-0014": {
+			taskMD:    "# Task 0014\n\n## Title\n\nTab-aware overlay.\n\n## Summary\n\nMove the overlay up on every tab.\n",
+			taskState: `{"task_id":"Task-0014","status":"in_progress","phase":"implementation","plan_approved":true,"current_gate":"implementation","blockers":[],"updated_at":"2026-04-24T16:27:00-04:00"}`,
+		},
+	})
+	if err := os.Remove(filepath.Join(worktreeRoot, "Tracking", "Task-0014", "TASK-STATE.json")); err != nil {
+		t.Fatalf("remove TASK-STATE.json: %v", err)
+	}
+
+	service := NewService(worktreeRoot, filepath.Join(worktreeRoot, ".runs"), nil)
+	tasks, err := service.ListTasks(context.Background())
+	if err != nil {
+		t.Fatalf("ListTasks must tolerate a missing TASK-STATE.json, got error: %v", err)
+	}
+	byID := map[string]TaskView{}
+	for _, tk := range tasks {
+		byID[tk.TaskID] = tk
+	}
+	if _, ok := byID["Task-0008"]; !ok {
+		t.Fatalf("Task-0008 (with state) missing from list: %#v", tasks)
+	}
+	stateless, ok := byID["Task-0014"]
+	if !ok {
+		t.Fatalf("stateless Task-0014 must still appear in the list: %#v", tasks)
+	}
+	if stateless.TaskID != "Task-0014" {
+		t.Fatalf("stateless task id = %q, want Task-0014", stateless.TaskID)
+	}
+}
+
 func TestCanonicalTaskFixtureRepoStartsAndDispatchesTask8And9(t *testing.T) {
 	repo := taskrepo.WriteCanonicalGitRepo(t)
 	runtime := newFakeRuntime()

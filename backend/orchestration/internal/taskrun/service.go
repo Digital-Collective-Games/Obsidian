@@ -1258,14 +1258,22 @@ func (s *Service) loadTask(taskRoot string) (parsedTask, error) {
 	}
 
 	taskStatePath := filepath.Join(taskRoot, "TASK-STATE.json")
-	taskStateRaw, err := os.ReadFile(taskStatePath)
-	if err != nil {
-		return parsedTask{}, fmt.Errorf("read %s: %w", taskStatePath, err)
-	}
-
+	taskStateExists := true
 	var state taskStateFile
-	if err := json.Unmarshal(taskStateRaw, &state); err != nil {
-		return parsedTask{}, fmt.Errorf("decode %s: %w", taskStatePath, err)
+	taskStateRaw, err := os.ReadFile(taskStatePath)
+	switch {
+	case err == nil:
+		if err := json.Unmarshal(taskStateRaw, &state); err != nil {
+			return parsedTask{}, fmt.Errorf("decode %s: %w", taskStatePath, err)
+		}
+	case os.IsNotExist(err):
+		// A task directory without TASK-STATE.json (e.g. created or migrated without one)
+		// must not fail the whole task list / Assign popup. Surface it with a default,
+		// unknown state derived from the directory name instead of erroring (BUG-0003).
+		taskStateExists = false
+		state = taskStateFile{TaskID: filepath.Base(taskRoot)}
+	default:
+		return parsedTask{}, fmt.Errorf("read %s: %w", taskStatePath, err)
 	}
 
 	title := extractMarkdownSection(string(taskRaw), "Title")
@@ -1284,7 +1292,9 @@ func (s *Service) loadTask(taskRoot string) (parsedTask, error) {
 
 	evidenceRefs := []EvidenceRef{
 		taskArtifactRef("TASK.md", taskMDPath),
-		taskArtifactRef("TASK-STATE.json", taskStatePath),
+	}
+	if taskStateExists {
+		evidenceRefs = append(evidenceRefs, taskArtifactRef("TASK-STATE.json", taskStatePath))
 	}
 	if _, err := os.Stat(filepath.Join(taskRoot, "PLAN.md")); err == nil {
 		evidenceRefs = append(evidenceRefs, taskArtifactRef("PLAN.md", filepath.Join(taskRoot, "PLAN.md")))
