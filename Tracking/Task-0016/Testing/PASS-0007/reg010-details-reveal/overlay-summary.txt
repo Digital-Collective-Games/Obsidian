@@ -1,0 +1,3 @@
+action=details
+worktree=repo-d130e7057332/wt-0001
+status=allocated

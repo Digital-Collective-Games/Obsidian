@@ -3,6 +3,58 @@
 These are the human's explicit decisions for this task. They outrank any
 writeup-standard preference. Do not narrow or re-sequence the scope below.
 
+## UPDATE 5 — 2026-06-01 — VISUAL FIDELITY + INFO HIERARCHY for the WORKTREES panels (authoritative; LATEST)
+
+New human directive — incorporate into the [FE] work; it raises the [FE] "done" bar
+(it does NOT change the functional scope of UPDATE 3 or the approved passes of
+UPDATE 4). Verbatim:
+
+> please ensure your visual target for each worktree panel matches the concept,
+> figure out a way to include other info you feel is important in a button or
+> mouseover. Ensure structurally you're paying attention to
+> C:\Users\gregs\.codex-pushable-temp\Orchestration\Prompts\INTERFACE-DESIGNER.md
+
+Requirements:
+
+- **Each worktree renders as a PANEL/CARD that matches the mockup concept** — not a
+  plain ttk list/table row. Canonical visual reference: the Stitch mockup
+  (`C:\Users\gregs\Downloads\stitch_codex_token_velocity_overlay (4)\screen.png` +
+  `code.html` + `DESIGN.md`) — the RIGHT-hand worktree cards (E2's left Task Browser
+  pane stays excluded). Each panel shows AT A GLANCE: the **repo** (Space-Grotesk
+  display/heading role), an **allocated/idle status chip**, the **local dir/path with
+  a copy control**, and — for allocated — the **bound task + run/gate status** and the
+  **Eject** action; for idle, the **Assign** action (plus **Create**/**Destroy** as
+  appropriate). Honor the mockup's "Monolithic Terminal" system: **0px radius, NO 1px
+  borders/dividers** (boundaries via tonal surface elevation
+  `#0a0e14`→`#1c2026`→higher tiers for nesting/hover), cyan/navy palette, Space Grotesk
+  for data/headings + Inter for metadata/labels, 4px baseline grid — reusing the app's
+  EXISTING ttk styles/palette (Q1=a; interpret by structure/hierarchy/role/affordance/
+  typography, NOT pixel-exact). Allocated vs idle panels must be tonally/colour distinct
+  in a meaning-bearing, same-family way (not arbitrary).
+- **Information hierarchy — primary on the panel face, secondary behind a control or
+  hover.** Keep the default panel glanceable (INTERFACE-DESIGNER: the default surface
+  is optimized for ordinary human interpretation; deeper diagnostic detail sits behind
+  an explicit reveal). Surface the important-but-secondary fields the backend exposes —
+  e.g. `agent_session_id`, `session_transcript_path`, `launched_pid`, the full
+  `run_gate_state`, the full/long `worktree_path`, `worktree_id`, `run_id` — via a
+  per-panel **Details button** and/or a **mouseover tooltip**, NOT crammed onto the
+  default card. On-face (glanceable) = repo, status chip, bound task (allocated), a
+  short path + copy control, the action button; behind the reveal = the long path/ids/
+  session/pid/transcript. Truthfully omit fields with no value (no fabricated
+  agent-model chip — E4).
+- **Structural adherence to INTERFACE-DESIGNER.md** is binding for this surface:
+  fidelity = affordance shape + icon family + hierarchy + typography roles + tonal
+  layering + glanceability + legibility (not just colour/spacing); a truthful empty/
+  zero-data state INSIDE the same panel shape; status via a chip (not text-only); the
+  copy control reads as a real affordance, not a placeholder glyph.
+- **Part of the [FE] "done" bar.** Before closure, a clean-context INTERFACE-DESIGNER
+  review compares the implemented `WORKTREES` tab against the mockup concept and must
+  report **no blocking fidelity discrepancies** (alongside the functional human-surface
+  QA and the in-app REG-010…REG-016). REG-010 must assert the panel matches the concept
+  (card layout; allocated/idle tonal distinction; status chip; repo + path + copy
+  control; action button) and that secondary/diagnostic info is reachable via the
+  Details/hover reveal.
+
 ## UPDATE 4 — 2026-06-01 — PLAN APPROVED + REG-003/REG-004 retirement decision (authoritative; LATEST)
 
 The human approved the implementation plan and confirmed the coordinator's

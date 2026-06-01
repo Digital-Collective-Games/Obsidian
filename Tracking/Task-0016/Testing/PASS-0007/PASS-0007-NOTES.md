@@ -81,9 +81,43 @@ dashboard config/db, or live Codex data. The app was pointed at it via
   `GET /api/v1/repos`, not hardcoded); selecting a repo narrows the pool, All-repos
   restores it.
 
+## UPDATE 5 refinement — panel/card fidelity + information hierarchy
+
+[HUMAN-DIRECTIVES UPDATE 5](../../HUMAN-DIRECTIVES-FOR-WORKER.md) raised the [FE] bar (it
+does NOT change functional scope): each worktree must render as a PANEL/CARD matching the
+Stitch mockup concept, glanceable by default with secondary/diagnostic info behind a
+reveal, structurally adhering to
+[INTERFACE-DESIGNER.md](../../../../../Users/gregs/.codex/Orchestration/Prompts/INTERFACE-DESIGNER.md).
+Applied (against the mockup `screen.png` + `DESIGN.md` "Monolithic Terminal": 0px radius,
+no dividers/borders, tonal surface elevation, Space Grotesk data/headings + Inter
+metadata, status chips):
+
+- **Glanceable face**: each panel shows the status chip, repo heading (Space Grotesk),
+  the bound `Task` (allocated, cyan data), a **shortened** local dir (Inter metadata), and
+  the action buttons. New `worktree_face_lines` + `shorten_path` pure helpers.
+- **Secondary behind a reveal**: a per-panel **DETAILS** button opens a popup with the
+  full secondary/diagnostic fields (full path, `worktree_id`, `run_id`, full
+  `run_gate_state`, `agent_session_id`, `session_transcript_path`, `launched_pid`) — empty
+  fields truthfully omitted (no fabricated agent-model chip, E4). `worktree_detail_lines`
+  now carries the full field set; `worktrees_backend` maps `session_transcript_path` +
+  `launched_pid`.
+- **Full-path hover tooltip** on the on-face short path (`_bind_tooltip`).
+- Allocated vs idle panels stay tonally distinct in the same family (`#173a44` vs
+  `#181c22` on the `#1c2026` shell); tooltip uses the `#353940` interaction tier.
+
+Re-captured: [reg010-pool-view-v2/overlay.png](./reg010-pool-view-v2/overlay.png) (the
+refined glanceable panels) and [reg010-details-reveal/overlay.png](./reg010-details-reveal/overlay.png)
+(the DETAILS popup with the full secondary fields). Unit suite green at **180** (added
+face-lines, shorten-path, and detail-lines secondary-field tests).
+
+A clean-context **INTERFACE-DESIGNER review** comparing the implemented tab against the
+mockup concept (no blocking fidelity discrepancies) remains a coordinator-arranged closure
+gate per UPDATE 5, alongside the functional in-app QA.
+
 ## Caveats
 
-- Producer testing only; the independent in-app QA verdict is coordinator-arranged.
+- Producer testing only; the independent in-app QA verdict + INTERFACE-DESIGNER review are
+  coordinator-arranged.
 - Captures use the smoke-capture harness (`--smoke-tab worktrees`) and a task-owned UI
   driver ([Runtime/capture_filtered.py](../Runtime/capture_filtered.py)) that drives the
   REAL app action methods / widget callbacks; both use the product's

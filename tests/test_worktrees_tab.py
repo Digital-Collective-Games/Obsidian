@@ -26,8 +26,10 @@ from app.codex_dashboard.worktrees_tab import (
     is_allocated,
     open_task_options,
     repo_filter_options,
+    shorten_path,
     sort_worktrees,
     worktree_detail_lines,
+    worktree_face_lines,
     worktree_matches_repo,
     worktree_status_background,
     worktree_status_color,
@@ -47,6 +49,9 @@ ALLOCATED_WORKTREE = {
     "task_id": "Task-0007",
     "worktree_path": "C:\\owned\\obsidian\\wt-0001\\wt-0001",
     "run_gate_state": "running",
+    "agent_session_id": "sess-abc",
+    "session_transcript_path": "C:\\transcripts\\sess-abc.jsonl",
+    "launched_pid": 12345,
 }
 IDLE_WORKTREE = {
     "worktree_id": "obsidian/wt-0002",
@@ -91,12 +96,35 @@ class WorktreesTabHelperTests(unittest.TestCase):
     def test_detail_lines_include_repo_path_id_and_allocated_binding(self) -> None:
         idle_lines = dict(worktree_detail_lines(IDLE_WORKTREE))
         self.assertEqual(idle_lines["Local dir"], IDLE_WORKTREE["worktree_path"])
-        self.assertEqual(idle_lines["ID"], IDLE_WORKTREE["worktree_id"])
+        self.assertEqual(idle_lines["Worktree id"], IDLE_WORKTREE["worktree_id"])
         self.assertNotIn("Task", idle_lines)
 
+        # The Details reveal carries the full secondary/diagnostic fields (UPDATE 5).
         allocated_lines = dict(worktree_detail_lines(ALLOCATED_WORKTREE))
         self.assertEqual(allocated_lines["Task"], "Task-0007")
-        self.assertEqual(allocated_lines["Gate"], "running")
+        self.assertEqual(allocated_lines["Run gate"], "running")
+        self.assertEqual(allocated_lines["Agent session"], "sess-abc")
+        self.assertEqual(allocated_lines["Transcript"], "C:\\transcripts\\sess-abc.jsonl")
+        self.assertEqual(allocated_lines["Launched PID"], "12345")
+
+    def test_face_lines_are_glanceable_only(self) -> None:
+        # The panel face shows only the bound task (allocated) + a SHORT path; the long
+        # ids / session / pid / transcript are NOT on the face (UPDATE 5).
+        allocated_face = dict(worktree_face_lines(ALLOCATED_WORKTREE))
+        self.assertEqual(allocated_face.get("Task"), "Task-0007")
+        self.assertIn("Local dir", allocated_face)
+        self.assertNotIn("Run", allocated_face)
+        self.assertNotIn("Agent session", allocated_face)
+        self.assertNotIn("Worktree id", allocated_face)
+        idle_face = dict(worktree_face_lines(IDLE_WORKTREE))
+        self.assertNotIn("Task", idle_face)
+        self.assertIn("Local dir", idle_face)
+
+    def test_shorten_path_keeps_leaf_with_ellipsis(self) -> None:
+        short = shorten_path("C:\\Users\\gregs\\AppData\\Local\\Temp\\cdxow\\repo-x\\wt-0001\\wt-0001")
+        self.assertTrue(short.startswith("..."))
+        self.assertIn("wt-0001", short)
+        self.assertEqual(shorten_path("C:\\short\\p"), "C:\\short\\p")  # short path unchanged
 
     def test_repo_filter_options_are_registry_sourced_not_hardcoded(self) -> None:
         # The dropdown is All repos + EXACTLY the registry ids, in registry order.
@@ -171,9 +199,12 @@ class WorktreesBackendTests(unittest.TestCase):
         self.assertEqual(allocated["status"], "allocated")
         self.assertEqual(allocated["task_id"], "Task-0007")
         self.assertEqual(allocated["run_id"], "taskrun--Task-0007--active")
+        self.assertEqual(allocated["launched_pid"], 12345)
+        self.assertEqual(allocated["session_transcript_path"], "C:\\transcripts\\sess-abc.jsonl")
         idle = snapshot["worktrees"][1]
         self.assertEqual(idle["status"], "idle")
         self.assertEqual(idle["run_id"], "")
+        self.assertEqual(idle["launched_pid"], 0)
 
     def test_map_pool_snapshot_rejects_non_list(self) -> None:
         with self.assertRaises(WorktreesBackendError):

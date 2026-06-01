@@ -126,6 +126,8 @@ def map_backend_worktree(worktree_payload: dict[str, Any]) -> dict[str, object]:
         "task_id": _text(worktree_payload.get("task_id"), default="") or "",
         "run_gate_state": _text(worktree_payload.get("run_gate_state"), default="") or "",
         "agent_session_id": _text(worktree_payload.get("agent_session_id"), default="") or "",
+        "session_transcript_path": _text(worktree_payload.get("session_transcript_path"), default="") or "",
+        "launched_pid": _int(worktree_payload.get("launched_pid")),
     }
 
 
@@ -225,3 +227,10 @@ def _text(value: Any, default: str | None = None) -> str | None:
     if text == "":
         return default
     return text
+
+
+def _int(value: Any) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0

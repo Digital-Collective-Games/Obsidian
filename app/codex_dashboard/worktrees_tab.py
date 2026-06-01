@@ -131,22 +131,67 @@ def worktree_summary_counts(worktrees: Iterable[dict[str, object]]) -> dict[str,
     return {"allocated": allocated, "idle": idle, "total": allocated + idle}
 
 
+def shorten_path(path: str, max_len: int = 52) -> str:
+    """A glanceable short form of a long local-dir path for the panel face: keep the
+    leaf (and one parent) with a leading ellipsis when the full path is long. The full
+    path stays available behind the Details reveal / tooltip and the copy control copies
+    the EXACT full path.
+    """
+    path = str(path or "")
+    if len(path) <= max_len:
+        return path
+    normalized = path.replace("/", "\\")
+    parts = [p for p in normalized.split("\\") if p]
+    if len(parts) >= 2:
+        tail = "\\".join(parts[-2:])
+    elif parts:
+        tail = parts[-1]
+    else:
+        return path[-max_len:]
+    return "...\\" + tail
+
+
+def worktree_face_lines(worktree: dict[str, object]) -> list[tuple[str, str]]:
+    """The GLANCEABLE on-face fields (INTERFACE-DESIGNER: default surface optimized for
+    ordinary interpretation). Repo is the panel heading and the chip carries status, so
+    the body face shows only the bound task (allocated) and a SHORT local dir; the full
+    path / ids / session / pid / transcript move behind the Details reveal.
+    """
+    lines: list[tuple[str, str]] = []
+    if is_allocated(worktree):
+        task_id = str(worktree.get("task_id") or "")
+        if task_id:
+            lines.append(("Task", task_id))
+    short = shorten_path(str(worktree.get("worktree_path") or ""))
+    if short:
+        lines.append(("Local dir", short))
+    return lines
+
+
 def worktree_detail_lines(worktree: dict[str, object]) -> list[tuple[str, str]]:
-    """Per-row detail fields (repo + local dir + id, and the allocated binding)."""
+    """The full secondary/diagnostic fields for the per-panel Details reveal / tooltip:
+    the full local dir, the stable id, and (allocated) the bound run/gate/session/pid/
+    transcript. Empty fields are omitted truthfully (no fabricated agent-model chip — E4).
+    """
     lines: list[tuple[str, str]] = [
         ("Repo", str(worktree.get("repo") or "")),
         ("Local dir", str(worktree.get("worktree_path") or "")),
-        ("ID", str(worktree.get("worktree_id") or "")),
+        ("Worktree id", str(worktree.get("worktree_id") or "")),
     ]
     if is_allocated(worktree):
         for label, key in (
             ("Task", "task_id"),
             ("Run", "run_id"),
-            ("Gate", "run_gate_state"),
+            ("Run gate", "run_gate_state"),
+            ("Agent session", "agent_session_id"),
+            ("Transcript", "session_transcript_path"),
         ):
             value = str(worktree.get(key) or "")
             if value:
                 lines.append((label, value))
+        pid = worktree.get("launched_pid")
+        if isinstance(pid, int) and pid > 0:
+            lines.append(("Launched PID", str(pid)))
     return [(label, value) for label, value in lines if value]
 
 

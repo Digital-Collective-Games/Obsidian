@@ -67,6 +67,7 @@ from .worktrees_tab import (
     open_task_options,
     repo_filter_options,
     worktree_detail_lines,
+    worktree_face_lines,
     worktree_status_background,
     worktree_status_color,
     worktree_status_label,
@@ -1312,12 +1313,17 @@ class DashboardApp:
         )
         repo_label.pack(side="left", padx=(10, 0))
 
-        for label, value in worktree_detail_lines(worktree):
+        # On-face glanceable fields only (INTERFACE-DESIGNER: default surface optimized
+        # for ordinary interpretation). The bound task reads as cyan data; the short
+        # local dir reads as muted metadata and carries a full-path hover tooltip. The
+        # full path / ids / session / pid / transcript live behind the Details reveal.
+        full_path = str(worktree.get("worktree_path") or "")
+        for label, value in worktree_face_lines(worktree):
             line = tk.Label(
                 content,
                 text=f"{label}: {value}",
                 bg=row_bg,
-                fg="#9fbdcc" if label in ("Repo", "Local dir", "ID") else "#c3f5ff",
+                fg="#c3f5ff" if label == "Task" else "#9fbdcc",
                 font=("Inter", 9),
                 anchor="w",
                 justify="left",
@@ -1325,6 +1331,8 @@ class DashboardApp:
             )
             line.pack(anchor="w", pady=(4, 0), fill="x")
             line.bind("<MouseWheel>", self._on_worktrees_mousewheel)
+            if label == "Local dir" and full_path:
+                self._bind_tooltip(line, full_path)
 
         controls = tk.Frame(content, bg=row_bg)
         controls.pack(anchor="w", pady=(8, 0), fill="x")
@@ -1341,6 +1349,12 @@ class DashboardApp:
             text="COPY PATH",
             style="Quiet.TButton",
             command=lambda path=worktree_path: self.copy_worktree_path(path),
+        ).pack(side="left", padx=(0, 6))
+        ttk.Button(
+            parent,
+            text="DETAILS",
+            style="Quiet.TButton",
+            command=lambda wt=dict(worktree): self.open_worktree_details(wt),
         ).pack(side="left", padx=(0, 6))
 
         if is_allocated(worktree):
@@ -1382,6 +1396,87 @@ class DashboardApp:
         self.overlay.clipboard_clear()
         self.overlay.clipboard_append(path)
         self._set_worktrees_status(f"Copied worktree path to clipboard: {path}")
+
+    def _bind_tooltip(self, widget: tk.Widget, text: str) -> None:
+        # A lightweight hover tooltip: the short on-face path stays glanceable while the
+        # full path is revealed on mouseover (UPDATE 5 information hierarchy).
+        tip: dict[str, tk.Toplevel | None] = {"win": None}
+
+        def show(_event=None) -> None:
+            if tip["win"] is not None:
+                return
+            win = tk.Toplevel(self.overlay)
+            win.wm_overrideredirect(True)
+            win.configure(bg="#353940")
+            tk.Label(
+                win,
+                text=text,
+                bg="#353940",
+                fg="#dfe2eb",
+                font=("Inter", 9),
+                justify="left",
+                padx=8,
+                pady=4,
+            ).pack()
+            win.wm_geometry(f"+{widget.winfo_rootx()}+{widget.winfo_rooty() + widget.winfo_height() + 2}")
+            tip["win"] = win
+
+        def hide(_event=None) -> None:
+            if tip["win"] is not None:
+                tip["win"].destroy()
+                tip["win"] = None
+
+        widget.bind("<Enter>", show)
+        widget.bind("<Leave>", hide)
+
+    def open_worktree_details(self, worktree: dict[str, object]) -> None:
+        # The explicit Details reveal: the full secondary/diagnostic fields the panel face
+        # intentionally omits (full path, ids, run/gate, agent session, transcript, PID).
+        popup = tk.Toplevel(self.overlay)
+        popup.title("Worktree details")
+        popup.configure(bg="#1c2026")
+        popup.transient(self.overlay)
+        popup.attributes("-topmost", True)
+        popup.geometry("560x360")
+
+        accent = worktree_status_color(worktree)
+        head = tk.Frame(popup, bg="#1c2026")
+        head.pack(fill="x", padx=16, pady=(16, 8))
+        tk.Label(
+            head,
+            text=worktree_status_label(worktree),
+            bg="#10141a",
+            fg=accent,
+            padx=8,
+            pady=3,
+            font=("Space Grotesk", 8, "bold"),
+        ).pack(side="left")
+        tk.Label(
+            head,
+            text=str(worktree.get("repo") or "unknown repo"),
+            bg="#1c2026",
+            fg="#dfe2eb",
+            font=("Space Grotesk", 11, "bold"),
+        ).pack(side="left", padx=(10, 0))
+
+        body = tk.Frame(popup, bg="#10141a")
+        body.pack(fill="both", expand=True, padx=16, pady=(0, 8))
+        for label, value in worktree_detail_lines(worktree):
+            line = tk.Frame(body, bg="#10141a")
+            line.pack(anchor="w", fill="x", padx=10, pady=3)
+            tk.Label(line, text=f"{label}:", bg="#10141a", fg="#6e8598", font=("Inter", 9), width=14, anchor="w").pack(side="left")
+            tk.Label(
+                line,
+                text=value,
+                bg="#10141a",
+                fg="#dfe2eb",
+                font=("Inter", 9),
+                anchor="w",
+                justify="left",
+                wraplength=400,
+            ).pack(side="left", fill="x", expand=True)
+
+        ttk.Button(popup, text="CLOSE", style="Quiet.TButton", command=popup.destroy).pack(anchor="e", padx=16, pady=(0, 14))
 
     def create_worktree_for_selected_repo(self) -> None:
         repo_id = self._selected_repo_id()
