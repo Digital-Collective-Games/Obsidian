@@ -74,7 +74,17 @@ Backend batch progress:
   [Testing/PASS-0004-CHECKLIST.json](./Testing/PASS-0004-CHECKLIST.json). Provider test
   fatals on any `issue close` (AC14); dequeue resolves Task-0007→#7 through the provider
   (AC12); endpoint 200 + guard (AC15). Full `go test ./...` green.
-- **Next:** PASS-0005 Eject (keep folder + return idle + dequeue) + no-bounce-back seam.
+- **PASS-0005 — Eject (keep folder + return idle + dequeue) + no-bounce-back seam — DONE.**
+  `Service.EjectWorktree` (terminate agent + `reset --hard`/`clean -fdx` via the new
+  `restoreOwnedLaneFull` + keep folder + clear pool record run_id + dequeue the freed task;
+  works running AND parked; never deletes, never closes) + `POST /api/v1/worktrees/eject`.
+  Proof: [Testing/PASS-0005/PASS-0005-NOTES.md](./Testing/PASS-0005/PASS-0005-NOTES.md),
+  [Testing/PASS-0005-CHECKLIST.json](./Testing/PASS-0005-CHECKLIST.json). Eject keeps the
+  folder + returns idle + dequeues #1 (AC6/AC14, running & parked); the consumer+service
+  no-bounce-back seam dequeues so the next poll does NOT re-dispatch, with a load-bearing
+  variant that DOES bounce when the dequeue is skipped (AC13); endpoint Eject returns idle +
+  dequeues #8. Full `go test ./...` green.
+- **Next:** PASS-0006 backend cross-cut (full `go test ./...` + server-only smoke).
 
 ### Original planning resume point (superseded by the approval above)
 

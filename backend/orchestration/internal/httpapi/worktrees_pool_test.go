@@ -210,6 +210,55 @@ func TestReposEndpointReadsRegistryWithoutQueueWorkers(t *testing.T) {
 	}
 }
 
+// AC6/AC13 (endpoint): POST /api/v1/worktrees/eject on an allocated worktree returns it to
+// idle in the pool view (folder kept) and dequeues the freed task through the provider.
+func TestWorktreeEjectReturnsIdleAndDequeues(t *testing.T) {
+	mux, taskService, _ := poolMuxWithService(t)
+	fake := &recordingDequeueProvider{}
+	taskService.SetDequeueProvider(fake)
+
+	createResp := httptest.NewRecorder()
+	mux.ServeHTTP(createResp, httptest.NewRequest(http.MethodPost, "/api/v1/worktrees/create",
+		strings.NewReader(`{"repo":"obsidian"}`)))
+	var created taskrun.PoolWorktree
+	_ = json.Unmarshal(createResp.Body.Bytes(), &created)
+
+	assignResp := httptest.NewRecorder()
+	mux.ServeHTTP(assignResp, httptest.NewRequest(http.MethodPost, "/api/v1/worktrees/assign",
+		strings.NewReader(`{"task_id":"Task-0008","repo":"obsidian","worktree_id":"`+created.WorktreeID+`"}`)))
+	if assignResp.Code != http.StatusAccepted {
+		t.Fatalf("assign status = %d, want 202: %s", assignResp.Code, assignResp.Body.String())
+	}
+	var assigned taskrun.TaskRunView
+	_ = json.Unmarshal(assignResp.Body.Bytes(), &assigned)
+
+	ejectResp := httptest.NewRecorder()
+	mux.ServeHTTP(ejectResp, httptest.NewRequest(http.MethodPost, "/api/v1/worktrees/eject",
+		strings.NewReader(`{"run_id":"`+assigned.RunID+`"}`)))
+	if ejectResp.Code != http.StatusOK {
+		t.Fatalf("eject status = %d, want 200: %s", ejectResp.Code, ejectResp.Body.String())
+	}
+	var ejected taskrun.PoolWorktree
+	_ = json.Unmarshal(ejectResp.Body.Bytes(), &ejected)
+	if ejected.Status != "idle" || ejected.WorktreeID != created.WorktreeID {
+		t.Fatalf("ejected worktree = %#v, want idle %q", ejected, created.WorktreeID)
+	}
+
+	// The pool view shows it idle, and the freed task was dequeued (Task-0008 -> #8).
+	listResp := httptest.NewRecorder()
+	mux.ServeHTTP(listResp, httptest.NewRequest(http.MethodGet, "/api/v1/worktrees", nil))
+	var payload struct {
+		Worktrees []taskrun.PoolWorktree `json:"worktrees"`
+	}
+	_ = json.Unmarshal(listResp.Body.Bytes(), &payload)
+	if len(payload.Worktrees) != 1 || payload.Worktrees[0].Status != "idle" {
+		t.Fatalf("pool after eject = %#v, want one idle worktree", payload.Worktrees)
+	}
+	if len(fake.calls) != 1 || fake.calls[0].number != 8 {
+		t.Fatalf("eject dequeue calls = %#v, want one dequeue for issue #8 (Task-0008)", fake.calls)
+	}
+}
+
 // AC15: POST /api/v1/worktrees/dequeue invokes the provider dequeue (Queue -> Never) for
 // the named task WITHOUT ejecting and does NOT close the issue.
 func TestWorktreeDequeueEndpointInvokesProviderWithoutClosing(t *testing.T) {
@@ -243,6 +292,7 @@ func TestWorktreePoolRouteGuards(t *testing.T) {
 		{"assign wrong method", http.MethodGet, "/api/v1/worktrees/assign", http.StatusMethodNotAllowed},
 		{"destroy wrong method", http.MethodGet, "/api/v1/worktrees/destroy", http.StatusMethodNotAllowed},
 		{"dequeue wrong method", http.MethodGet, "/api/v1/worktrees/dequeue", http.StatusMethodNotAllowed},
+		{"eject wrong method", http.MethodGet, "/api/v1/worktrees/eject", http.StatusMethodNotAllowed},
 		{"unknown subpath", http.MethodPost, "/api/v1/worktrees/bogus", http.StatusNotFound},
 		{"repos wrong method", http.MethodPost, "/api/v1/repos", http.StatusMethodNotAllowed},
 	}

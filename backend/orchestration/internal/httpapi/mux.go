@@ -255,6 +255,31 @@ func handleWorktreeAPIRoute(w http.ResponseWriter, r *http.Request, taskService 
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"status": "destroyed", "worktree_id": body.WorktreeID})
+	case "eject":
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		var body struct {
+			RunID      string `json:"run_id"`
+			WorktreeID string `json:"worktree_id"`
+		}
+		if err := decodeJSONBody(r, &body); err != nil {
+			writeJSONError(w, http.StatusBadRequest, err)
+			return
+		}
+		ctx, cancel := contextWithTimeout(r, 60*time.Second)
+		defer cancel()
+		ejected, err := taskService.EjectWorktree(ctx, body.RunID, body.WorktreeID)
+		if err != nil {
+			if errors.Is(err, taskrun.ErrPoolWorktreeNotFound) {
+				http.NotFound(w, r)
+				return
+			}
+			writeJSONError(w, http.StatusBadRequest, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, ejected)
 	case "dequeue":
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)

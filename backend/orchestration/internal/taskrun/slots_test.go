@@ -286,3 +286,83 @@ func TestDispatchRefusedWhenPoolEmpty(t *testing.T) {
 		t.Fatal("dispatch into an empty pool must be refused, got nil error")
 	}
 }
+
+// TestEjectKeepsFolderReturnsIdleAndDequeues is the AC6/AC14 service proof: Eject of an
+// allocated worktree KEEPS the folder, returns it idle (run_id cleared), and DEQUEUES the
+// freed task through the provider (Queue -> Never) WITHOUT closing the issue. A test that
+// finds the folder deleted, or that finds the dequeue not called, or that finds the issue
+// closed, fails.
+func TestEjectKeepsFolderReturnsIdleAndDequeues(t *testing.T) {
+	service := newSiblingPoolService(t)
+	dequeue := &fakeDequeueProvider{}
+	service.SetDequeueProvider(dequeue)
+
+	created := seedThroughCreate(t, service)
+	run, err := service.Dispatch(context.Background(), "Task-0001")
+	if err != nil {
+		t.Fatalf("dispatch: %v", err)
+	}
+	if _, err := os.Stat(created.WorktreePath); err != nil {
+		t.Fatalf("allocated checkout should exist: %v", err)
+	}
+
+	ejected, err := service.EjectWorktree(context.Background(), run.RunID, "")
+	if err != nil {
+		t.Fatalf("eject: %v", err)
+	}
+	// Folder is KEPT (NOT deleted) and now idle.
+	if _, err := os.Stat(created.WorktreePath); err != nil {
+		t.Fatalf("Eject must KEEP the folder, but the checkout is gone: %v", err)
+	}
+	if ejected.Status != poolStatusIdle {
+		t.Fatalf("ejected worktree status = %q, want idle", ejected.Status)
+	}
+	rec, ok, err := readPoolRecord(service.poolMemberDir(1))
+	if err != nil || !ok {
+		t.Fatalf("read pool record after eject: ok=%v err=%v", ok, err)
+	}
+	if rec.RunID != "" {
+		t.Fatalf("ejected pool record run_id = %q, want empty (idle)", rec.RunID)
+	}
+	// Dequeued the freed task (Task-0001 -> issue #1) through the provider; never closed.
+	if len(dequeue.calls) != 1 || dequeue.calls[0].number != 1 {
+		t.Fatalf("dequeue calls = %#v, want one dequeue for issue #1 (Task-0001)", dequeue.calls)
+	}
+}
+
+// TestEjectWorksWhileParked proves Eject works regardless of parked state (it does not
+// require a parked run, unlike resolve-interrupt-review which only reclaims parked).
+func TestEjectWorksWhileParked(t *testing.T) {
+	service := newSiblingPoolService(t)
+	service.SetDequeueProvider(&fakeDequeueProvider{})
+	created := seedThroughCreate(t, service)
+	run, err := service.Dispatch(context.Background(), "Task-0001")
+	if err != nil {
+		t.Fatalf("dispatch: %v", err)
+	}
+	// Park the lane (Human Needed=Yes), as the consumer would.
+	if _, err := service.SetRunGateState("Task-0001", RunGateStateParkedAwaitingClosure); err != nil {
+		t.Fatalf("park lane: %v", err)
+	}
+	ejected, err := service.EjectWorktree(context.Background(), run.RunID, "")
+	if err != nil {
+		t.Fatalf("eject parked lane: %v", err)
+	}
+	if ejected.Status != poolStatusIdle {
+		t.Fatalf("ejected parked worktree status = %q, want idle", ejected.Status)
+	}
+	if _, err := os.Stat(created.WorktreePath); err != nil {
+		t.Fatalf("Eject of a parked lane must KEEP the folder: %v", err)
+	}
+}
+
+// seedThroughCreate provisions one idle pool worktree via the real CreatePoolWorktree on a
+// sibling pool service (declared root is a real git repo, owned-lane root isolated).
+func seedThroughCreate(t *testing.T, service *Service) PoolWorktree {
+	t.Helper()
+	wt, err := service.CreatePoolWorktree("repo")
+	if err != nil {
+		t.Fatalf("create pool worktree: %v", err)
+	}
+	return wt
+}

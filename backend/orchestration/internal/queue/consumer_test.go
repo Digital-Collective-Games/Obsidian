@@ -38,6 +38,13 @@ func (p *fakeProvider) CloseIssue(repo string, number int) error {
 
 func (p *fakeProvider) DequeueIssue(repo string, number int) error {
 	p.dequeued = append(p.dequeued, closedIssue{repo: repo, number: number})
+	// Model the real provider write: flip the issue's observed Queue to Never so the next
+	// poll's ListReadyIssues reflects the dequeue (the no-bounce-back behavior).
+	for i := range p.issues {
+		if p.issues[i].Number == number {
+			p.issues[i].State.Queue = QueueNever
+		}
+	}
 	return nil
 }
 
@@ -433,6 +440,63 @@ func TestDrainOnceAutoCloseDoesNotCloseWhenDisabled(t *testing.T) {
 	}
 	if len(result.AutoClosed) != 0 {
 		t.Fatalf("result.AutoClosed = %v, want none (auto-close off)", result.AutoClosed)
+	}
+}
+
+// Task-0016 PASS-0005 / AC13: the no-bounce-back seam. After an Eject of a task whose
+// issue is Queue=Ready, the Eject dequeue (Queue -> Never via the provider) means a
+// subsequent consumer poll does NOT re-dispatch the freed task. The load-bearing variant
+// (Eject that SKIPS the dequeue, leaving the issue Ready) shows the task IS re-dispatched,
+// proving the dequeue is what prevents the bounce-back.
+func TestEjectThenNoBounceBackOnNextPoll(t *testing.T) {
+	// Pool of 1 idle worktree; #7070 is Ready and dispatches on the first poll.
+	provider := &fakeProvider{issues: []IssueRef{
+		{Number: 7070, State: IssueState{Queue: QueueReady}},
+	}}
+	dispatcher := newFakeDispatcher()
+	consumer := NewConsumer(testRepo, provider, dispatcher, fixedIdleSizer(1))
+
+	first, err := consumer.DrainOnce(context.Background())
+	if err != nil {
+		t.Fatalf("first DrainOnce: %v", err)
+	}
+	if want := []string{"Task-7070"}; !reflect.DeepEqual(first.Dispatched, want) {
+		t.Fatalf("first poll dispatched = %v, want %v", first.Dispatched, want)
+	}
+
+	// Eject: free the dispatcher's lane AND dequeue the issue through the provider
+	// (Queue -> Never), exactly as Service.EjectWorktree does.
+	dispatcher.active = nil
+	if err := provider.DequeueIssue(testRepo, 7070); err != nil {
+		t.Fatalf("provider dequeue: %v", err)
+	}
+
+	// Next poll: the issue now reads Never, so it is NOT re-dispatched (no bounce-back).
+	second, err := consumer.DrainOnce(context.Background())
+	if err != nil {
+		t.Fatalf("second DrainOnce: %v", err)
+	}
+	if len(second.Dispatched) != 0 {
+		t.Fatalf("second poll dispatched = %v, want none (Eject dequeued it -> no bounce-back)", second.Dispatched)
+	}
+
+	// Load-bearing variant: an Eject that SKIPS the dequeue leaves the issue Ready, so the
+	// next poll DOES re-dispatch it (the bounce-back the dequeue prevents).
+	provider2 := &fakeProvider{issues: []IssueRef{
+		{Number: 7071, State: IssueState{Queue: QueueReady}},
+	}}
+	dispatcher2 := newFakeDispatcher()
+	consumer2 := NewConsumer(testRepo, provider2, dispatcher2, fixedIdleSizer(1))
+	if _, err := consumer2.DrainOnce(context.Background()); err != nil {
+		t.Fatalf("variant first DrainOnce: %v", err)
+	}
+	dispatcher2.active = nil // eject frees the lane, but DO NOT dequeue (issue stays Ready)
+	bounce, err := consumer2.DrainOnce(context.Background())
+	if err != nil {
+		t.Fatalf("variant second DrainOnce: %v", err)
+	}
+	if want := []string{"Task-7071"}; !reflect.DeepEqual(bounce.Dispatched, want) {
+		t.Fatalf("variant second poll dispatched = %v, want %v (skipping the dequeue bounces it back)", bounce.Dispatched, want)
 	}
 }
 

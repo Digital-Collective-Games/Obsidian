@@ -595,6 +595,114 @@ func (s *Service) markPoolMemberRun(drawn drawnLane, runID string) error {
 	return s.writePoolRecord(drawn.seq, record)
 }
 
+// EjectWorktree is the operator's explicit "give me this slot back": it stops the launched
+// agent, cleans the checkout to a true baseline (reset --hard + clean -fdx), KEEPS the
+// folder and returns the pool member to IDLE (run_id cleared) — it MUST NOT delete the
+// folder — and then DEQUEUES the freed task through the task provider (Queue -> Never) so
+// the still-Ready task is not re-dispatched on the next poll (the no-bounce-back fix). It
+// works regardless of parked state (unlike resolve-interrupt-review, which only reclaims a
+// parked run). It never closes the issue. Keyed on run_id by default; worktree_id is an
+// accepted alternate. Returns the now-idle worktree.
+func (s *Service) EjectWorktree(ctx context.Context, runID string, worktreeID string) (PoolWorktree, error) {
+	records, err := s.enumeratePoolRecords()
+	if err != nil {
+		return PoolWorktree{}, err
+	}
+	// Resolve the target member: by worktree_id if given, else by the run_id it is bound
+	// to.
+	var memberID string
+	var record poolRecord
+	if strings.TrimSpace(worktreeID) != "" {
+		r, ok := records[worktreeID]
+		if !ok {
+			return PoolWorktree{}, fmt.Errorf("%w: %s", ErrPoolWorktreeNotFound, worktreeID)
+		}
+		memberID, record = worktreeID, r
+	} else {
+		for id, r := range records {
+			if r.RunID != "" && r.RunID == runID {
+				memberID, record = id, r
+				break
+			}
+		}
+		if memberID == "" {
+			return PoolWorktree{}, fmt.Errorf("%w: no pool worktree bound to run %q", ErrPoolWorktreeNotFound, runID)
+		}
+	}
+	boundRunID := record.RunID
+	if boundRunID == "" {
+		// Already idle: clean it to a true baseline and report idle (idempotent eject).
+		boundRunID = runID
+	}
+
+	// Best-effort: terminate the launched agent BEFORE touching the checkout (BUG-0002),
+	// reading the live PID from the bound run's binding when available.
+	taskID := taskIDFromRunID(boundRunID)
+	if s.runtime != nil && boundRunID != "" {
+		if view, verr := s.runtime.GetActiveTaskRun(ctx, boundRunID); verr == nil {
+			if view.RepoLane.Binding != nil && view.RepoLane.Binding.LaunchedPID > 0 {
+				terminateAgentProcess(view.RepoLane.Binding.LaunchedPID)
+			}
+			if view.TaskID != "" {
+				taskID = view.TaskID
+			}
+		}
+	}
+
+	// Clean the checkout to a TRUE baseline (reset --hard + clean -fdx); KEEP the folder.
+	seq, err := s.poolSeqForID(memberID)
+	if err != nil {
+		return PoolWorktree{}, err
+	}
+	baselineCommit := gitRevision(s.declaredWorktreeRoot)
+	repoLane := RepoLane{
+		OwnedRepoRoot:         record.WorktreePath,
+		BaselineCommit:        baselineCommit,
+		ApprovedRestoreCommit: baselineCommit,
+	}
+	if _, err := s.restoreOwnedLaneFull(repoLane); err != nil {
+		return PoolWorktree{}, fmt.Errorf("eject clean worktree %s: %w", memberID, err)
+	}
+
+	// Return the member to idle (clear run_id) WITHOUT deleting the folder.
+	record.RunID = ""
+	if err := s.writePoolRecord(seq, record); err != nil {
+		return PoolWorktree{}, fmt.Errorf("return ejected worktree %s to idle: %w", memberID, err)
+	}
+
+	// Dequeue the freed task (Queue -> Never) so the still-Ready task is NOT re-dispatched.
+	// Safe no-op when the worktree had no provider-backed task. Never closes the issue.
+	if taskID != "" {
+		if err := s.DequeueTask(s.dequeueRepo(), taskID); err != nil {
+			return PoolWorktree{}, fmt.Errorf("dequeue ejected task %s: %w", taskID, err)
+		}
+	}
+
+	return s.classifyPoolMember(record), nil
+}
+
+// dequeueRepo names the task-provider repo the dequeue write targets. The provider is
+// already bound to its repo (NewGitHubQueueProvider), so an empty repo lets the provider
+// use its configured repo; the Service does not hold the provider repo string directly.
+func (s *Service) dequeueRepo() string {
+	return ""
+}
+
+// taskIDFromRunID extracts the Task-NNNN id embedded in an active run id of the form
+// taskrun--<taskID>--active or taskrun--<repo>--<taskID>--active. It returns "" when the
+// run id does not carry a parseable Task- segment.
+func taskIDFromRunID(runID string) string {
+	trimmed := strings.TrimPrefix(runID, "taskrun--")
+	trimmed = strings.TrimSuffix(trimmed, "--active")
+	parts := strings.Split(trimmed, "--")
+	for i := len(parts) - 1; i >= 0; i-- {
+		if strings.HasPrefix(parts[i], "Task-") {
+			return parts[i]
+		}
+	}
+	return ""
+}
+
 // returnPoolMemberToIdle finds the pool member whose checkout is ownedRepoRoot and, if it
 // is a pool member, clears its run_id (allocated -> idle) WITHOUT deleting the folder, so
 // a superseded same-task run frees its pool worktree for reuse. It reports whether the

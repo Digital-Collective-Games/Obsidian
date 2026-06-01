@@ -1777,7 +1777,23 @@ func removeOwnedLaneWorktree(declaredWorktreeRoot string, ownedLaneRoot string, 
 	return fmt.Errorf("%w; residual checkout remained after prune+removeall: %v", gitErr, removeAllErr)
 }
 
+// restoreOwnedLane resets the owned checkout to baseline with `git clean -fd` — the
+// Assign/dispatch reset (preserves ignored files). Eject uses restoreOwnedLaneFull
+// (`-fdx`) for a true baseline.
 func (s *Service) restoreOwnedLane(repoLane RepoLane) (RepoLane, error) {
+	return s.restoreOwnedLaneWithClean(repoLane, "-fd")
+}
+
+// restoreOwnedLaneFull resets the owned checkout to baseline with `git clean -fdx`,
+// dropping ignored files too for a TRUE baseline (Eject's "give me a clean slot back").
+func (s *Service) restoreOwnedLaneFull(repoLane RepoLane) (RepoLane, error) {
+	return s.restoreOwnedLaneWithClean(repoLane, "-fdx")
+}
+
+// restoreOwnedLaneWithClean resets the owned checkout to baseline (reset --hard) then runs
+// `git clean <cleanFlags>`. cleanFlags is "-fd" for the Assign/dispatch reset and "-fdx"
+// for an Eject true-baseline; nothing else differs, so Assign's reset is never weakened.
+func (s *Service) restoreOwnedLaneWithClean(repoLane RepoLane, cleanFlags string) (RepoLane, error) {
 	now := s.now()
 	repoLane.LastResetAt = now
 	restoreCommit := repoLane.ApprovedRestoreCommit
@@ -1806,7 +1822,7 @@ func (s *Service) restoreOwnedLane(repoLane RepoLane) (RepoLane, error) {
 		repoLane.ResetFailureSummary = fmt.Sprintf("Reset to %s failed.", restoreCommit)
 		return repoLane, fmt.Errorf("reset owned lane to %s: %w", restoreCommit, err)
 	}
-	if err := gitInWorktree(repoLane.OwnedRepoRoot, "clean", "-fd"); err != nil {
+	if err := gitInWorktree(repoLane.OwnedRepoRoot, "clean", cleanFlags); err != nil {
 		repoLane.ResetStatus = "cleanup_blocked"
 		repoLane.ResetFailureSummary = "Git clean failed while restoring the owned checkout."
 		return repoLane, fmt.Errorf("clean owned lane: %w", err)
