@@ -1,6 +1,7 @@
 package taskrun
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -245,4 +246,125 @@ func (s *Service) enumeratePoolRecords() (map[string]poolRecord, error) {
 func sortedPoolWorktrees(in []PoolWorktree) []PoolWorktree {
 	sort.Slice(in, func(i, j int) bool { return in[i].WorktreeID < in[j].WorktreeID })
 	return in
+}
+
+// classifyPoolMember derives a member's live status from its durable record. A record
+// with an empty run_id is idle. A record with a run_id is allocated ONLY while its
+// per-run workflow is still LIVE (a live binding is read from it, Task-0015 Landing-2
+// authority); a run that has ended (ErrRunNotFound / no live binding) reclassifies the
+// member to idle. This is what reconstructs allocated-vs-idle across a backend restart
+// without losing bound state for a still-live run.
+func (s *Service) classifyPoolMember(record poolRecord) PoolWorktree {
+	entry := PoolWorktree{
+		WorktreeID:   record.WorktreeID,
+		Repo:         record.Repo,
+		WorktreePath: record.WorktreePath,
+		Status:       poolStatusIdle,
+	}
+	if record.RunID == "" {
+		return entry
+	}
+	if s.runtime == nil {
+		// No runtime to consult: trust the record's own run id + breadcrumb binding so
+		// a still-bound member is not silently reclassified idle in a runtime-less test.
+		entry.Status = poolStatusAllocated
+		entry.RunID = record.RunID
+		binding := s.poolBindingFallback(record)
+		entry.Binding = &binding
+		return entry
+	}
+	view, err := s.runtime.GetActiveTaskRun(context.Background(), record.RunID)
+	if err != nil || !runOwnsLiveStory(view) {
+		// The bound run has ended (closed/failed/interrupted) or is gone: the member is
+		// no longer allocated. It returns to idle (its folder is kept).
+		return entry
+	}
+	entry.Status = poolStatusAllocated
+	entry.RunID = record.RunID
+	binding := s.poolBindingFallback(record)
+	if view.RepoLane.Binding != nil {
+		binding = *view.RepoLane.Binding
+	}
+	entry.Binding = &binding
+	return entry
+}
+
+// poolBindingFallback builds a minimal binding for an allocated pool member from its
+// record when the live workflow carries none yet, so an allocated member always names
+// its task/worktree even before the workflow seeds the binding.
+func (s *Service) poolBindingFallback(record poolRecord) RepoBinding {
+	return RepoBinding{
+		Repo:         record.Repo,
+		WorktreePath: record.WorktreePath,
+		RunGateState: RunGateStateRunning,
+	}
+}
+
+// ListPoolWorktrees returns the FULL pool for this Service's repo — every member,
+// idle and allocated — each with its stable identity + status; allocated members carry
+// the live binding (task/run/gate/session). It is the single read both discover
+// assertions and the GET /api/v1/worktrees full-pool read use. A repo with no pool root
+// yet returns an empty slice.
+func (s *Service) ListPoolWorktrees() ([]PoolWorktree, error) {
+	records, err := s.enumeratePoolRecords()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]PoolWorktree, 0, len(records))
+	for _, record := range records {
+		out = append(out, s.classifyPoolMember(record))
+	}
+	return sortedPoolWorktrees(out), nil
+}
+
+// DiscoverPool performs startup discovery for this repo's pool: it ENUMERATES the pool
+// member folders on disk, reconstructs each one's idle-vs-allocated state from its
+// durable record + the live per-run workflow, and persists the corrected run_id back
+// onto a record whose bound run has ended (so the durable record reflects idle once the
+// run is gone). It does NOT create or destroy any folder, and it preserves the existing
+// `git worktree prune` hygiene (ReconcileOwnedLanes) for genuinely stale git metadata.
+// It is invoked at the same wiring point the prune-only reconcile was.
+//
+// Crucially it never reclassifies a STILL-LIVE allocated member as idle (that is the
+// load-bearing restart-survival guarantee, REG-008): classifyPoolMember marks a member
+// idle only when its bound run has actually ended.
+func (s *Service) DiscoverPool() error {
+	// Keep the prune-only hygiene first so a crashed/partial owned-lane removal does not
+	// linger. The prune is best-effort: a prune failure (e.g. a non-git declared root in
+	// a focused test) must not abort pool reconstruction — it never reclaims a live
+	// worktree, exactly as the wiring already treats it.
+	_ = s.ReconcileOwnedLanes()
+	records, err := s.enumeratePoolRecords()
+	if err != nil {
+		return err
+	}
+	for _, record := range records {
+		if record.RunID == "" {
+			continue
+		}
+		entry := s.classifyPoolMember(record)
+		if entry.Status == poolStatusIdle {
+			// The bound run ended: persist the member back to idle so the durable record
+			// is consistent with the reconstructed state (the folder is kept).
+			seq, err := s.poolSeqForID(record.WorktreeID)
+			if err != nil {
+				continue
+			}
+			record.RunID = ""
+			if err := s.writePoolRecord(seq, record); err != nil {
+				return fmt.Errorf("persist reclassified idle pool member %s: %w", record.WorktreeID, err)
+			}
+		}
+	}
+	return nil
+}
+
+// poolSeqForID parses the wt-<NNNN> sequence number from a <repo>/wt-<NNNN> worktree id
+// that belongs to this Service's repo segment.
+func (s *Service) poolSeqForID(worktreeID string) (int, error) {
+	if _, err := s.poolMemberDirForID(worktreeID); err != nil {
+		return 0, err
+	}
+	_, leaf, _ := strings.Cut(worktreeID, "/")
+	return poolMemberSeq(leaf)
 }

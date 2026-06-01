@@ -35,7 +35,16 @@ Backend batch progress:
   Proof: [Testing/PASS-0000/PASS-0000-NOTES.md](./Testing/PASS-0000/PASS-0000-NOTES.md),
   [Testing/PASS-0000-CHECKLIST.json](./Testing/PASS-0000-CHECKLIST.json). `go build ./...`
   + `go test ./internal/taskrun/...` green.
-- **Next:** PASS-0001 discover-on-startup.
+- **PASS-0001 — Discover-on-startup — DONE.** `ListPoolWorktrees()` + `DiscoverPool()`
+  in [pool.go](../../backend/orchestration/internal/taskrun/pool.go) (reconstructs
+  idle-vs-allocated from disk + the live workflow; persists reclassified-idle; subsumes
+  the prune hygiene); the queuedrain startup wiring
+  ([queuedrain.go](../../backend/orchestration/internal/temporalbackend/queuedrain.go)
+  L229) now calls `DiscoverPool()` instead of the prune-only `ReconcileOwnedLanes()`.
+  Proof: [Testing/PASS-0001/PASS-0001-NOTES.md](./Testing/PASS-0001/PASS-0001-NOTES.md),
+  [Testing/PASS-0001-CHECKLIST.json](./Testing/PASS-0001-CHECKLIST.json). Full
+  `go test ./...` green.
+- **Next:** PASS-0002 Create + Destroy + full-pool/repos reads + route guards.
 
 ### Original planning resume point (superseded by the approval above)
 

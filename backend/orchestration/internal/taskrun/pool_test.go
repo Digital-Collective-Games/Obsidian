@@ -1,6 +1,7 @@
 package taskrun
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -119,6 +120,149 @@ func TestEnumeratePoolRecordsSurfacesIdleMembers(t *testing.T) {
 	}
 	if gotAllocated.RunID != allocated.RunID {
 		t.Fatalf("allocated member run_id = %q, want %q", gotAllocated.RunID, allocated.RunID)
+	}
+}
+
+// poolDiscoverRuntime is a minimal Runtime that reports a live run for exactly one
+// run id (the allocated member's), and ErrRunNotFound for everything else. It models a
+// backend RESTART: the in-memory service is fresh, but the per-run workflow store still
+// holds the live run for the allocated pool member.
+type poolDiscoverRuntime struct {
+	liveRunID  string
+	liveTaskID string
+}
+
+func (r poolDiscoverRuntime) StartTaskRun(context.Context, StartTaskRunRequest) (TaskRunView, error) {
+	return TaskRunView{}, ErrRunNotFound
+}
+func (r poolDiscoverRuntime) GetTaskRun(_ context.Context, runID string) (TaskRunView, error) {
+	return r.GetActiveTaskRun(context.Background(), runID)
+}
+func (r poolDiscoverRuntime) GetActiveTaskRun(_ context.Context, runID string) (TaskRunView, error) {
+	if runID != r.liveRunID {
+		return TaskRunView{}, ErrRunNotFound
+	}
+	return TaskRunView{
+		RunID:  r.liveRunID,
+		TaskID: r.liveTaskID,
+		Status: "active",
+		RepoLane: RepoLane{Binding: &RepoBinding{
+			TaskID:       r.liveTaskID,
+			RunGateState: RunGateStateRunning,
+		}},
+	}, nil
+}
+func (r poolDiscoverRuntime) SetRunGateState(context.Context, string, string) (TaskRunView, error) {
+	return TaskRunView{}, ErrRunNotFound
+}
+func (r poolDiscoverRuntime) BindLaunchedSession(context.Context, string, string, string, int) (TaskRunView, error) {
+	return TaskRunView{}, ErrRunNotFound
+}
+func (r poolDiscoverRuntime) ReconcileTaskSnapshot(context.Context, string, TaskDefinitionSnapshot) (TaskRunView, error) {
+	return TaskRunView{}, ErrRunNotFound
+}
+func (r poolDiscoverRuntime) UpdateTaskRun(context.Context, string, TaskRunUpdate) (TaskRunView, error) {
+	return TaskRunView{}, ErrRunNotFound
+}
+func (r poolDiscoverRuntime) RetryTaskRunWorkload(context.Context, string, WorkloadRetryRequest) (TaskRunView, error) {
+	return TaskRunView{}, ErrRunNotFound
+}
+
+func writeAllocatedPoolMember(t *testing.T, s *Service, seq int, runID string) poolRecord {
+	t.Helper()
+	checkout := s.poolCheckoutPath(seq)
+	if err := os.MkdirAll(checkout, 0o755); err != nil {
+		t.Fatalf("mkdir allocated checkout: %v", err)
+	}
+	record := poolRecord{
+		WorktreeID:   s.poolWorktreeID(seq),
+		WorktreePath: checkout,
+		Repo:         s.poolRepoSegment(),
+		RunID:        runID,
+	}
+	if err := s.writePoolRecord(seq, record); err != nil {
+		t.Fatalf("write allocated pool record: %v", err)
+	}
+	return record
+}
+
+// Task-0016 PASS-0001 / AC8 / REG-008: discover-on-startup reconstructs each pool
+// member's idle-vs-allocated state from disk + the LIVE per-run workflow across a
+// backend restart, with NO bound state lost. The falsifier (a discover that
+// reclassifies a live-allocated worktree as idle, or drops it) fails.
+func TestDiscoverPoolReconstructsAllocatedAndIdleAcrossRestart(t *testing.T) {
+	// Lay the on-disk pool down with one Service.
+	layout := newPoolTestService(t, "obsidian")
+	liveRunID := ActiveRunIDForRepo("obsidian", "Task-0007")
+	allocated := writeAllocatedPoolMember(t, layout, 1, liveRunID)
+	idle := writeIdlePoolMember(t, layout, 2)
+
+	// Construct a FRESH Service over the same roots (simulating a backend restart): a
+	// new in-memory service, with the runtime still reporting the live run for wt-0001.
+	fresh := NewService(layout.declaredWorktreeRoot, filepath.Join(layout.declaredWorktreeRoot, ".runs"),
+		poolDiscoverRuntime{liveRunID: liveRunID, liveTaskID: "Task-0007"})
+	fresh.SetRepoNamespace("obsidian")
+	fresh.ownedLaneRoot = layout.ownedLaneRoot
+
+	pool, err := fresh.ListPoolWorktrees()
+	if err != nil {
+		t.Fatalf("list pool worktrees after restart: %v", err)
+	}
+	if len(pool) != 2 {
+		t.Fatalf("pool size after restart = %d, want 2: %#v", len(pool), pool)
+	}
+	byID := map[string]PoolWorktree{}
+	for _, wt := range pool {
+		byID[wt.WorktreeID] = wt
+	}
+
+	gotAllocated, ok := byID[allocated.WorktreeID]
+	if !ok {
+		t.Fatalf("allocated member %q dropped by discover", allocated.WorktreeID)
+	}
+	if gotAllocated.Status != poolStatusAllocated {
+		t.Fatalf("allocated member status = %q, want allocated (bound state must survive restart)", gotAllocated.Status)
+	}
+	if gotAllocated.RunID != liveRunID {
+		t.Fatalf("allocated member run id = %q, want %q", gotAllocated.RunID, liveRunID)
+	}
+	if gotAllocated.Binding == nil || gotAllocated.Binding.TaskID != "Task-0007" {
+		t.Fatalf("allocated member must keep its bound task: %#v", gotAllocated.Binding)
+	}
+
+	gotIdle, ok := byID[idle.WorktreeID]
+	if !ok {
+		t.Fatalf("idle member %q dropped by discover", idle.WorktreeID)
+	}
+	if gotIdle.Status != poolStatusIdle {
+		t.Fatalf("idle member status = %q, want idle", gotIdle.Status)
+	}
+}
+
+// A pool member whose bound run has ENDED (the workflow no longer reports it live) is
+// reconstructed as idle, and DiscoverPool persists the corrected run_id == "" back onto
+// the durable record (the folder is kept).
+func TestDiscoverPoolReclassifiesEndedRunToIdleAndPersists(t *testing.T) {
+	service := newPoolTestService(t, "obsidian")
+	// Runtime reports NOTHING live, so the bound run is treated as ended.
+	service.runtime = poolDiscoverRuntime{liveRunID: "no-such-run", liveTaskID: "none"}
+	endedRunID := ActiveRunIDForRepo("obsidian", "Task-0007")
+	member := writeAllocatedPoolMember(t, service, 1, endedRunID)
+
+	if err := service.DiscoverPool(); err != nil {
+		t.Fatalf("discover pool: %v", err)
+	}
+
+	// The durable record now reads idle (run_id cleared), and the folder is kept.
+	record, ok, err := readPoolRecord(service.poolMemberDir(1))
+	if err != nil || !ok {
+		t.Fatalf("read pool record after discover: ok=%v err=%v", ok, err)
+	}
+	if record.RunID != "" {
+		t.Fatalf("ended-run member run_id = %q, want cleared to idle", record.RunID)
+	}
+	if _, err := os.Stat(member.WorktreePath); err != nil {
+		t.Fatalf("discover must keep the folder for a reclassified-idle member: %v", err)
 	}
 }
 

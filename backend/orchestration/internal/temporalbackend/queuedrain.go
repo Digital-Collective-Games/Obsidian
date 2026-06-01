@@ -219,11 +219,13 @@ func newQueueDrainActivities(cfg config.Config, runtime taskrun.Runtime) (*queue
 				watchdog.SetTailReader(queue.OSTailTranscript)
 				sup = newGoroutineSupervisor(watchdog, 0)
 				supervisors[repo.ID] = sup
-				// Startup reconciliation (once per repo): prune stale git worktree
-				// metadata BEFORE reconstructing supervision, so a crashed/partial removal
+				// Startup reconciliation (once per repo): discover-on-startup (Task-0016)
+				// reconstructs the worktree pool's idle-vs-allocated state from disk + the
+				// live per-run workflow and subsumes the prune-only hygiene: it prunes stale
+				// git worktree metadata BEFORE reconstructing supervision, so a crashed/partial removal
 				// does not linger. Best-effort hygiene — a prune failure must not abort the
-				// dispatch build (it never reclaims a live worktree; see ReconcileOwnedLanes).
-				_ = service.ReconcileOwnedLanes()
+				// dispatch build (it never reclaims a still-live worktree; see DiscoverPool / ReconcileOwnedLanes).
+				_ = service.DiscoverPool()
 				reconstructSupervision(sup, service, repo.ProviderRepo)
 			}
 			supervisorsMu.Unlock()
