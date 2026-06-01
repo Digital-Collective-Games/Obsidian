@@ -1,0 +1,75 @@
+REG-007 (pool-of-1) LIVE RE-VERIFY v2 — AFTER the BUG-0002 fix — PASS
+=======================================================================
+Date: 2026-06-01. Fix commit: dddab0e (task-0016 BUG-0002 fix). Binary:
+controlplane-reg007fix.exe (built 14:54 from the fixed tree, HEAD dddab0e).
+Run owner: context-blind fix+regression worker (single context; nested CLAUDE
+agents WERE launched by the consumer — this is real nested dispatch, not a
+single-context fallback).
+
+LANE / ISOLATION (confirmed before + after)
+- Backend: 127.0.0.1:24330, namespace reg007fix (throwaway, created + deleted
+  this run), validation Temporal 127.0.0.1:17233. NEVER :4318 / :14318 / the
+  real `default` namespace / service Temporal :7233.
+- Registry -> throwaway repos ONLY: RepoA -> Digital-Collective-Games/QueueDrainTestbed,
+  RepoB -> Digital-Collective-Games/QueueDrainTestbed2. NEVER Digital-Collective-Games/Obsidian.
+- Isolated TEMP -> lane temp (owned-lane root = <lane>/temp/cdxow), isolated
+  runs/jobs/tracking roots. /api/v1/repos confirmed the registry + NO queue_workers.
+- Dashboard WorktreeRoot = the lane root (NOT RepoA's local_root) — the faithful
+  production condition that previously hashed to repo-<hash>/.
+- Post-run: production lanes :4318 (pid 27680) + :14318 (pid 77280) confirmed on
+  their original pids — untouched. reg007fix namespace deleted; lane + binary removed;
+  testbed issues reset to Never + closed.
+
+(a) PRODUCT CREATE seeds the consumer's segment — FIX PROVEN
+- POST /api/v1/worktrees/create {"repo":"RepoA"} ->
+  worktree_id=RepoA/wt-0001, path <lane>/temp/cdxow/RepoA/wt-0001/wt-0001
+  (the RepoA registry-id segment — NOT the old repo-<hash>/ segment).
+- The checkout is a genuine RepoA checkout (HEAD = RepoA's commit
+  d9569ee, contains RepoA's Tracking/Task-0005 + Task-0006) — added from RepoA's
+  own local_root per the fix.
+- GET /api/v1/worktrees listed it idle under RepoA/wt-0001.
+
+(b) Always-on consumer started (poll 30s).
+
+(c) TWO testbed issues flipped Queue=Ready at the REAL GitHub web UI
+    (Set-IssueFieldViaUi.ps1 on the 9222 session; API/proxy flip ruled out):
+    - #5 -> Ready: Committed=True, ObservedButtonText=QueueReady, ApiMatches=True
+    - #6 -> Ready: Committed=True, ObservedButtonText=QueueReady, ApiMatches=True
+
+(d) EXACTLY ONE dispatched into the product-Created worktree; the SECOND WAITS
+- 14:59:52 poll acted: dispatched [Task-0005] parked [] reclaimed []  (issue #5)
+- RepoA/wt-0001 -> allocated, run taskrun--RepoA--Task-0005--active,
+  launched a top-level CLAUDE agent: agent_session_id=01bd1a84-7907-412c-8364-4591c1204e41,
+  launched_pid=13244 (claude.exe confirmed running), transcript .../wt-0001-wt-0001/01bd1a84-...jsonl,
+  run_gate_state=running. (codex-dispatch disqualifier ruled out — it launched claude.)
+- The SECOND Ready issue (#6/Task-0006) WAITED: only RepoA/wt-0001 existed (no
+  wt-0002 auto-created), only Task-0005 dispatched. Subsequent polls (15:00:22,
+  15:00:57) did NOT dispatch #6 — empty pool defers, no auto-create.
+- This is the BUG-0002 fix: the product-Created worktree was DRAWN by the
+  consumer's pool-draw (previously invisible -> dispatched [] forever).
+
+(e) CLOSE the first -> freed worktree REUSED for the second — PROVEN
+- gh issue close #5 (human-approved close; agent never self-closes).
+- 15:02:14 poll acted: dispatched [Task-0006] parked [] reclaimed [Task-0005]
+  — in ONE poll the consumer reclaimed Task-0005's worktree (returned to idle,
+  checkout KEPT — the reclaim fix) and REUSED the SAME RepoA/wt-0001 member to
+  dispatch the deferred Task-0006.
+- RepoA/wt-0001 -> allocated, run taskrun--RepoA--Task-0006--active, new claude
+  agent agent_session_id=a2cd542d-72da-4d55-804b-eaff17b0a792, launched_pid=61460,
+  run_gate_state=running. STILL only one member dir on disk (wt-0001) — reused, not
+  re-created.
+
+(f) Teardown: see REGRESSION-RUN note. Production lanes confirmed on original pids.
+
+VERDICT: REG-007 (pool-of-1) is GREEN end-to-end on the real surface via the
+documented Create-seed path AND the close->reclaim->reuse leg. BUG-0002 fixed +
+LIVE-verified.
+
+Artifacts:
+- consumer-backend.log (full consumer log: create, dispatch [Task-0005],
+  reclaim [Task-0005] + dispatch [Task-0006])
+- worktrees-reuse-task0006.json (final /worktrees: RepoA/wt-0001 allocated Task-0006)
+- pool-record-reuse.json (the reused member's durable record)
+- api-repos.json / REPO-MANIFEST.json (isolation: throwaway repos, no queue_workers)
+- claude-transcripts/01bd1a84-...jsonl (Task-0005 launched agent),
+  claude-transcripts/a2cd542d-...jsonl (Task-0006 launched agent in the REUSED worktree)

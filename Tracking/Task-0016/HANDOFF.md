@@ -1,5 +1,22 @@
 # Task-0016 Handoff
 
+## LATEST — 2026-06-01 — BUG-0002 fixed + LIVE REG-007 re-verified (green)
+
+[BUG-0002](./BUG-0002.md) (the dashboard pool repo-segment mismatch that blocked the
+REG-007 Create-seed + reuse legs) is **FIXED + LIVE-VERIFIED**. Fix commit `dddab0e`:
+the multi-repo dashboard `taskService` now registry-resolves the per-repo pool segment +
+the repo's own local_root (mirroring the BUG-0001 pattern), and `ReclaimOwnedLane` returns
+a pool worktree to idle (folder/checkout kept, run_id nulled) so close→reclaim→reuse works.
+Unit proof: [pool_segment_test.go](../../backend/orchestration/internal/taskrun/pool_segment_test.go);
+`go test ./...` + `gofmt` clean. **LIVE REG-007 v2** on the isolated `reg007fix` lane proved
+all legs green (product Create → `RepoA/wt-0001` drawn by the consumer; real-UI Ready flips
+of `#5`/`#6`; exactly one dispatched + claude launched; second waits; close `#5` →
+reclaim+reuse the SAME worktree for `#6`); torn down, production lanes untouched. See
+[Testing/PASS-0009/REGRESSION-RUN-0002.md](./Testing/PASS-0009/REGRESSION-RUN-0002.md) +
+[reg007-live-v2/](./Testing/PASS-0009/reg007-live-v2/). `TASK-STATE.validation.regression`
+is now `passing` (REG-007/008/009 + REG-015 all green live). Closure of issue #16 remains a
+separate human gate (the [FE] in-app QA bar per the directives still governs final closure).
+
 ## What this task is
 
 **One testable chunk** delivering BOTH halves, closed as one unit (per

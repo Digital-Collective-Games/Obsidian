@@ -11,23 +11,22 @@
   "validation": {
     "build": "passing",
     "unit_tests": "passing",
-    "regression": "blocked"
+    "regression": "passing"
   },
-  "blockers": [
-    "BUG-0002: dashboard Create segments the pool by a WorktreeRoot hash while the queue-drain consumer segments by registry repo id, so a Create-seeded worktree is invisible to the consumer pool-draw. Blocks REG-007 'pool of 1' Create-seed + close/eject->reuse legs. REG-007 core (real-UI flip -> dispatch -> claude launch -> second-Ready-defers) PROVEN live; REG-008, REG-009, and live REG-015 (BUG-0001 fix) PASS live. Task is not closure-ready until BUG-0002 is fixed and REG-007 re-verified live."
-  ],
+  "blockers": [],
   "live_regression_run": {
-    "artifact": "Tracking/Task-0016/Testing/PASS-0009/REGRESSION-RUN-0001.md",
-    "REG-007": "partial_core_proven_create_seed_and_reuse_blocked_by_BUG-0002",
+    "artifact": "Tracking/Task-0016/Testing/PASS-0009/REGRESSION-RUN-0002.md",
+    "REG-007": "passing_live_after_BUG-0002_fix_create_seed_and_close_reclaim_reuse_proven",
     "REG-008": "passing_live",
     "REG-009": "passing_live",
     "REG-015_bug0001_fix": "passing_live",
     "reg014_clean_recapture": "done",
-    "production_untouched": true
+    "production_untouched": true,
+    "fix_commit": "dddab0e"
   },
   "open_bugs": [
     "BUG-0001 (fixed + live-verified by REG-015 in this PASS-0009 run)",
-    "BUG-0002 (OPEN: manual-pool repo-segment mismatch; blocks REG-007 closure)"
+    "BUG-0002 (fixed + live-verified by REG-007 v2 in REGRESSION-RUN-0002; commit dddab0e)"
   ],
-  "updated_at": "2026-06-01T14:40:00-04:00"
+  "updated_at": "2026-06-01T15:05:00-04:00"
 }

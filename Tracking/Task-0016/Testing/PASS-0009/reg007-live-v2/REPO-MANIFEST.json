@@ -1,0 +1,14 @@
+{
+  "repos": [
+    {
+      "id": "RepoA",
+      "task_provider": { "repo": "Digital-Collective-Games/QueueDrainTestbed", "kind": "github_issues" },
+      "local_root": "C:/Agent/CodexDashboard/Tracking/Task-0016/Testing/Runtime/reg007fix/RepoA"
+    },
+    {
+      "id": "RepoB",
+      "task_provider": { "repo": "Digital-Collective-Games/QueueDrainTestbed2", "kind": "github_issues" },
+      "local_root": "C:/Agent/CodexDashboard/Tracking/Task-0016/Testing/Runtime/reg007fix/RepoB"
+    }
+  ]
+}
