@@ -1,0 +1,2 @@
+action=assign-popup
+idle_worktree=repo-435f219730fe/wt-0001

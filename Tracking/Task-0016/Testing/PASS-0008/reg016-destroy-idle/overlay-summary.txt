@@ -1,0 +1,10 @@
+action=destroy-idle
+destroyed_worktree=repo-435f219730fe/wt-0002
+still_present=False
+repo_filter=All repos
+repo_options=All repos,WorktreesTabA,WorktreesTabB
+visible_total=02
+visible_allocated=01
+visible_idle=01
+visible_ids=repo-435f219730fe/wt-0001,repo-435f219730fe/wt-0003
+status=Worktree pool refreshed from orchestration backend.

@@ -1,0 +1,11 @@
+action=eject
+ejected_worktree=repo-d130e7057332/wt-0001
+after_status=idle
+folder_still_present=True
+repo_filter=WorktreesTabC
+repo_options=All repos,WorktreesTabC
+visible_total=02
+visible_allocated=00
+visible_idle=02
+visible_ids=repo-d130e7057332/wt-0001,repo-d130e7057332/wt-0002
+status=Ejected repo-d130e7057332/wt-0001; it is idle and the task is dequeued.

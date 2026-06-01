@@ -1,0 +1,12 @@
+action=destroy-allocated
+target_allocated_worktree=repo-435f219730fe/wt-0001
+still_present=True
+still_status=allocated
+status_message=Destroy failed: POST http://127.0.0.1:24318/api/v1/worktrees/destroy failed with HTTP 409: worktree is allocated; eject it before destroy: repo-435f219730fe/wt-0001
+repo_filter=All repos
+repo_options=All repos,WorktreesTabA,WorktreesTabB
+visible_total=02
+visible_allocated=01
+visible_idle=01
+visible_ids=repo-435f219730fe/wt-0001,repo-435f219730fe/wt-0003
+status=Destroy failed: POST http://127.0.0.1:24318/api/v1/worktrees/destroy failed with HTTP 409: worktree is allocated; eject it before destroy: repo-435f219730fe/wt-0001

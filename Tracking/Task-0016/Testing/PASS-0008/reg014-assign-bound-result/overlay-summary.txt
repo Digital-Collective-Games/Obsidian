@@ -1,0 +1,13 @@
+active_tab=worktrees
+Worktree pool loaded from orchestration backend.
+hotkey_triggered=True
+overlay_fallback=False
+worktrees_backend=http://127.0.0.1:24318
+worktrees_repo_filter=All repos
+worktrees_repo_options=All repos,WorktreesTabC
+worktrees_total=02
+worktrees_allocated=01
+worktrees_idle=01
+worktrees_ids=repo-d130e7057332/wt-0001,repo-d130e7057332/wt-0002
+worktrees_allocated_ids=repo-d130e7057332/wt-0001
+worktrees_idle_ids=repo-d130e7057332/wt-0002

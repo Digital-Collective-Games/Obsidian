@@ -22,12 +22,48 @@ pass on the isolated validation lane. Full scope + acceptance live in
 
 ## Current resume point
 
-**Phase: implementation (backend batch). Plan APPROVED (UPDATE 4). Backend passes
-PASS-0000…PASS-0006 are in progress in this single-context run; UI passes
-PASS-0007…PASS-0009 are deferred to a later coordinator-arranged run after a
-clean-context QA verdict on the backend.**
+**Phase: implementation. Plan APPROVED (UPDATE 4). Backend passes PASS-0000…PASS-0006 DONE
++ clean-context audit (PASS-0006-AUDIT.json `ready`). FRONTEND passes PASS-0007 + PASS-0008
+DONE (implemented, Python unit suite green @ 178, in-app REG-010…016 captured on the
+isolated validation lane, committed/pushed on `master`). REG-003/REG-004 retired in
+repo-root `REGRESSION.md` (UPDATE 4). `TASK-STATE.json` current_pass=PASS-0009.**
 
-Backend batch progress:
+Remaining: **PASS-0009** — the consolidated in-app regression re-run (REG-010…016 + the
+REG-007/008/009 re-run under the new model), which needs a coordinator-arranged
+clean-context QA verdict on the in-app surface and the human-authenticated Chrome debug
+session for the real-UI `Queue=Ready` flip. The agent never closes issue #16.
+
+### Frontend batch (PASS-0007 + PASS-0008) — DONE this run
+
+- **PASS-0007 — rename `TASKS`→`WORKTREES` + replace + read-only pool view — DONE.** New
+  [worktrees_backend.py](../../app/codex_dashboard/worktrees_backend.py) HTTP client +
+  [worktrees_tab.py](../../app/codex_dashboard/worktrees_tab.py) pure helpers; `ui.py` nav
+  rename + D1=replace of the old task-stream/detail/dispatch surface with the
+  worktree-management surface (allocated/idle background color, repo + local dir + id,
+  per-row copy-path, registry-sourced repo filter, backend-unavailable message). Proof:
+  [Testing/PASS-0007/PASS-0007-NOTES.md](./Testing/PASS-0007/PASS-0007-NOTES.md),
+  [Testing/PASS-0007-CHECKLIST.json](./Testing/PASS-0007-CHECKLIST.json). In-app REG-010
+  (pool view + color + rename + backend-unavailable), REG-011 (copy-path, clipboard ==
+  backend path), REG-012 (registry repo filter narrows) captured under
+  [Testing/PASS-0007/](./Testing/PASS-0007/).
+- **PASS-0008 — mutating controls (Create / Assign popup → bind / Eject / Destroy /
+  Dequeue) — DONE.** Controls wired to the [BE] endpoints (Assign popup lists open tasks
+  from `GET /api/v1/tasks`, id+title+state, no progress bars; Destroy idle-only with the
+  allocated 409 surfaced; standalone Dequeue leaves the worktree allocated). Proof:
+  [Testing/PASS-0008/PASS-0008-NOTES.md](./Testing/PASS-0008/PASS-0008-NOTES.md),
+  [Testing/PASS-0008-CHECKLIST.json](./Testing/PASS-0008-CHECKLIST.json). In-app REG-013
+  (Create), REG-014 (Assign popup + bind→allocated), REG-015 (Eject→idle, folder kept),
+  REG-016 (Destroy idle removes / allocated rejected + standalone Dequeue) captured under
+  [Testing/PASS-0008/](./Testing/PASS-0008/). Caveat: on this single-Service control plane
+  the dequeue provider is unwired, so the in-app dequeue is a safe no-op — the
+  `Queue=Never` write + no-bounce-back are unit-proven in PASS-0004/0005 and re-exercised
+  live in PASS-0009.
+- **REG-003 / REG-004 retired** in [REGRESSION.md](../../REGRESSION.md): both marked
+  SUPERSEDED by Task-0016 D1=replace (the `Tasks` surface is removed; the lifecycle lives
+  on the GitHub Issues queue surface; the `WORKTREES` tab is covered by REG-010…016). Case
+  history retained.
+
+### Backend batch progress (PASS-0000…PASS-0006) — DONE earlier
 
 - **PASS-0000 — Pool record + stable identity — DONE.** New
   [pool.go](../../backend/orchestration/internal/taskrun/pool.go) + idle-persistence
@@ -95,32 +131,34 @@ Backend batch progress:
   Assign reuses the existing idle worktree (no fresh dir), Eject keeps the folder + returns
   idle, Destroy removes the idle folder, repos read carries no `queue_workers`.
 
-## Backend batch checkpoint (PASS-0000…PASS-0006 complete)
+## Frontend batch checkpoint (PASS-0007 + PASS-0008 complete)
+
+The backend half (PASS-0000…PASS-0006) was implemented, unit/server-smoke proven, and
+independently audited `ready` earlier. The frontend half (PASS-0007 + PASS-0008) is now
+implemented, the Python unit suite is green (178), the in-app REG-010…016 cases are
+captured on the isolated validation lane against the live backend, and both passes are
+committed/pushed on `master`. The independent in-app QA verdict is NOT claimed by this
+producer — it is coordinator-arranged.
+
+**Remaining (PASS-0009, a later coordinator-arranged run):**
+
+- **PASS-0009** — Cross-cutting closure: the consolidated in-app `WORKTREES`-tab regression
+  run (REG-010…REG-016) + the REG-007/008/009 in-app re-run under the new model, on the
+  isolated validation / reg007 lanes. Needs a clean-context QA verdict (coordinator-
+  arranged) and the human-authenticated Chrome debug session for the real-UI REG-007
+  `Queue=Ready` flip. This is also where the live provider `Queue=Never` dequeue write is
+  exercised against the throwaway testbed (the in-app dequeue is a safe no-op on the
+  single-Service control plane; see [PASS-0008 NOTES](./Testing/PASS-0008/PASS-0008-NOTES.md)).
+
+The new [BE] endpoints the UI consumes (verified live in the PASS-0006 smoke and the
+PASS-0007/0008 in-app captures): `GET /api/v1/repos`, `GET /api/v1/worktrees` (full pool,
+§8 flat shape), `POST /api/v1/worktrees/{create,assign,eject,destroy,dequeue}`.
+
+### Backend batch checkpoint (PASS-0000…PASS-0006 complete)
 
 The backend half of Task-0016 is implemented, unit-tested green, server-smoke green, and
-committed/pushed on `master`. This run STOPS here for a **coordinator-arranged
-clean-context QA verdict on the backend batch** before the UI passes begin (the worker
-cannot create a clean QA lane; see "Process gaps"). The independent QA verdict is NOT
-claimed by this producer.
-
-**Remaining (UI passes, a later coordinator-arranged run):**
-
-- **PASS-0007** — Frontend foundation: rename `TASKS`→`WORKTREES`, replace the tab content,
-  `worktrees_backend.py` HTTP client + `worktrees_tab.py` pure helpers, read-only pool view
-  (allocated/idle color + repo + path), copy-path control, registry-sourced repo filter
-  (REG-010/011/012).
-- **PASS-0008** — Frontend mutating controls: Create / Assign popup / Eject / Destroy /
-  Dequeue wired to the [BE] endpoints (REG-013/014/015/016).
-- **PASS-0009** — Cross-cutting closure: the in-app `WORKTREES`-tab regression run
-  (REG-010…REG-016) + the REG-007/008/009 in-app re-run under the new model, on the
-  isolated validation / reg007 lanes; REG-003/REG-004 retirement note in `REGRESSION.md`
-  (UPDATE 4). These need a confirmed runnable Tk environment + a clean-context QA verdict
-  (coordinator-arranged) and the human-authenticated Chrome debug session for the REG-007
-  Ready flip.
-
-The new [BE] endpoints the UI consumes (verified live in the PASS-0006 smoke):
-`GET /api/v1/repos`, `GET /api/v1/worktrees` (full pool, §8 flat shape),
-`POST /api/v1/worktrees/{create,assign,eject,destroy,dequeue}`.
+committed/pushed on `master`, and passed a clean-context audit. The independent QA verdict
+is NOT claimed by this producer.
 
 ### Original planning resume point (superseded by the approval above)
 
