@@ -2,6 +2,7 @@ package queue
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 )
@@ -63,6 +64,63 @@ func TestGitHubQueueProviderParsesGhReads(t *testing.T) {
 			strings.Contains(c, "issue edit") || strings.Contains(c, "issue close") {
 			t.Fatalf("provider issued a non-read gh call: %q", c)
 		}
+	}
+}
+
+// Task-0016 PASS-0004 / AC12, AC14: the provider DequeueIssue WRITE sets the issue's
+// Queue single-select to Never via gh (resolving the org Queue field id), through the
+// injectable run func — NEVER touching real GitHub. It posts to the issue-field-values
+// endpoint with the Never value and never closes the issue.
+func TestGitHubQueueProviderDequeueSetsQueueNeverViaProvider(t *testing.T) {
+	var calls []string
+	var postedBody string
+	fakeRun := func(args ...string) ([]byte, error) {
+		joined := strings.Join(args, " ")
+		calls = append(calls, joined)
+		switch {
+		case strings.Contains(joined, "issue close"):
+			t.Fatalf("dequeue must NEVER close the issue, got: %s", joined)
+			return nil, nil
+		case strings.Contains(joined, "/issue-fields"):
+			return []byte(`[{"id":42656828,"name":"Queue","data_type":"single_select","options":[{"id":1,"name":"Ready"},{"id":2,"name":"Never"}]},{"id":42656829,"name":"Human Needed","data_type":"single_select","options":[{"id":3,"name":"Yes"}]}]`), nil
+		case strings.Contains(joined, "-X POST") && strings.Contains(joined, "/issues/77/issue-field-values"):
+			// Read the JSON body the provider passed via --input <tmpfile> and capture it.
+			for i, a := range args {
+				if a == "--input" && i+1 < len(args) {
+					raw, err := os.ReadFile(args[i+1])
+					if err != nil {
+						return nil, fmt.Errorf("read dequeue input: %w", err)
+					}
+					postedBody = string(raw)
+				}
+			}
+			return []byte(`{}`), nil
+		default:
+			return nil, fmt.Errorf("unexpected gh call: %s", joined)
+		}
+	}
+
+	provider := &ghQueueProvider{owner: "Digital-Collective-Games", repo: testRepo, limit: 200, run: fakeRun}
+	if err := provider.DequeueIssue(testRepo, 77); err != nil {
+		t.Fatalf("DequeueIssue: %v", err)
+	}
+
+	// The posted body targets the Queue field id with the Never value.
+	if !strings.Contains(postedBody, `"field_id":42656828`) || !strings.Contains(postedBody, `"value":"Never"`) {
+		t.Fatalf("dequeue POST body = %q, want Queue field_id 42656828 set to Never", postedBody)
+	}
+	// The write went to the issue-field-values endpoint for #77, never a close.
+	posted := false
+	for _, c := range calls {
+		if strings.Contains(c, "-X POST") && strings.Contains(c, "/issues/77/issue-field-values") {
+			posted = true
+		}
+		if strings.Contains(c, "issue close") || strings.Contains(c, "-X PATCH") || strings.Contains(c, "-X DELETE") {
+			t.Fatalf("dequeue issued a non-dequeue write: %q", c)
+		}
+	}
+	if !posted {
+		t.Fatalf("dequeue did not POST the issue-field-value: calls = %v", calls)
 	}
 }
 

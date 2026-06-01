@@ -66,7 +66,15 @@ Backend batch progress:
   [Testing/PASS-0003/PASS-0003-NOTES.md](./Testing/PASS-0003/PASS-0003-NOTES.md),
   [Testing/PASS-0003-CHECKLIST.json](./Testing/PASS-0003-CHECKLIST.json). Full
   `go test ./...` green; AC1 grep proof clean (no live cap). REG-007 "pool of 1" unit-proven.
-- **Next:** PASS-0004 Provider dequeue write + standalone dequeue endpoint.
+- **PASS-0004 — Provider dequeue write + standalone dequeue endpoint — DONE.** Added
+  `QueueProvider.DequeueIssue` (gh-CLI `Queue→Never` write, idempotent, never closes) +
+  the `Service.DequeueProvider` seam + `Service.DequeueTask` + `POST
+  /api/v1/worktrees/dequeue`; wired the gh provider as the Service's dequeue provider in
+  queuedrain. Proof: [Testing/PASS-0004/PASS-0004-NOTES.md](./Testing/PASS-0004/PASS-0004-NOTES.md),
+  [Testing/PASS-0004-CHECKLIST.json](./Testing/PASS-0004-CHECKLIST.json). Provider test
+  fatals on any `issue close` (AC14); dequeue resolves Task-0007→#7 through the provider
+  (AC12); endpoint 200 + guard (AC15). Full `go test ./...` green.
+- **Next:** PASS-0005 Eject (keep folder + return idle + dequeue) + no-bounce-back seam.
 
 ### Original planning resume point (superseded by the approval above)
 

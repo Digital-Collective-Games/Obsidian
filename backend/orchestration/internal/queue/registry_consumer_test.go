@@ -227,3 +227,5 @@ func (p *capturingProvider) ListReadyIssues(repo string) ([]IssueRef, error) {
 }
 
 func (p *capturingProvider) CloseIssue(string, int) error { return nil }
+
+func (p *capturingProvider) DequeueIssue(string, int) error { return nil }

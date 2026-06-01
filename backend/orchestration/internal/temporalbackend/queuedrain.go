@@ -198,6 +198,11 @@ func newQueueDrainActivities(cfg config.Config, runtime taskrun.Runtime) (*queue
 		// registry repo id so two repos' identical issue #N can never collide on the
 		// Temporal workflow id or the runs-root path.
 		service.SetRepoNamespace(repo.ID)
+		// Inject the task-provider WRITE capability used by Eject / the dequeue endpoint
+		// (Task-0016): the SAME gh-backed provider that polls Queue=Ready also performs
+		// the Queue->Never dequeue write, so the dequeue goes THROUGH the provider, never
+		// an inline gh call.
+		service.SetDequeueProvider(provider)
 		dispatcher := taskrunDispatcher{service: service, repo: repo.ProviderRepo, repoNamespace: repo.ID}
 		if cfg.LaunchQueueAgent {
 			dispatcher.launch = launchConfig{

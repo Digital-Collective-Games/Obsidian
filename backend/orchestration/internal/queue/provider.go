@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -30,6 +31,14 @@ type QueueProvider interface {
 	// and it is invoked ONLY when the TEST-ONLY OBSIDIAN_AUTO_CLOSE_QUEUED auto-close
 	// is enabled (otherwise the consumer never calls it and stays read-only, A4.6).
 	CloseIssue(repo string, number int) error
+	// DequeueIssue is the provider WRITE that takes a task out of the queue: it sets the
+	// issue's Queue single-select to Never (QueueNever), the same field ListReadyIssues
+	// polls for Ready. It is the symmetric sibling of the Queue read and of CloseIssue.
+	// It NEVER closes the issue (the issue stays open, preserving human-only closure) and
+	// is idempotent — setting Never when it is already Never is a no-op. Task-0016 Eject
+	// and the standalone dequeue endpoint both call it; it is the FIRST task-provider
+	// queue write (the consumer's own poll path stays read-only).
+	DequeueIssue(repo string, number int) error
 }
 
 // IssueRef is one provider-observed GitHub issue. Number is the issue #N (which
@@ -91,8 +100,13 @@ func runGh(args ...string) ([]byte, error) {
 }
 
 type ghIssueField struct {
-	ID   int    `json:"id"`
-	Name string `json:"name"`
+	ID       int    `json:"id"`
+	Name     string `json:"name"`
+	DataType string `json:"data_type"`
+	Options  []struct {
+		ID   int    `json:"id"`
+		Name string `json:"name"`
+	} `json:"options"`
 }
 
 type ghIssueListEntry struct {
@@ -169,6 +183,79 @@ func (p *ghQueueProvider) CloseIssue(repo string, number int) error {
 	}
 	_, err := p.run("issue", "close", strconv.Itoa(number), "--repo", repo, "--reason", "completed")
 	return err
+}
+
+// DequeueIssue sets the issue's Queue single-select to Never via the gh CLI — the
+// symmetric WRITE counterpart of the Queue read. It resolves the org "Queue" field id
+// (and verifies the single-select carries the Never option, reusing the QueueNever
+// constant) and POSTs the issue-field-value, the same write the obsidian-operator sync
+// performs (POST /repos/<repo>/issues/<n>/issue-field-values with
+// {issue_field_values:[{field_id, value:"Never"}]}). The body is passed through the
+// injectable run func via --input so a test never touches real GitHub. It never closes
+// the issue; setting Never when already Never is a server-side no-op (idempotent).
+func (p *ghQueueProvider) DequeueIssue(repo string, number int) error {
+	if repo == "" {
+		repo = p.repo
+	}
+	field, err := p.queueField()
+	if err != nil {
+		return err
+	}
+	body, err := json.Marshal(map[string]any{
+		"issue_field_values": []map[string]any{
+			{"field_id": field.ID, "value": string(QueueNever)},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("encode dequeue body: %w", err)
+	}
+	tmp, err := os.CreateTemp("", "dequeue-*.json")
+	if err != nil {
+		return fmt.Errorf("create dequeue body temp: %w", err)
+	}
+	defer os.Remove(tmp.Name())
+	if _, err := tmp.Write(body); err != nil {
+		tmp.Close()
+		return fmt.Errorf("write dequeue body temp: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("close dequeue body temp: %w", err)
+	}
+	_, err = p.run("api", "-X", "POST", fmt.Sprintf("/repos/%s/issues/%d/issue-field-values", repo, number), "--input", tmp.Name())
+	return err
+}
+
+// queueField resolves the org "Queue" single-select issue field, verifying it carries
+// the Never option so the dequeue write targets a real value.
+func (p *ghQueueProvider) queueField() (ghIssueField, error) {
+	raw, err := p.run("api", "/orgs/"+p.owner+"/issue-fields")
+	if err != nil {
+		return ghIssueField{}, err
+	}
+	var fields []ghIssueField
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return ghIssueField{}, fmt.Errorf("decode org issue-fields: %w", err)
+	}
+	for _, field := range fields {
+		if field.Name != "Queue" {
+			continue
+		}
+		if field.DataType != "" && field.DataType != "single_select" {
+			return ghIssueField{}, fmt.Errorf("issue field %q must be single_select, got %q", field.Name, field.DataType)
+		}
+		hasNever := len(field.Options) == 0 // tolerate a fields read that omits options
+		for _, opt := range field.Options {
+			if opt.Name == string(QueueNever) {
+				hasNever = true
+				break
+			}
+		}
+		if !hasNever {
+			return ghIssueField{}, fmt.Errorf("issue field %q has no %q option", field.Name, QueueNever)
+		}
+		return field, nil
+	}
+	return ghIssueField{}, fmt.Errorf("issue field %q not found for org %q", "Queue", p.owner)
 }
 
 func (p *ghQueueProvider) fieldIDMap() (map[int]string, error) {

@@ -255,6 +255,26 @@ func handleWorktreeAPIRoute(w http.ResponseWriter, r *http.Request, taskService 
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"status": "destroyed", "worktree_id": body.WorktreeID})
+	case "dequeue":
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		var body struct {
+			Repo   string `json:"repo"`
+			TaskID string `json:"task_id"`
+		}
+		if err := decodeJSONBody(r, &body); err != nil {
+			writeJSONError(w, http.StatusBadRequest, err)
+			return
+		}
+		// Standalone dequeue: take the task out of the queue (Queue -> Never) WITHOUT
+		// ejecting; it does NOT close the issue (the issue stays open).
+		if err := taskService.DequeueTask(body.Repo, body.TaskID); err != nil {
+			writeJSONError(w, http.StatusBadRequest, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"status": "dequeued", "task_id": body.TaskID})
 	default:
 		http.NotFound(w, r)
 	}

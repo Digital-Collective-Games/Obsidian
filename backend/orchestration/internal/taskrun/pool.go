@@ -479,6 +479,42 @@ var ErrPoolWorktreeNotFound = errors.New("pool worktree not found")
 // to draw for a dispatch/assign (an empty pool defers — no auto-create).
 var ErrNoIdleWorktree = errors.New("no idle worktree available in the repo pool")
 
+// DequeueProvider is the task-provider WRITE seam the Service uses to take a task out of
+// the queue (Task-0016): set the issue's queue state to not-ready. It is a small interface
+// on the Service so Eject and the standalone dequeue endpoint call THROUGH the provider
+// (never an inline gh call), and so tests inject a fake. Production wires it to the
+// queue.QueueProvider built in the queuedrain wiring (symmetric to the read provider). A
+// nil provider makes a dequeue a safe no-op (e.g. the manual single-repo control plane
+// with no provider configured).
+type DequeueProvider interface {
+	DequeueIssue(repo string, number int) error
+}
+
+// SetDequeueProvider injects the task-provider write capability used by DequeueTask and
+// Eject. It is set by the per-repo queuedrain wiring (the same place the read provider is
+// built). Left nil, dequeue is a safe no-op.
+func (s *Service) SetDequeueProvider(p DequeueProvider) {
+	s.dequeueProvider = p
+}
+
+// DequeueTask takes a task out of the queue THROUGH the task provider (Queue -> Never)
+// WITHOUT ejecting: it does not stop the agent, clean the checkout, or unbind the run.
+// It resolves the issue number from the task id and calls the provider dequeue; a task
+// with no parseable issue number (or no provider configured) is a safe no-op. It never
+// closes the issue (the issue stays open). It is the standalone POST
+// /api/v1/worktrees/dequeue operation and is also reused by Eject (PASS-0005).
+func (s *Service) DequeueTask(repo string, taskID string) error {
+	if s.dequeueProvider == nil {
+		return nil
+	}
+	number, err := queue.IssueNumberFromTaskID(taskID)
+	if err != nil {
+		// No provider-backed issue number (e.g. a non-issue task): safe no-op.
+		return nil
+	}
+	return s.dequeueProvider.DequeueIssue(repo, number)
+}
+
 // drawnLane is one idle pool worktree drawn for a dispatch/assign: its sequence number
 // (to update the record's run_id after the run starts) and a RepoLane pointed at its
 // stable checkout, already reset to baseline.

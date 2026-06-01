@@ -16,6 +16,9 @@ type fakeProvider struct {
 	// the auto-close tests can assert the exact issue closed (and that none closed
 	// when the flag is off).
 	closed []closedIssue
+	// dequeued records every (repo, number) DequeueIssue (Queue -> Never) was called
+	// for, so dequeue/eject tests can assert the write without touching real GitHub.
+	dequeued []closedIssue
 }
 
 type closedIssue struct {
@@ -30,6 +33,11 @@ func (p *fakeProvider) ListReadyIssues(string) ([]IssueRef, error) {
 
 func (p *fakeProvider) CloseIssue(repo string, number int) error {
 	p.closed = append(p.closed, closedIssue{repo: repo, number: number})
+	return nil
+}
+
+func (p *fakeProvider) DequeueIssue(repo string, number int) error {
+	p.dequeued = append(p.dequeued, closedIssue{repo: repo, number: number})
 	return nil
 }
 

@@ -14,9 +14,34 @@ import (
 	"github.com/gregsemple2003/CodexDesktop/backend/orchestration/internal/taskrun"
 )
 
+// recordingDequeueProvider records the (repo, number) the dequeue endpoint asked the
+// task provider to set not-ready, so the endpoint test can assert it went THROUGH the
+// provider (never an inline gh call) and never closed the issue.
+type recordingDequeueProvider struct {
+	calls []struct {
+		repo   string
+		number int
+	}
+}
+
+func (p *recordingDequeueProvider) DequeueIssue(repo string, number int) error {
+	p.calls = append(p.calls, struct {
+		repo   string
+		number int
+	}{repo, number})
+	return nil
+}
+
 // poolMux builds a mux over a real-git worktree root with a fixture registry at the
 // configured OBSIDIAN_REGISTRY_PATH, for the Task-0016 pool endpoints.
 func poolMux(t *testing.T) (*http.ServeMux, string) {
+	mux, _, _ := poolMuxWithService(t)
+	return mux, ""
+}
+
+// poolMuxWithService is poolMux exposing the underlying task service so a test can inject
+// a fake dequeue provider.
+func poolMuxWithService(t *testing.T) (*http.ServeMux, *taskrun.Service, string) {
 	t.Helper()
 	worktreeRoot := writeTaskTrackingRoot(t)
 	registry := filepath.Join(t.TempDir(), "REPO-MANIFEST.json")
@@ -41,7 +66,7 @@ func poolMux(t *testing.T) (*http.ServeMux, string) {
 		TaskQueue:       "codex-orchestration",
 		TemporalAddress: "127.0.0.1:7233",
 	}, controlplane.NewService(t.TempDir(), newFakeBackend()), taskService, nil)
-	return mux, worktreeRoot
+	return mux, taskService, worktreeRoot
 }
 
 // Task-0016 PASS-0002 / AC2 + AC9: POST /api/v1/worktrees/create provisions an idle
@@ -185,7 +210,25 @@ func TestReposEndpointReadsRegistryWithoutQueueWorkers(t *testing.T) {
 	}
 }
 
-// AC11: the new routes are method/path-guarded — 405 on the wrong method, 404 on an
+// AC15: POST /api/v1/worktrees/dequeue invokes the provider dequeue (Queue -> Never) for
+// the named task WITHOUT ejecting and does NOT close the issue.
+func TestWorktreeDequeueEndpointInvokesProviderWithoutClosing(t *testing.T) {
+	mux, taskService, _ := poolMuxWithService(t)
+	fake := &recordingDequeueProvider{}
+	taskService.SetDequeueProvider(fake)
+
+	resp := httptest.NewRecorder()
+	mux.ServeHTTP(resp, httptest.NewRequest(http.MethodPost, "/api/v1/worktrees/dequeue",
+		strings.NewReader(`{"repo":"gregsemple2003/obsidian","task_id":"Task-0007"}`)))
+	if resp.Code != http.StatusOK {
+		t.Fatalf("dequeue status = %d, want 200: %s", resp.Code, resp.Body.String())
+	}
+	if len(fake.calls) != 1 || fake.calls[0].repo != "gregsemple2003/obsidian" || fake.calls[0].number != 7 {
+		t.Fatalf("dequeue provider calls = %#v, want one call for repo/issue #7", fake.calls)
+	}
+}
+
+// AC11/AC15: the new routes are method/path-guarded — 405 on the wrong method, 404 on an
 // unknown sub-path, matching the existing handler guards.
 func TestWorktreePoolRouteGuards(t *testing.T) {
 	mux, _ := poolMux(t)
@@ -199,6 +242,7 @@ func TestWorktreePoolRouteGuards(t *testing.T) {
 		{"create wrong method", http.MethodGet, "/api/v1/worktrees/create", http.StatusMethodNotAllowed},
 		{"assign wrong method", http.MethodGet, "/api/v1/worktrees/assign", http.StatusMethodNotAllowed},
 		{"destroy wrong method", http.MethodGet, "/api/v1/worktrees/destroy", http.StatusMethodNotAllowed},
+		{"dequeue wrong method", http.MethodGet, "/api/v1/worktrees/dequeue", http.StatusMethodNotAllowed},
 		{"unknown subpath", http.MethodPost, "/api/v1/worktrees/bogus", http.StatusNotFound},
 		{"repos wrong method", http.MethodPost, "/api/v1/repos", http.StatusMethodNotAllowed},
 	}

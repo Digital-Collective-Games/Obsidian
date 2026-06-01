@@ -41,6 +41,11 @@ type Service struct {
 	// tests can drive admission deterministically; production wiring counts idle pool
 	// members on disk (countIdlePoolWorktrees).
 	idleWorktreeCount func() (int, error)
+	// dequeueProvider is the task-provider WRITE seam used by DequeueTask / Eject to set
+	// an issue's queue state to not-ready (Queue -> Never) THROUGH the provider, never an
+	// inline gh call (Task-0016). Nil = dequeue is a safe no-op. Injected by the per-repo
+	// queuedrain wiring (symmetric to the read provider) or a fake in tests.
+	dequeueProvider DequeueProvider
 }
 
 type taskStateFile struct {

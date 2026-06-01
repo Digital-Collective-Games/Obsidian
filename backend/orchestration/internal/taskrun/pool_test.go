@@ -216,6 +216,63 @@ func TestListReposProjectsRegistryWithoutQueueWorkers(t *testing.T) {
 	}
 }
 
+// fakeDequeueProvider records the (repo, number) dequeue write calls so a test can
+// assert DequeueTask went THROUGH the provider with the right issue number.
+type fakeDequeueProvider struct {
+	calls []struct {
+		repo   string
+		number int
+	}
+}
+
+func (f *fakeDequeueProvider) DequeueIssue(repo string, number int) error {
+	f.calls = append(f.calls, struct {
+		repo   string
+		number int
+	}{repo, number})
+	return nil
+}
+
+// Task-0016 PASS-0004 / AC12: DequeueTask resolves the issue number from the task id and
+// calls the provider dequeue write (Queue -> Never) with the correct repo + number.
+func TestDequeueTaskCallsProviderWithIssueNumber(t *testing.T) {
+	service := newPoolTestService(t, "obsidian")
+	fake := &fakeDequeueProvider{}
+	service.SetDequeueProvider(fake)
+
+	if err := service.DequeueTask("gregsemple2003/obsidian", "Task-0007"); err != nil {
+		t.Fatalf("dequeue task: %v", err)
+	}
+	if len(fake.calls) != 1 {
+		t.Fatalf("dequeue provider calls = %d, want 1", len(fake.calls))
+	}
+	if fake.calls[0].repo != "gregsemple2003/obsidian" || fake.calls[0].number != 7 {
+		t.Fatalf("dequeue call = %#v, want repo gregsemple2003/obsidian issue #7", fake.calls[0])
+	}
+}
+
+// A task with no parseable issue number is a SAFE no-op (no provider call, no error).
+func TestDequeueTaskSafeNoOpForUnparseableTaskID(t *testing.T) {
+	service := newPoolTestService(t, "obsidian")
+	fake := &fakeDequeueProvider{}
+	service.SetDequeueProvider(fake)
+
+	if err := service.DequeueTask("gregsemple2003/obsidian", "not-a-task"); err != nil {
+		t.Fatalf("dequeue with unparseable task id should be a safe no-op, got: %v", err)
+	}
+	if len(fake.calls) != 0 {
+		t.Fatalf("dequeue provider calls = %d, want 0 (no parseable issue number)", len(fake.calls))
+	}
+}
+
+// With no provider configured, dequeue is a safe no-op.
+func TestDequeueTaskSafeNoOpWithNoProvider(t *testing.T) {
+	service := newPoolTestService(t, "obsidian")
+	if err := service.DequeueTask("gregsemple2003/obsidian", "Task-0007"); err != nil {
+		t.Fatalf("dequeue with no provider should be a safe no-op, got: %v", err)
+	}
+}
+
 func TestPoolRecordPersistsIdleMemberAndStableID(t *testing.T) {
 	service := newPoolTestService(t, "obsidian")
 	want := writeIdlePoolMember(t, service, 1)
