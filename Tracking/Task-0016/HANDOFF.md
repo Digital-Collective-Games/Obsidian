@@ -24,14 +24,48 @@ pass on the isolated validation lane. Full scope + acceptance live in
 
 **Phase: implementation. Plan APPROVED (UPDATE 4). Backend passes PASS-0000…PASS-0006 DONE
 + clean-context audit (PASS-0006-AUDIT.json `ready`). FRONTEND passes PASS-0007 + PASS-0008
-DONE (implemented, Python unit suite green @ 178, in-app REG-010…016 captured on the
-isolated validation lane, committed/pushed on `master`). REG-003/REG-004 retired in
-repo-root `REGRESSION.md` (UPDATE 4). `TASK-STATE.json` current_pass=PASS-0009.**
+DONE. PASS-0007 INTERFACE-DESIGNER fidelity fix (B1/B2/empty-msg) DONE + the full in-app
+regression set RE-CAPTURED on the final post-fix surface (PASS-0009 UI-surface evidence /
+INTERFACE-DESIGNER B3). Python unit suite green @ 182. Committed/pushed on `master`.
+REG-003/REG-004 retired in repo-root `REGRESSION.md` (UPDATE 4). `TASK-STATE.json`
+current_pass=PASS-0009.**
 
-Remaining: **PASS-0009** — the consolidated in-app regression re-run (REG-010…016 + the
-REG-007/008/009 re-run under the new model), which needs a coordinator-arranged
-clean-context QA verdict on the in-app surface and the human-authenticated Chrome debug
-session for the real-UI `Queue=Ready` flip. The agent never closes issue #16.
+### PASS-0007 INTERFACE-DESIGNER fidelity fix + final re-capture — DONE this run
+
+The clean-context [INTERFACE-DESIGNER review](./Testing/PASS-0007/INTERFACE-DESIGNER-REVIEW.md)
+raised two blocking fidelity findings; both are fixed (fix commit `4967cf9`, captures
+`e18be01`, both pushed on `master`):
+
+- **B1 (short repo heading)** — the panel HEADING now uses `worktree_heading_repo()` (the
+  stable worktree-id repo segment, identical for idle and allocated) in BOTH states instead
+  of the raw `repo` field (which for an allocated worktree is the bound checkout PATH and
+  overflowed the heading). The full bound path stays in the DETAILS reveal. Applied to the
+  row panel and the Details popup.
+- **B2 (chip state mark)** — the status chip now carries a leading state MARK (a small
+  0px-radius Canvas swatch in the cyan/green family — filled for allocated, hollow/outlined
+  for idle, no emoji), not text only. New `_build_worktree_status_chip()` reused by the row
+  and the Details popup; `worktree_chip_mark_filled()` helper.
+- **Empty-pool message** — a reachable-backend zero-worktrees state now reads "No worktrees
+  in this repo yet - use CREATE WORKTREE to add one." instead of the generic refresh line.
+- **N1 (copy glyph)** intentionally skipped (a Tk text glyph risks reading as a placeholder,
+  which UPDATE 5 forbids; the all-caps COPY PATH text is the approved Tk affordance).
+- **REGRESSION.md REG-010** tightened (process gap §7a): the in-app step + expected result
+  now require the heading to be the short repo id in BOTH idle and allocated states.
+- **Tests** — `tests/test_worktrees_tab.py` adds heading-uses-segment + chip-mark tests;
+  full suite green @ 182.
+- **B3 re-capture** — the full REG-010…REG-016 set was re-taken on the FINAL post-fix Tk
+  surface and confirms B1+B2 fixed (short `RepoX` headings + filled/hollow chip marks):
+  [Testing/PASS-0009/PASS-0009-NOTES.md](./Testing/PASS-0009/PASS-0009-NOTES.md). Isolated
+  throwaway lane on a fresh port `:24319`, namespace `reg016fix`, a throwaway registry
+  (RepoX/RepoY) with **NO `task_provider`** so the post-fix Eject/Dequeue is a guaranteed
+  safe local no-op; never the human service/validation lanes or live data; no production
+  queue touched.
+
+Remaining: **PASS-0009 closure** — a coordinator-arranged clean-context QA verdict on the
+in-app surface (a fresh INTERFACE-DESIGNER re-check on this final surface) and the
+human-authenticated Chrome debug session for the real-UI `Queue=Ready` flip + the LIVE
+provider `Queue=Never` dequeue write against a throwaway GitHub testbed (NOT proven by this
+run's no-provider captures). The agent never closes issue #16.
 
 ### Frontend batch (PASS-0007 + PASS-0008) — DONE this run
 
