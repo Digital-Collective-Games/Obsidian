@@ -804,6 +804,17 @@ func (s *Service) EjectWorktree(ctx context.Context, runID string, worktreeID st
 		}
 	}
 
+	// Terminate the run's per-run TaskRunWorkflow (BUG-0005). The workflow loops on signals
+	// and only exits on a terminal status, so freeing the worktree without terminating it
+	// leaves the run ACTIVE/orphaned (verified live). This mirrors the agent-kill above:
+	// best-effort and idempotent — TerminateTaskRun treats an already-gone run as success —
+	// so a re-eject or a parked run still ejects cleanly. It runs for the bound run only.
+	if s.runtime != nil && record.RunID != "" {
+		if err := s.runtime.TerminateTaskRun(ctx, record.RunID, "ejected by operator"); err != nil {
+			return PoolWorktree{}, fmt.Errorf("terminate ejected run %s: %w", record.RunID, err)
+		}
+	}
+
 	// Clean the checkout to a TRUE baseline (reset --hard + clean -fdx); KEEP the folder.
 	seq, err := s.poolSeqForID(memberID)
 	if err != nil {

@@ -328,6 +328,14 @@ func (f *fakeTaskRuntime) RetryTaskRunWorkload(_ context.Context, runID string, 
 	return run, nil
 }
 
+func (f *fakeTaskRuntime) TerminateTaskRun(_ context.Context, runID string, _ string) error {
+	if run, ok := f.byRunID[runID]; ok {
+		delete(f.byRunID, runID)
+		delete(f.activeByTask, run.TaskID)
+	}
+	return nil
+}
+
 func TestMuxExposesHealthJobsAndSync(t *testing.T) {
 	root := writeJobsRoot(t, []jobs.Spec{
 		{

@@ -288,6 +288,21 @@ func (b *Backend) RetryTaskRunWorkload(ctx context.Context, runID string, reques
 	})
 }
 
+// TerminateTaskRun terminates the per-run TaskRunWorkflow (BUG-0005). The workflow loops on
+// signals and never self-exits once running, so a freed slot otherwise leaves it
+// ACTIVE/orphaned; Eject calls this to end it. It is idempotent: a run that is already gone
+// (Temporal not-found) is treated as success so a re-eject / already-terminated run never
+// errors.
+func (b *Backend) TerminateTaskRun(ctx context.Context, runID string, reason string) error {
+	if err := b.client.TerminateWorkflow(ctx, runID, "", reason); err != nil {
+		if isTemporalNotFound(err) {
+			return nil
+		}
+		return fmt.Errorf("terminate task run %s: %w", runID, err)
+	}
+	return nil
+}
+
 func (b *Backend) getClosedTaskRunResult(ctx context.Context, workflowID string, executionRunID string) (taskrun.TaskRunView, error) {
 	workflowRun := b.client.GetWorkflow(ctx, workflowID, executionRunID)
 

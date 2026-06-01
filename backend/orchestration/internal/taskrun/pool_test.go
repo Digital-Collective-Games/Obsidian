@@ -397,6 +397,9 @@ func (r poolDiscoverRuntime) UpdateTaskRun(context.Context, string, TaskRunUpdat
 func (r poolDiscoverRuntime) RetryTaskRunWorkload(context.Context, string, WorkloadRetryRequest) (TaskRunView, error) {
 	return TaskRunView{}, ErrRunNotFound
 }
+func (r poolDiscoverRuntime) TerminateTaskRun(context.Context, string, string) error {
+	return nil
+}
 
 func writeAllocatedPoolMember(t *testing.T, s *Service, seq int, runID string) poolRecord {
 	t.Helper()
@@ -520,5 +523,142 @@ func TestNextPoolMemberSeqAllocatesStableIncrementingIDs(t *testing.T) {
 	}
 	if service.poolWorktreeID(seq) != "obsidian/wt-0003" {
 		t.Fatalf("next worktree id = %q, want obsidian/wt-0003", service.poolWorktreeID(seq))
+	}
+}
+
+// ejectRuntime reports ONE live run (running or parked, with a launched PID) and records
+// the run ids passed to TerminateTaskRun, dropping a terminated run from its live view so a
+// follow-up read reports it not-active (modeling the real backend, where a terminated
+// workflow can no longer be queried). It is the BUG-0005 eject-termination test double.
+type ejectRuntime struct {
+	liveRunID  string
+	liveTaskID string
+	gateState  string
+	pid        int
+	terminated *[]string
+}
+
+func (r ejectRuntime) StartTaskRun(context.Context, StartTaskRunRequest) (TaskRunView, error) {
+	return TaskRunView{}, ErrRunNotFound
+}
+func (r ejectRuntime) GetTaskRun(_ context.Context, runID string) (TaskRunView, error) {
+	return r.GetActiveTaskRun(context.Background(), runID)
+}
+func (r ejectRuntime) GetActiveTaskRun(_ context.Context, runID string) (TaskRunView, error) {
+	for _, id := range *r.terminated {
+		if id == runID {
+			// Already terminated: the workflow is gone, so the read is no longer active.
+			return TaskRunView{}, ErrRunNotFound
+		}
+	}
+	if runID != r.liveRunID {
+		return TaskRunView{}, ErrRunNotFound
+	}
+	return TaskRunView{
+		RunID:  r.liveRunID,
+		TaskID: r.liveTaskID,
+		Status: "active",
+		RepoLane: RepoLane{Binding: &RepoBinding{
+			TaskID:       r.liveTaskID,
+			RunGateState: r.gateState,
+			LaunchedPID:  r.pid,
+		}},
+	}, nil
+}
+func (r ejectRuntime) SetRunGateState(context.Context, string, string) (TaskRunView, error) {
+	return TaskRunView{}, ErrRunNotFound
+}
+func (r ejectRuntime) BindLaunchedSession(context.Context, string, string, string, int) (TaskRunView, error) {
+	return TaskRunView{}, ErrRunNotFound
+}
+func (r ejectRuntime) ReconcileTaskSnapshot(context.Context, string, TaskDefinitionSnapshot) (TaskRunView, error) {
+	return TaskRunView{}, ErrRunNotFound
+}
+func (r ejectRuntime) UpdateTaskRun(context.Context, string, TaskRunUpdate) (TaskRunView, error) {
+	return TaskRunView{}, ErrRunNotFound
+}
+func (r ejectRuntime) RetryTaskRunWorkload(context.Context, string, WorkloadRetryRequest) (TaskRunView, error) {
+	return TaskRunView{}, ErrRunNotFound
+}
+func (r ejectRuntime) TerminateTaskRun(_ context.Context, runID string, _ string) error {
+	*r.terminated = append(*r.terminated, runID)
+	return nil
+}
+
+// Task-0016 BUG-0005: EjectWorktree must TERMINATE the bound run's per-run workflow (not just
+// kill the agent + clean + idle + dequeue), so no active run lingers with no worktree after an
+// Eject. This proves it for BOTH a running and a parked lane, and that the run reads not-active
+// afterward. The falsifier (an Eject that frees the worktree but never terminates the run — the
+// live-observed orphan) fails: terminated stays empty and the run still reads active.
+func TestEjectWorktreeTerminatesRunForRunningAndParkedLane(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		gateState string
+	}{
+		{name: "running", gateState: RunGateStateRunning},
+		{name: "parked", gateState: "parked_awaiting_closure"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			service := newGitPoolTestService(t, "RepoA")
+
+			created, err := service.CreatePoolWorktree("RepoA")
+			if err != nil {
+				t.Fatalf("create pool worktree: %v", err)
+			}
+
+			// Bind the member to a live run and install the recording runtime that reports it
+			// live (running or parked) with a launched PID.
+			runID := ActiveRunIDForRepo("RepoA", "Task-0007")
+			terminated := []string{}
+			service.runtime = ejectRuntime{
+				liveRunID:  runID,
+				liveTaskID: "Task-0007",
+				gateState:  tc.gateState,
+				pid:        0, // 0 => no real process kill is attempted in-test
+				terminated: &terminated,
+			}
+			record, _, err := readPoolRecord(service.poolMemberDir(1))
+			if err != nil {
+				t.Fatalf("read record: %v", err)
+			}
+			record.RunID = runID
+			if err := service.writePoolRecord(1, record); err != nil {
+				t.Fatalf("mark allocated: %v", err)
+			}
+
+			// Sanity: before the eject the member is allocated and the run reads active.
+			before, err := service.ListPoolWorktrees()
+			if err != nil {
+				t.Fatalf("list pool before eject: %v", err)
+			}
+			if len(before) != 1 || before[0].Status != poolStatusAllocated {
+				t.Fatalf("pre-eject pool = %#v, want one allocated member", before)
+			}
+
+			ejected, err := service.EjectWorktree(context.Background(), runID, "")
+			if err != nil {
+				t.Fatalf("eject worktree: %v", err)
+			}
+
+			// BUG-0005: the bound run's workflow was TERMINATED.
+			if len(terminated) != 1 || terminated[0] != runID {
+				t.Fatalf("terminated runs = %#v, want exactly [%s] (Eject must terminate the run)", terminated, runID)
+			}
+
+			// The worktree returns to idle (folder KEPT) and the run no longer reads active.
+			if ejected.WorktreeID != "RepoA/wt-0001" || ejected.Status != poolStatusIdle {
+				t.Fatalf("ejected = %#v, want idle RepoA/wt-0001", ejected)
+			}
+			if _, statErr := os.Stat(created.WorktreePath); statErr != nil {
+				t.Fatalf("ejected pool checkout must be kept: %v", statErr)
+			}
+			after, err := service.ListPoolWorktrees()
+			if err != nil {
+				t.Fatalf("list pool after eject: %v", err)
+			}
+			if len(after) != 1 || after[0].Status != poolStatusIdle || after[0].RunID != "" {
+				t.Fatalf("post-eject pool = %#v, want one idle member with no bound run (no orphaned active run)", after)
+			}
+		})
 	}
 }

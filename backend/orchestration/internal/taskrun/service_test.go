@@ -18,6 +18,9 @@ type fakeRuntime struct {
 	byRunID      map[string]TaskRunView
 	started      []StartTaskRunRequest
 	reconciled   []TaskDefinitionSnapshot
+	// terminated records the run ids passed to TerminateTaskRun, so a test can assert Eject
+	// terminated the run's workflow (BUG-0005).
+	terminated []string
 }
 
 func newFakeRuntime() *fakeRuntime {
@@ -270,6 +273,27 @@ func (f *fakeRuntime) RetryTaskRunWorkload(_ context.Context, runID string, requ
 	f.byRunID[runID] = run
 	f.activeByTask[run.TaskID] = run
 	return run, nil
+}
+
+// TerminateTaskRun records the terminate call and DROPS the run from the live maps, modeling
+// the real backend where a terminated workflow can no longer be queried (GetActiveTaskRun ->
+// ErrRunNotFound). This lets a test assert both that Eject terminated the run (BUG-0005) and
+// that the run read no longer reports it active afterward.
+func (f *fakeRuntime) TerminateTaskRun(_ context.Context, runID string, _ string) error {
+	f.terminated = append(f.terminated, runID)
+	if run, ok := f.byRunID[runID]; ok {
+		delete(f.byRunID, runID)
+		delete(f.activeByTask, run.TaskID)
+	}
+	for taskID, run := range f.activeByTask {
+		if ActiveRunID(taskID) == runID || run.RunID == runID {
+			delete(f.activeByTask, taskID)
+			if run.RunID != "" {
+				delete(f.byRunID, run.RunID)
+			}
+		}
+	}
+	return nil
 }
 
 func TestListTasksParsesMeaningAndReadyState(t *testing.T) {

@@ -844,21 +844,31 @@ Steps:
    worktree bound to a task whose provider queue state is `Ready` (use a throwaway
    testbed task on the isolated lane; never a production issue).
 2. Trigger the real overlay path and open the `WORKTREES` tab.
-3. Click Eject on the allocated worktree row.
-4. Verify the worktree returns to IDLE in the view (idle color), the bound task is no
+3. Before the Eject, record the bound run id and confirm its Temporal workflow is ACTIVE
+   (e.g. `temporal workflow describe -w <run_id>` shows `Running`).
+4. Click Eject on the allocated worktree row.
+5. Verify the worktree returns to IDLE in the view (idle color), the bound task is no
    longer shown, and the SAME local-dir path is still present (the folder was kept, not
    deleted).
-5. Verify the freed task is dequeued: the pool read no longer re-allocates it on a
+6. Verify the run is TERMINATED: the run's Temporal workflow `<run_id>` is no longer
+   `Running` (`temporal workflow describe -w <run_id>` shows a terminated/closed status,
+   not `Running`), and `GET /api/v1/task-runs/<run_id>` no longer reports it
+   `active/running` (it reads not-found/terminated). No active run lingers with no worktree
+   after the Eject.
+7. Verify the freed task is dequeued: the pool read no longer re-allocates it on a
    subsequent refresh / consumer poll (its provider queue state is `Never`, not `Ready`),
    so it is not re-dispatched (no bounce-back). The task's issue remains open.
-6. Capture an artifact from the running app surface showing the worktree idle after Eject
-   and the task no longer bound/re-dispatched.
-7. Exit cleanly.
+8. Capture an artifact from the running app surface showing the worktree idle after Eject
+   and the task no longer bound/re-dispatched, plus the terminated-workflow status.
+9. Exit cleanly.
 
 Expected result:
 
 - clicking Eject returns the allocated worktree to idle in the view with the same folder
   retained (Eject never deletes the folder)
+- the run's Temporal workflow is TERMINATED by the Eject — it is no longer `Running` and the
+  run read no longer reports it `active/running`; no active run is left orphaned with no
+  worktree
 - the freed task is dequeued (`Queue=Never`, issue still open) and is not re-dispatched
   on the next poll
 - the interaction acts only through the backend endpoint and spawns no extra windows
@@ -866,16 +876,16 @@ Expected result:
 Interpretation:
 
 - this is the canonical regression for the Task-0016 Eject (keep-folder + return-idle +
-  dequeue) interaction at the desktop surface
+  terminate-run + dequeue) interaction at the desktop surface
+- the run-termination requirement is load-bearing ([BUG-0005](./Tracking/Task-0016/BUG-0005.md)):
+  an Eject that frees the worktree but leaves the run's workflow active fails this case. The
+  backend unit proof
+  (`TestEjectWorktreeTerminatesRunForRunningAndParkedLane`) supports but does not replace this
+  in-app live check.
 - the no-bounce-back consequence is exercised in-app here; the backend-seam no-redispatch
   unit proof supports but does not replace this case
 - run only against throwaway testbed tasks on the isolated lane; the dequeue is a backend
   provider write and must never touch a production-owned queue
-- **Incomplete pending [BUG-0005](./Tracking/Task-0016/BUG-0005.md):** this case currently
-  asserts the worktree returns to idle, but the live smoke showed Eject leaves the run's
-  Temporal workflow ACTIVE/orphaned (worktree freed, run not terminated). Once BUG-0005 is
-  fixed, strengthen this case to also assert the run is terminated (no active run lingers
-  with no worktree after Eject).
 
 ### REG-016 WORKTREES Tab Destroy (Idle Only) And Standalone Dequeue
 

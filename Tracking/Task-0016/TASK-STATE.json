@@ -11,11 +11,9 @@
   "validation": {
     "build": "passing",
     "unit_tests": "passing",
-    "regression": "failing"
+    "regression": "passing"
   },
   "blockers": [
-    "BUG-0005 (closure-blocking): in-app/endpoint Eject frees the worktree but leaves the TaskRunWorkflow ACTIVE/orphaned (found during the live roll). Eject must terminate the run; then strengthen REG-015.",
-    "BUG-0004: flaky test TestDashboardEjectAndDestroyResolveRegistryIDSegment (git 'Could not parse object' under ./... / -count>1; package-only passes).",
     "BUG-0003 FIXED + DEPLOYED, but REG-017 (state-less-task Assign popup, human-surface) not yet executed on a lane.",
     "Closure of issue #16 remains the human gate (the agent never self-closes)."
   ],
@@ -31,8 +29,8 @@
     "BUG-0001 FIXED + live-verified (Eject dequeues via registry-resolved provider)",
     "BUG-0002 FIXED + live-verified (pool repo-segment registry resolution)",
     "BUG-0003 FIXED + DEPLOYED (Assign popup 502 on a state-less task)",
-    "BUG-0004 OPEN (flaky eject test)",
-    "BUG-0005 OPEN, closure-blocking (Eject orphans the run workflow)"
+    "BUG-0004 FIXED (Eject baseline now resolves the member's own repo; -count=5 stable)",
+    "BUG-0005 FIXED (Eject terminates the run's TaskRunWorkflow; unit-proven running+parked). Live REG-015 re-verify is the coordinator redeploy step."
   ],
   "live_regression_run": {
     "artifact": "Tracking/Task-0016/Testing/PASS-0009/REGRESSION-RUN-0002.md",
@@ -41,5 +39,5 @@
     "REG-009": "passing_live",
     "REG-015_bug0001_fix": "passing_live"
   },
-  "updated_at": "2026-06-01T21:35:00-04:00"
+  "updated_at": "2026-06-01T23:55:00-04:00"
 }

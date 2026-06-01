@@ -1,6 +1,46 @@
 # Task-0016 Handoff
 
-## LATEST — 2026-06-01 — BUG-0002 fixed + LIVE REG-007 re-verified (green)
+## LATEST — 2026-06-01 — BUG-0005 + BUG-0004 fixed (Eject terminates the run; eject baseline made deterministic)
+
+Two tracked bugs in the Go backend are now **FIXED + unit-proven** (no production touched —
+the coordinator owns the redeploy + live REG-015 re-verify):
+
+- **[BUG-0005](./BUG-0005.md) (was closure-blocking) — Eject now TERMINATES the run.** Root
+  cause: the per-run `TaskRunWorkflow`
+  ([taskexec.go](../../backend/orchestration/internal/taskexec/taskexec.go)) is long-running
+  and only exits on a TERMINAL status, so after owned-lane execution it sits `running` on
+  signals forever; neither close nor Eject ever terminated it (live-observed orphan). Fix
+  (mirrors the existing best-effort agent-kill, NOT a new path): added
+  `Runtime.TerminateTaskRun(ctx, runID, reason)`
+  ([types.go](../../backend/orchestration/internal/taskrun/types.go)) implemented on the
+  Temporal `Backend` as a thin idempotent `client.TerminateWorkflow`
+  ([backend.go](../../backend/orchestration/internal/temporalbackend/backend.go)); `EjectWorktree`
+  ([pool.go](../../backend/orchestration/internal/taskrun/pool.go)) now terminates the bound
+  run's workflow in addition to its agent-kill + clean + return-idle (folder kept) + dequeue.
+  Run-read staleness is resolved BY the termination (a terminated workflow can't be queried →
+  pool read reclassifies idle, `/api/v1/task-runs/<id>` reads not-found, not stale `active`);
+  no separate read-path change, focused note left in the bug for the 502-vs-404 edge. Test:
+  `TestEjectWorktreeTerminatesRunForRunningAndParkedLane`
+  ([pool_test.go](../../backend/orchestration/internal/taskrun/pool_test.go)) — asserts the
+  terminate call recorded AND the run no longer reads active, for a running AND a parked lane.
+- **[BUG-0004](./BUG-0004.md) — flaky `TestDashboardEjectAndDestroyResolveRegistryIDSegment`
+  was a real multi-repo product bug.** `EjectWorktree` resolved its reset baseline from the
+  dashboard Service's own `declaredWorktreeRoot` instead of the ejected member's OWN repo, so
+  `git reset --hard <wrong-repo HEAD>` ran in the member's worktree. It only passed when the
+  two fixture repos happened to share a commit hash (same-second commit collision); a 1-second
+  boundary (timing/`-count>1`) flipped it to `fatal: Could not parse object`. Fix: `EjectWorktree`
+  now resolves the baseline against `registryRepoLocalRoot(record.Repo)` (falling back to
+  `declaredWorktreeRoot`), mirroring `CreatePoolWorktree`. `go test -count=5 ./internal/taskrun/`
+  is now stable green (210s); no fixture change needed.
+
+Proof this run: `go build ./...` exit 0; `gofmt -l internal/ cmd/` clean; full `go test ./...`
+green; `go test -count=5 ./internal/taskrun/` green. [REGRESSION.md](../../REGRESSION.md)
+**REG-015** strengthened — the "Incomplete pending BUG-0005" caveat removed and an explicit
+step + expected-result added asserting the run's Temporal workflow is TERMINATED after Eject
+(not just the worktree idle). **No production lane/issue touched** (no rebuild, no restart, #16
+untouched) — the coordinator redeploys and re-verifies live.
+
+## 2026-06-01 — BUG-0002 fixed + LIVE REG-007 re-verified (green)
 
 [BUG-0002](./BUG-0002.md) (the dashboard pool repo-segment mismatch that blocked the
 REG-007 Create-seed + reuse legs) is **FIXED + LIVE-VERIFIED**. Fix commit `dddab0e`:

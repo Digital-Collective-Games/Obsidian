@@ -301,6 +301,12 @@ type Runtime interface {
 	ReconcileTaskSnapshot(ctx context.Context, runID string, snapshot TaskDefinitionSnapshot) (TaskRunView, error)
 	UpdateTaskRun(ctx context.Context, runID string, update TaskRunUpdate) (TaskRunView, error)
 	RetryTaskRunWorkload(ctx context.Context, runID string, request WorkloadRetryRequest) (TaskRunView, error)
+	// TerminateTaskRun terminates the per-run TaskRunWorkflow so an operator Eject does not
+	// leave the run's long-running workflow ACTIVE/orphaned after the worktree is freed
+	// (BUG-0005). The TaskRunWorkflow loops on signals and only exits on a terminal status,
+	// so nothing ends it when a slot is reclaimed; Eject must terminate it explicitly. It is
+	// idempotent: a run that is already gone (ErrRunNotFound) is treated as success.
+	TerminateTaskRun(ctx context.Context, runID string, reason string) error
 }
 
 type StartTaskRunRequest struct {
