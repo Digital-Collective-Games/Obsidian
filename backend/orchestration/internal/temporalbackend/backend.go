@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 
 	"github.com/gregsemple2003/CodexDesktop/backend/orchestration/internal/config"
@@ -517,6 +518,15 @@ func isTemporalNotFound(err error) bool {
 	}
 	if err == nil {
 		return false
+	}
+	// A TERMINATED workflow is gone for run-read purposes: getClosedTaskRunResult's
+	// workflowRun.Get returns a *temporal.TerminatedError (whose message lacks "not found"),
+	// and a query/signal against a terminated workflow can fail without a NotFound serviceerror.
+	// Map both to ErrRunNotFound so a terminated run reads as "no active run" — the direct read
+	// /api/v1/task-runs/<id> returns 404 (not a 502/stale active), and readTask tolerates it so
+	// GET /api/v1/tasks / the Assign popup keep loading after an Eject terminates the run (BUG-0006).
+	if temporal.IsTerminatedError(err) {
+		return true
 	}
 	return strings.Contains(err.Error(), "not found")
 }

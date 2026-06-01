@@ -858,9 +858,13 @@ Steps:
 7. Verify the freed task is dequeued: the pool read no longer re-allocates it on a
    subsequent refresh / consumer poll (its provider queue state is `Never`, not `Ready`),
    so it is not re-dispatched (no bounce-back). The task's issue remains open.
-8. Capture an artifact from the running app surface showing the worktree idle after Eject
+8. After the Eject, confirm the WORKTREES Assign popup still LOADS: open an idle worktree's
+   Assign control and verify `GET /api/v1/tasks` returns 200 (not 502) and the just-ejected
+   task appears with no active run — a terminated run on a non-terminal task must not 502 the
+   list (BUG-0006). (REG-018 is the focused case for this; this step keeps REG-015 honest.)
+9. Capture an artifact from the running app surface showing the worktree idle after Eject
    and the task no longer bound/re-dispatched, plus the terminated-workflow status.
-9. Exit cleanly.
+10. Exit cleanly.
 
 Expected result:
 
@@ -871,6 +875,8 @@ Expected result:
   worktree
 - the freed task is dequeued (`Queue=Never`, issue still open) and is not re-dispatched
   on the next poll
+- after the Eject, the Assign popup still loads (`GET /api/v1/tasks` is 200, not 502) and the
+  ejected task appears with no active run (BUG-0006)
 - the interaction acts only through the backend endpoint and spawns no extra windows
 
 Interpretation:
@@ -980,6 +986,55 @@ Interpretation:
 - lesson (why this case exists): the WORKTREES human-surface cases (REG-010…016) must be run
   against a REALISTIC Tracking/registry set — including a state-less task — not only a
   pristine throwaway set, or this class of bug reaches the human instead of regression.
+
+### REG-018 WORKTREES Assign Popup Loads After An Eject Terminates A Run
+
+Goal:
+
+Confirm the `WORKTREES` tab's Assign popup still loads its open-task list
+(`GET /api/v1/tasks`) AFTER an Eject has terminated a task's run workflow while that task's
+`TASK-STATE.json` is still non-terminal. A terminated-but-not-completed run must read as "no
+active run", never 502 the whole list and blank the Assign popup (BUG-0006 — found live: once
+the [BUG-0005](./Tracking/Task-0016/BUG-0005.md) fix made Eject terminate the run, the next
+`GET /api/v1/tasks` returned `502 {"error":"task run not found"}`).
+
+Surface:
+
+The real `WORKTREES` tab Assign popup, backed by `GET /api/v1/tasks` on the isolated
+validation lane, after an Eject has terminated the bound run's workflow.
+
+Steps:
+
+1. Launch the real app + validation-lane backend as in REG-010, with an ALLOCATED worktree
+   bound to a throwaway testbed task on the isolated lane (its `TASK-STATE.json` non-terminal,
+   e.g. `in_progress`).
+2. Eject that worktree (as in REG-015) so the bound run's Temporal workflow is TERMINATED while
+   the task's `TASK-STATE.json` stays non-terminal.
+3. Open the `WORKTREES` tab and an idle worktree's Assign control.
+4. Confirm the Assign popup POPULATES with the open tasks (it does not blank, error, or hang);
+   `GET /api/v1/tasks` returns 200, not 502.
+5. Confirm the just-ejected task still appears with NO active run (no active/running story; not
+   dropped from the list, not fabricated as complete), and that a normal task can still be
+   selected and bound.
+6. Capture an artifact showing the populated popup after the Eject.
+
+Expected result:
+
+- the Assign popup populates after the Eject; `GET /api/v1/tasks` is 200 (a terminated run on a
+  non-terminal task must NOT 502 the whole list)
+- the ejected task appears with no active run; its state is not fabricated as complete
+
+Interpretation:
+
+- this is the human-surface regression for **BUG-0006** (a terminated run 502'd the Assign popup
+  live, recurring after every Eject). Unit coverage: `TestListTasksToleratesTerminatedRun`
+  (both the GetActiveTaskRun and the refreshRun not-found shapes) and
+  `TestRunForTerminatedRunReturnsErrRunNotFound` (direct read 404, not 502/stale), plus
+  `TestIsTemporalNotFoundTreatsTerminatedWorkflowAsGone` — these support but do not replace this
+  in-app case.
+- lesson (why this case exists): the post-Eject state is a distinct precondition from REG-017's
+  state-less task; the BUG-0005 run-termination fix introduced it, so the post-Eject Assign-popup
+  load must be exercised in-app or this class of bug reaches the human again.
 
 ## Supporting Smoke
 

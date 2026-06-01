@@ -30,7 +30,8 @@
     "BUG-0002 FIXED + live-verified (pool repo-segment registry resolution)",
     "BUG-0003 FIXED + DEPLOYED (Assign popup 502 on a state-less task)",
     "BUG-0004 FIXED (Eject baseline now resolves the member's own repo; -count=5 stable)",
-    "BUG-0005 FIXED (Eject terminates the run's TaskRunWorkflow; unit-proven running+parked). Live REG-015 re-verify is the coordinator redeploy step."
+    "BUG-0005 FIXED (Eject terminates the run's TaskRunWorkflow; unit-proven running+parked). Live REG-015 re-verify is the coordinator redeploy step.",
+    "BUG-0006 FIXED (terminated run no longer 502s GET /api/v1/tasks / the Assign popup; readTask tolerates ErrRunNotFound at the refreshRun site, terminated workflow maps to ErrRunNotFound). Unit-proven (both not-found shapes + falsifier). Live REG-018 re-verify is the coordinator redeploy step."
   ],
   "live_regression_run": {
     "artifact": "Tracking/Task-0016/Testing/PASS-0009/REGRESSION-RUN-0002.md",
@@ -39,5 +40,5 @@
     "REG-009": "passing_live",
     "REG-015_bug0001_fix": "passing_live"
   },
-  "updated_at": "2026-06-01T23:55:00-04:00"
+  "updated_at": "2026-06-01T23:59:00-04:00"
 }

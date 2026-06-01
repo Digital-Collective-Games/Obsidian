@@ -3,6 +3,7 @@ package taskrun
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -407,6 +408,102 @@ func TestListTasksToleratesMissingTaskState(t *testing.T) {
 	}
 	if stateless.TaskID != "Task-0014" {
 		t.Fatalf("stateless task id = %q, want Task-0014", stateless.TaskID)
+	}
+}
+
+// terminatedRunRuntime models the BUG-0006 "terminated-run" shapes a non-terminal task can
+// land in after an Eject terminates its run's workflow (BUG-0005) while TASK-STATE.json stays
+// non-terminal. It embeds the standard fakeRuntime so all other Runtime methods behave
+// normally, and overrides only the two run-read sites readTask uses:
+//   - activeNotFound=true  -> GetActiveTaskRun returns ErrRunNotFound (the live-after-terminate
+//     case where the closed workflow can no longer be queried at all).
+//   - activeNotFound=false -> GetActiveTaskRun returns a TERMINAL run (the closed workflow's last
+//     state still queries), but refreshRun's UpdateTaskRun then returns ErrRunNotFound (the run
+//     is gone by the time the derived update is applied).
+//
+// Either shape must read as "no active run", NOT 502 GET /api/v1/tasks / the Assign popup.
+type terminatedRunRuntime struct {
+	*fakeRuntime
+	taskID         string
+	activeNotFound bool
+}
+
+func (r *terminatedRunRuntime) GetActiveTaskRun(ctx context.Context, runID string) (TaskRunView, error) {
+	if r.activeNotFound {
+		return TaskRunView{}, ErrRunNotFound
+	}
+	// A terminated run whose closed workflow still answers the query: surface a TERMINAL run with
+	// empty Actions/Attention so refreshRun's derivedRunUpdate is non-nil and reaches UpdateTaskRun.
+	return TaskRunView{
+		RunID:         runID,
+		TaskID:        r.taskID,
+		WorkflowID:    runID,
+		Status:        "interrupted",
+		StateEnvelope: StateEnvelope{State: StateInterrupted},
+	}, nil
+}
+
+func (r *terminatedRunRuntime) UpdateTaskRun(_ context.Context, _ string, _ TaskRunUpdate) (TaskRunView, error) {
+	return TaskRunView{}, ErrRunNotFound
+}
+
+// BUG-0006: a non-terminal task whose run workflow has been TERMINATED (post-Eject) must still
+// appear in ListTasks with no active run — never 502 the whole list / the WORKTREES Assign popup.
+// Covers BOTH failing shapes: ErrRunNotFound at the GetActiveTaskRun site AND at the refreshRun
+// (UpdateTaskRun) site. The falsifier (a terminated run 502ing the list) makes this test error.
+func TestListTasksToleratesTerminatedRun(t *testing.T) {
+	const taskID = "Task-0008"
+	fixture := taskFixture{
+		taskMD:    "# Task 0008\n\n## Title\n\nBuild the backend dispatch layer.\n\n## Summary\n\nDurable contract.\n",
+		taskState: `{"task_id":"Task-0008","status":"in_progress","phase":"implementation","plan_approved":true,"current_pass":"PASS-0000","current_gate":"implementation","blockers":[],"updated_at":"2026-04-24T16:27:00-04:00"}`,
+	}
+
+	for _, tc := range []struct {
+		name           string
+		activeNotFound bool
+	}{
+		{name: "not_found_at_get_active_run", activeNotFound: true},
+		{name: "not_found_at_refresh_run", activeNotFound: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			worktreeRoot := writeTaskTrackingRoot(t, map[string]taskFixture{taskID: fixture})
+			runtime := &terminatedRunRuntime{fakeRuntime: newFakeRuntime(), taskID: taskID, activeNotFound: tc.activeNotFound}
+			service := NewService(worktreeRoot, filepath.Join(worktreeRoot, ".runs"), runtime)
+
+			tasks, err := service.ListTasks(context.Background())
+			if err != nil {
+				t.Fatalf("ListTasks must tolerate a terminated run (no 502), got error: %v", err)
+			}
+			if len(tasks) != 1 {
+				t.Fatalf("task count = %d, want 1: %#v", len(tasks), tasks)
+			}
+			task := tasks[0]
+			if task.TaskID != taskID {
+				t.Fatalf("task id = %q, want %q", task.TaskID, taskID)
+			}
+			if task.CurrentStory.Status != "no_active_run" {
+				t.Fatalf("current story status = %q, want no_active_run", task.CurrentStory.Status)
+			}
+		})
+	}
+}
+
+// BUG-0006: a direct read of a TERMINATED run must surface ErrRunNotFound so the API returns 404
+// (not 502/stale active). Mirrors the post-Eject direct read /api/v1/task-runs/<id>.
+func TestRunForTerminatedRunReturnsErrRunNotFound(t *testing.T) {
+	worktreeRoot := writeTaskTrackingRoot(t, map[string]taskFixture{
+		"Task-0008": {
+			taskMD:    "# Task 0008\n\n## Title\n\nBuild the backend dispatch layer.\n\n## Summary\n\nDurable contract.\n",
+			taskState: `{"task_id":"Task-0008","status":"in_progress","updated_at":"2026-04-24T16:27:00-04:00"}`,
+		},
+	})
+	runtime := newFakeRuntime()
+	service := NewService(worktreeRoot, filepath.Join(worktreeRoot, ".runs"), runtime)
+
+	// No run was ever started, so the runtime has no entry for this id: the gone/terminated run.
+	_, err := service.Run(context.Background(), ActiveRunID("Task-0008"))
+	if !errors.Is(err, ErrRunNotFound) {
+		t.Fatalf("Service.Run for a terminated/gone run = %v, want ErrRunNotFound", err)
 	}
 }
 

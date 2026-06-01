@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"go.temporal.io/sdk/temporal"
+
 	"github.com/gregsemple2003/CodexDesktop/backend/orchestration/internal/controlplane"
 	"github.com/gregsemple2003/CodexDesktop/backend/orchestration/internal/jobs"
 	"github.com/gregsemple2003/CodexDesktop/backend/orchestration/internal/taskrun"
@@ -85,6 +87,20 @@ func TestReadUpdatedTaskRunPreservesNonNotFoundError(t *testing.T) {
 	})
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("error = %v, want %v", err, wantErr)
+	}
+}
+
+func TestIsTemporalNotFoundTreatsTerminatedWorkflowAsGone(t *testing.T) {
+	// BUG-0006: after an Eject terminates a run's workflow (BUG-0005), the closed-result read
+	// (getClosedTaskRunResult -> workflowRun.Get) returns a *temporal.TerminatedError whose
+	// message lacks "not found". It must map to ErrRunNotFound so the run reads as gone — the
+	// direct read /api/v1/task-runs/<id> returns 404 (not 502) and readTask tolerates it.
+	terminated := error(&temporal.TerminatedError{})
+	if !isTemporalNotFound(terminated) {
+		t.Fatalf("isTemporalNotFound(TerminatedError) = false, want true (terminated workflow must read as gone)")
+	}
+	if isTemporalNotFound(errors.New("some other transient failure")) {
+		t.Fatal("isTemporalNotFound must not treat an unrelated error as gone")
 	}
 }
 

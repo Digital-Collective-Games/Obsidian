@@ -1198,6 +1198,15 @@ func (s *Service) readTask(ctx context.Context, taskRoot string) (TaskView, erro
 	}
 	run, err = s.refreshRun(ctx, run)
 	if err != nil {
+		// A terminated/gone run must read as "no active run" here too, exactly like the
+		// GetActiveTaskRun site above (BUG-0006). After an Eject terminates the run's
+		// workflow (BUG-0005) while the task stays non-terminal, GetActiveTaskRun can still
+		// query the closed workflow's last state (no error), but refreshRun's UpdateTaskRun
+		// then sees the run is gone (ErrRunNotFound). Tolerating it returns the task view
+		// with no active run instead of 502ing the whole list / Assign popup.
+		if errors.Is(err, ErrRunNotFound) {
+			return view, nil
+		}
 		return TaskView{}, err
 	}
 	run.DeepContext = runDeepContext(run)

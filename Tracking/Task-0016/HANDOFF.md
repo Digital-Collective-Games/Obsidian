@@ -1,6 +1,44 @@
 # Task-0016 Handoff
 
-## LATEST — 2026-06-01 — BUG-0005 + BUG-0004 fixed (Eject terminates the run; eject baseline made deterministic)
+## LATEST — 2026-06-01 — BUG-0006 fixed (terminated run no longer 502s the Assign popup)
+
+**[BUG-0006](./BUG-0006.md) (was closure-blocking) — FIXED + unit-proven** (no production
+touched — the coordinator owns the redeploy + live [REG-018](../../REGRESSION.md) re-verify).
+This was the direct fallout of the [BUG-0005](./BUG-0005.md) fix: once Eject TERMINATES the
+run while the task's `TASK-STATE.json` stays non-terminal, the next `GET /api/v1/tasks` →
+`readTask` queries the terminated run and returned **502 `{"error":"task run not found"}`**,
+blanking the WORKTREES Assign popup. Recurred after every Eject.
+
+Root cause: `readTask`
+([service.go](../../backend/orchestration/internal/taskrun/service.go) L1148) had TWO run-read
+sites with inconsistent not-found handling — `GetActiveTaskRun` (L1185) tolerated
+`ErrRunNotFound`, but `refreshRun` (L1199) did not. A terminated workflow's `QueryWorkflow` can
+still succeed (closed-state read), so `GetActiveTaskRun` returns a run; then `refreshRun`'s
+`UpdateTaskRun` sees the run is gone (`ErrRunNotFound`), which the old code re-raised, and the
+`ListTasks` handler maps any error to 502 (no 404 translation). The 502 body being EXACTLY the
+`ErrRunNotFound` message pinned it.
+
+Fix (surgical, additive): (1) `readTask` now tolerates `ErrRunNotFound` from `refreshRun` the
+same way the `GetActiveTaskRun` site does (returns the view with `no_active_run`); (2)
+`isTemporalNotFound` ([backend.go](../../backend/orchestration/internal/temporalbackend/backend.go))
+now also treats `temporal.IsTerminatedError` as gone, so a terminated workflow's
+query/`getClosedTaskRunResult` consistently surfaces `ErrRunNotFound` → the direct read
+`/api/v1/task-runs/<id>` returns 404, not 502/stale. No task was marked complete to dodge it.
+
+Tests ([service_test.go](../../backend/orchestration/internal/taskrun/service_test.go),
+[backend_test.go](../../backend/orchestration/internal/temporalbackend/backend_test.go)):
+`TestListTasksToleratesTerminatedRun` (both shapes — not-found at GetActiveTaskRun AND at
+refreshRun), `TestRunForTerminatedRunReturnsErrRunNotFound`,
+`TestIsTemporalNotFoundTreatsTerminatedWorkflowAsGone`. Falsifier verified: dropping the
+refreshRun tolerance fails the refresh-run shape with the exact live error.
+
+Proof this run: `go build ./...` exit 0; `gofmt -l internal/ cmd/` clean; full `go test ./...`
+green; `go test -count=3 ./internal/taskrun/` green. [REGRESSION.md](../../REGRESSION.md): new
+**REG-018** (post-Eject Assign popup loads, 200 not 502) + a load-bearing step/expected-result
+added to **REG-015**. **No production lane/issue touched** — the coordinator redeploys and
+re-verifies live.
+
+## 2026-06-01 — BUG-0005 + BUG-0004 fixed (Eject terminates the run; eject baseline made deterministic)
 
 Two tracked bugs in the Go backend are now **FIXED + unit-proven** (no production touched —
 the coordinator owns the redeploy + live REG-015 re-verify):
