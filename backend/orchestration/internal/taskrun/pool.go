@@ -105,6 +105,105 @@ func (s *Service) poolRepoSegment() string {
 	return sanitizePathSegment(id)
 }
 
+// poolRepoSegmentFor resolves the pool repo segment for a `repo`-keyed operation
+// (BUG-0002). On the MULTI-REPO dashboard control-plane Service (poolSegmentRegistryPath
+// set), it maps the request `repo` arg — a registry id, a task_provider owner/name slug,
+// or a registry local_root — to that entry's registry id segment, EXACTLY the segment the
+// registry-driven consumer (SetRepoNamespace(repo.ID)) reads. So a Create for "RepoA"
+// lands under <ownedLaneRoot>/RepoA, where the consumer's idle count / pool-draw for
+// RepoA looks. A repo the registry does not know (or a Service with no registry) falls
+// back to the namespace/hash segment, so it never crashes.
+func (s *Service) poolRepoSegmentFor(repo string) string {
+	if seg := s.registryRepoSegment(repo); seg != "" {
+		return seg
+	}
+	return s.poolRepoSegment()
+}
+
+// registryRepoSegment resolves a `repo` arg to its registry repo-id segment using the
+// configured pool-segment registry, or "" when there is no registry path, the registry
+// cannot be read, or no entry matches. It accepts a registry id, the entry's
+// task_provider.repo slug, or the entry's local_root (normalized) so any of the
+// operator-facing repo keys land on the same segment the consumer uses (repo.ID).
+func (s *Service) registryRepoSegment(repo string) string {
+	if entry, ok := s.registryEntryForRepo(repo); ok {
+		return sanitizePathSegment(entry.ID)
+	}
+	return ""
+}
+
+// registryRepoLocalRoot resolves a `repo` arg to its registry local_root (the actual repo
+// checkout the worktree must be added from), or "" when no registry entry matches. The
+// multi-repo dashboard Create uses it so a `repo`-keyed worktree is a checkout of THAT
+// repo, added from its own local_root — the same root the consumer (NewServiceForRepo)
+// resets against — rather than the dashboard Service's unrelated declared worktree root.
+func (s *Service) registryRepoLocalRoot(repo string) string {
+	if entry, ok := s.registryEntryForRepo(repo); ok {
+		return entry.LocalRoot
+	}
+	return ""
+}
+
+// registryEntryForRepo resolves a `repo` arg (registry id, task_provider slug, or
+// local_root) to its registry entry using the configured pool-segment registry. It
+// reports ok=false when there is no registry path, the registry cannot be read, or no
+// entry matches (so the caller falls back to the Service's own segment/root).
+func (s *Service) registryEntryForRepo(repo string) (queue.RepoEntry, bool) {
+	repo = strings.TrimSpace(repo)
+	if repo == "" || s.poolSegmentRegistryPath == "" {
+		return queue.RepoEntry{}, false
+	}
+	manifest, err := queue.LoadRegistry(s.poolSegmentRegistryPath)
+	if err != nil {
+		return queue.RepoEntry{}, false
+	}
+	target := normalizePoolRoot(repo)
+	for _, entry := range manifest.Repos {
+		if entry.ID == "" {
+			continue
+		}
+		if entry.ID == repo ||
+			(entry.TaskProvider != nil && entry.TaskProvider.Repo == repo) ||
+			(entry.LocalRoot != "" && normalizePoolRoot(entry.LocalRoot) == target) {
+			return entry, true
+		}
+	}
+	return queue.RepoEntry{}, false
+}
+
+// normalizePoolRoot makes two declared roots comparable across separator / trailing-slash
+// / case differences when matching a `repo` arg against a registry local_root, without
+// resolving symlinks (the registry stores literal roots).
+func normalizePoolRoot(path string) string {
+	cleaned := filepath.ToSlash(filepath.Clean(strings.TrimSpace(path)))
+	return strings.ToLower(strings.TrimRight(cleaned, "/"))
+}
+
+// poolRepoSegments lists every repo segment this Service operates over for the segment-
+// agnostic reads/ops keyed by worktree_id (full-pool list, Destroy, Eject). For the
+// per-repo consumer Service it is just its single segment. For the multi-repo dashboard
+// Service (poolSegmentRegistryPath set) it is every registry repo-id segment PLUS this
+// Service's own fallback segment, so a worktree created under any repo's id segment — and
+// any legacy hash-segmented worktree — is discovered and addressable.
+func (s *Service) poolRepoSegments() []string {
+	segs := map[string]struct{}{s.poolRepoSegment(): {}}
+	if s.poolSegmentRegistryPath != "" {
+		if manifest, err := queue.LoadRegistry(s.poolSegmentRegistryPath); err == nil {
+			for _, entry := range manifest.Repos {
+				if entry.ID != "" {
+					segs[sanitizePathSegment(entry.ID)] = struct{}{}
+				}
+			}
+		}
+	}
+	out := make([]string, 0, len(segs))
+	for seg := range segs {
+		out = append(out, seg)
+	}
+	sort.Strings(out)
+	return out
+}
+
 // poolRepoRoot is the directory that holds all of this repo's pool member folders:
 // <ownedLaneRoot>/<repoSegment>.
 func (s *Service) poolRepoRoot() string {
@@ -116,6 +215,57 @@ func (s *Service) poolRepoRoot() string {
 // same on every platform and never collides with a filesystem separator in the id.
 func (s *Service) poolWorktreeID(seq int) string {
 	return s.poolRepoSegment() + "/" + poolMemberFolder(seq)
+}
+
+// poolRepoRootForSegment / poolMemberDirForSegment / poolCheckoutPathForSegment /
+// poolRecordPathForSegment / poolWorktreeIDForSegment / nextPoolMemberSeqForSegment are
+// the explicit-segment forms used by the multi-repo dashboard Create path (BUG-0002), so
+// a `repo`-keyed Create lands under the registry-resolved segment rather than this
+// Service's single default segment. They are identical to the default-segment helpers
+// with the segment supplied by poolRepoSegmentFor(repo).
+func (s *Service) poolRepoRootForSegment(seg string) string {
+	return filepath.Join(s.ownedLaneRoot, seg)
+}
+
+func (s *Service) poolMemberDirForSegment(seg string, seq int) string {
+	return filepath.Join(s.poolRepoRootForSegment(seg), poolMemberFolder(seq))
+}
+
+func (s *Service) poolCheckoutPathForSegment(seg string, seq int) string {
+	return filepath.Join(s.poolMemberDirForSegment(seg, seq), poolMemberFolder(seq))
+}
+
+func (s *Service) poolRecordPathForSegment(seg string, seq int) string {
+	return filepath.Join(s.poolMemberDirForSegment(seg, seq), poolRecordFileName)
+}
+
+func (s *Service) poolWorktreeIDForSegment(seg string, seq int) string {
+	return seg + "/" + poolMemberFolder(seq)
+}
+
+func (s *Service) nextPoolMemberSeqForSegment(seg string) (int, error) {
+	root := s.poolRepoRootForSegment(seg)
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 1, nil
+		}
+		return 0, fmt.Errorf("read pool root %s: %w", root, err)
+	}
+	highest := 0
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		seq, err := poolMemberSeq(entry.Name())
+		if err != nil {
+			continue
+		}
+		if seq > highest {
+			highest = seq
+		}
+	}
+	return highest + 1, nil
 }
 
 // poolMemberFolder is the wt-<NNNN> folder/id leaf for a sequence number.
@@ -152,13 +302,25 @@ func (s *Service) poolMemberDirForID(worktreeID string) (string, error) {
 	if !ok || leaf == "" {
 		return "", fmt.Errorf("worktree id %q is not in <repo>/wt-<NNNN> form", worktreeID)
 	}
-	if seg != s.poolRepoSegment() {
+	// BUG-0002: the multi-repo dashboard Service addresses any of its known segments
+	// (poolRepoSegments), so a Destroy/Eject of a "RepoA/wt-NNNN" worktree resolves the
+	// member dir from the id's OWN segment, not just this Service's single default
+	// segment. The per-repo consumer Service has exactly one segment, so this is the
+	// same single-segment check it had before.
+	allowed := false
+	for _, known := range s.poolRepoSegments() {
+		if seg == known {
+			allowed = true
+			break
+		}
+	}
+	if !allowed {
 		return "", fmt.Errorf("worktree id %q does not belong to repo %q", worktreeID, s.poolRepoSegment())
 	}
 	if _, err := poolMemberSeq(leaf); err != nil {
 		return "", err
 	}
-	return filepath.Join(s.poolRepoRoot(), leaf), nil
+	return filepath.Join(s.poolRepoRootForSegment(seg), leaf), nil
 }
 
 // poolMemberSeq parses the <NNNN> sequence number from a wt-<NNNN> folder leaf. It
@@ -180,27 +342,7 @@ func poolMemberSeq(leaf string) (int, error) {
 // pool, scanning existing member folders for the highest in-use sequence and adding
 // one. A missing pool root means an empty pool, so the first member is wt-0001.
 func (s *Service) nextPoolMemberSeq() (int, error) {
-	entries, err := os.ReadDir(s.poolRepoRoot())
-	if err != nil {
-		if os.IsNotExist(err) {
-			return 1, nil
-		}
-		return 0, fmt.Errorf("read pool root %s: %w", s.poolRepoRoot(), err)
-	}
-	highest := 0
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		seq, err := poolMemberSeq(entry.Name())
-		if err != nil {
-			continue
-		}
-		if seq > highest {
-			highest = seq
-		}
-	}
-	return highest + 1, nil
+	return s.nextPoolMemberSeqForSegment(s.poolRepoSegment())
 }
 
 // readPoolRecord reads the durable pool record for a member folder. A missing record
@@ -223,8 +365,14 @@ func readPoolRecord(memberDir string) (poolRecord, bool, error) {
 
 // writePoolRecord persists a member's pool record (worktree-pool.json) inside its
 // member folder. The folder must already exist (Create makes it before the worktree
-// is added).
+// is added). The destination segment is taken from the record's OWN worktree_id when it
+// carries one (BUG-0002: so an Eject/reclaim update of a "RepoA/wt-NNNN" member on the
+// multi-repo dashboard Service lands in the RepoA segment, not this Service's default
+// segment); a record with no parseable id falls back to the default-segment path.
 func (s *Service) writePoolRecord(seq int, record poolRecord) error {
+	if seg, _, ok := strings.Cut(record.WorktreeID, "/"); ok && seg != "" {
+		return writeJSONFile(s.poolRecordPathForSegment(seg, seq), record)
+	}
 	return writeJSONFile(s.poolRecordPath(seq), record)
 }
 
@@ -235,29 +383,36 @@ func (s *Service) writePoolRecord(seq int, record poolRecord) error {
 // reports, per id, whether the member's `w` checkout still exists on disk.
 func (s *Service) enumeratePoolRecords() (map[string]poolRecord, error) {
 	out := map[string]poolRecord{}
-	entries, err := os.ReadDir(s.poolRepoRoot())
-	if err != nil {
-		if os.IsNotExist(err) {
-			return out, nil
-		}
-		return nil, fmt.Errorf("read pool root %s: %w", s.poolRepoRoot(), err)
-	}
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		if _, err := poolMemberSeq(entry.Name()); err != nil {
-			continue
-		}
-		memberDir := filepath.Join(s.poolRepoRoot(), entry.Name())
-		record, ok, err := readPoolRecord(memberDir)
+	// BUG-0002: the multi-repo dashboard Service enumerates EVERY registry repo-id
+	// segment (poolRepoSegments), so a worktree Created under "RepoA" is listed/
+	// destroyable/ejectable even though the dashboard Service has no single namespace.
+	// The per-repo consumer Service has exactly one segment, so this stays a single read.
+	for _, seg := range s.poolRepoSegments() {
+		root := s.poolRepoRootForSegment(seg)
+		entries, err := os.ReadDir(root)
 		if err != nil {
-			return nil, err
+			if os.IsNotExist(err) {
+				continue
+			}
+			return nil, fmt.Errorf("read pool root %s: %w", root, err)
 		}
-		if !ok {
-			continue
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
+			if _, err := poolMemberSeq(entry.Name()); err != nil {
+				continue
+			}
+			memberDir := filepath.Join(root, entry.Name())
+			record, ok, err := readPoolRecord(memberDir)
+			if err != nil {
+				return nil, err
+			}
+			if !ok {
+				continue
+			}
+			out[record.WorktreeID] = record
 		}
-		out[record.WorktreeID] = record
 	}
 	return out, nil
 }
@@ -739,20 +894,32 @@ func (s *Service) returnPoolMemberToIdle(ownedRepoRoot string) (bool, error) {
 // backend Service is per-repo). Worktree CREATION happens only here (and never as a
 // dispatch side effect, after PASS-0003).
 func (s *Service) CreatePoolWorktree(repo string) (PoolWorktree, error) {
-	baselineCommit := gitRevision(s.declaredWorktreeRoot)
-	if baselineCommit == "" {
-		return PoolWorktree{}, fmt.Errorf("resolve baseline commit for repo %q", s.declaredWorktreeRoot)
+	// BUG-0002: resolve the repo segment AND the repo's own local_root from the `repo`
+	// arg so a multi-repo dashboard Create lands under the SAME registry-id segment the
+	// consumer's pool-draw reads (RepoA/wt-NNNN) and is a checkout of THAT repo (added from
+	// its own local_root — the root the consumer resets against), not this Service's hashed
+	// declared-root segment / unrelated checkout. A repo not in the registry falls back to
+	// this Service's declared root + hashed segment (the single-repo control plane).
+	seg := s.poolRepoSegmentFor(repo)
+	declaredRoot := s.declaredWorktreeRoot
+	if root := s.registryRepoLocalRoot(repo); root != "" {
+		declaredRoot = root
 	}
-	seq, err := s.nextPoolMemberSeq()
+	baselineCommit := gitRevision(declaredRoot)
+	if baselineCommit == "" {
+		return PoolWorktree{}, fmt.Errorf("resolve baseline commit for repo %q", declaredRoot)
+	}
+	seq, err := s.nextPoolMemberSeqForSegment(seg)
 	if err != nil {
 		return PoolWorktree{}, err
 	}
-	checkout := s.poolCheckoutPath(seq)
-	if err := os.MkdirAll(s.poolMemberDir(seq), 0o755); err != nil {
+	checkout := s.poolCheckoutPathForSegment(seg, seq)
+	memberDir := s.poolMemberDirForSegment(seg, seq)
+	if err := os.MkdirAll(memberDir, 0o755); err != nil {
 		return PoolWorktree{}, fmt.Errorf("create pool member dir: %w", err)
 	}
 
-	args := []string{"-C", s.declaredWorktreeRoot}
+	args := []string{"-C", declaredRoot}
 	if runtime.GOOS == "windows" {
 		args = append([]string{"-c", "core.longpaths=true"}, args...)
 	}
@@ -760,21 +927,21 @@ func (s *Service) CreatePoolWorktree(repo string) (PoolWorktree, error) {
 	if output, err := exec.Command("git", args...).CombinedOutput(); err != nil {
 		// Best-effort cleanup of the partially-created member dir so a failed Create does
 		// not leave a stray folder that nextPoolMemberSeq would skip over.
-		_ = os.RemoveAll(s.poolMemberDir(seq))
+		_ = os.RemoveAll(memberDir)
 		return PoolWorktree{}, fmt.Errorf("create pool worktree: %w: %s", err, strings.TrimSpace(string(output)))
 	}
 
 	recordRepo := strings.TrimSpace(repo)
 	if recordRepo == "" {
-		recordRepo = s.poolRepoSegment()
+		recordRepo = seg
 	}
 	record := poolRecord{
-		WorktreeID:   s.poolWorktreeID(seq),
+		WorktreeID:   s.poolWorktreeIDForSegment(seg, seq),
 		WorktreePath: checkout,
 		Repo:         recordRepo,
 		RunID:        "",
 	}
-	if err := s.writePoolRecord(seq, record); err != nil {
+	if err := writeJSONFile(s.poolRecordPathForSegment(seg, seq), record); err != nil {
 		return PoolWorktree{}, fmt.Errorf("write pool record: %w", err)
 	}
 	return PoolWorktree{

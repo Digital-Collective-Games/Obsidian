@@ -38,6 +38,12 @@ func main() {
 	// worktree's repo -> its task_provider slug via the registry and writes through the
 	// gh provider; a repo with no GitHub provider configured is a safe no-op.
 	taskService.SetDequeueProvider(temporalbackend.NewControlPlaneDequeueProvider(cfg.RegistryPath))
+	// Resolve the worktree-pool repo segment from the registry too (Task-0016 BUG-0002):
+	// the multi-repo dashboard Service segments a `repo`-keyed Create/Eject/Destroy/list by
+	// the registry repo id (RepoA/wt-NNNN under <ownedLaneRoot>/RepoA), the SAME segment the
+	// registry-driven queue-drain consumer reads, so a Created worktree is visible to that
+	// repo's pool-draw. A repo not in the registry is a safe fallback to the hashed segment.
+	taskService.SetPoolSegmentRegistry(cfg.RegistryPath)
 
 	worker, err := backend.StartWorker(cfg, taskService)
 	if err != nil {

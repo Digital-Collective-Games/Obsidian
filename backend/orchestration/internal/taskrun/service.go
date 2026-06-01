@@ -46,6 +46,15 @@ type Service struct {
 	// inline gh call (Task-0016). Nil = dequeue is a safe no-op. Injected by the per-repo
 	// queuedrain wiring (symmetric to the read provider) or a fake in tests.
 	dequeueProvider DequeueProvider
+	// poolSegmentRegistryPath, when set, makes the MULTI-REPO dashboard control-plane
+	// Service resolve a `repo`-keyed pool operation's repo segment from the registry
+	// (BUG-0002): the no-namespace dashboard Service otherwise hashes its single
+	// declaredWorktreeRoot into a `repo-<hash>` segment that no registry-driven consumer
+	// (which segments by the registry repo id) ever reads. With this set, a Create for
+	// "RepoA" lands under <ownedLaneRoot>/RepoA and reads/destroys/ejects there too, so a
+	// Created worktree is visible to that repo's consumer pool-draw. Empty (the per-repo
+	// consumer Service) keeps the namespace-based single-segment behavior unchanged.
+	poolSegmentRegistryPath string
 }
 
 type taskStateFile struct {
@@ -112,6 +121,17 @@ func NewServiceForRepo(localRoot string, runsRoot string, runtime Runtime) *Serv
 // id. Set it before the Service dispatches.
 func (s *Service) SetRepoNamespace(repoNamespace string) {
 	s.repoNamespace = repoNamespace
+}
+
+// SetPoolSegmentRegistry makes this (multi-repo dashboard control-plane) Service resolve
+// its per-repo pool segment from the central registry at registryPath, keyed by the
+// `repo` argument of each pool operation, instead of hashing its single declared worktree
+// root (BUG-0002). It is the single production cutover point for the dashboard Service
+// (called by the control-plane entrypoint with cfg.RegistryPath). It MUST NOT be set on
+// the per-repo queue-drain Service, which segments by its repoNamespace; an empty path
+// (or leaving it unset) keeps the legacy namespace/hash segmentation byte-identical.
+func (s *Service) SetPoolSegmentRegistry(registryPath string) {
+	s.poolSegmentRegistryPath = registryPath
 }
 
 func newService(declaredWorktreeRoot string, runsRoot string, runtime Runtime) *Service {
@@ -523,6 +543,19 @@ func (s *Service) ReclaimOwnedLane(taskID string) error {
 	// a kill failure never blocks the reclaim (cleanupOwnedLane is self-healing).
 	if activeRecord.Binding != nil && activeRecord.Binding.LaunchedPID > 0 {
 		terminateAgentProcess(activeRecord.Binding.LaunchedPID)
+	}
+	// Pool model (Task-0016 / BUG-0002): if the reclaimed lane is a POOL worktree, return
+	// it to idle (folder + checkout KEPT, run_id cleared) so the freed member is reused for
+	// the next Ready issue — and so the durable record no longer carries a stale run_id. A
+	// legacy non-pool (random-temp) lane still uses the delete path. This mirrors the
+	// interrupt-review release (resolveOwnedLane) so close->reclaim and resolve free a pool
+	// worktree the same way.
+	isPoolMember, err := s.returnPoolMemberToIdle(activeRecord.OwnedRepoRoot)
+	if err != nil {
+		return err
+	}
+	if isPoolMember {
+		return nil
 	}
 	return s.cleanupOwnedLane(RepoLane{OwnedRepoRoot: activeRecord.OwnedRepoRoot})
 }
