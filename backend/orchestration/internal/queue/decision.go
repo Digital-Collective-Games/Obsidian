@@ -136,21 +136,3 @@ func parkStateForHint(hint GateHint) string {
 		return runGateStateParkedAwaitingClosure
 	}
 }
-
-// EffectiveFreeConcurrency reports how many NEW dispatches a repo admits:
-// queue_workers minus the number of parked needs-human lanes (A4.5). Parked lanes
-// keep their slots, so they reduce free concurrency without ever freeing a slot. A
-// non-positive limit falls back to DefaultQueueWorkers; the result is never negative.
-func EffectiveFreeConcurrency(limit int, parked int) int {
-	if limit <= 0 {
-		limit = DefaultQueueWorkers
-	}
-	if parked < 0 {
-		parked = 0
-	}
-	free := limit - parked
-	if free < 0 {
-		return 0
-	}
-	return free
-}

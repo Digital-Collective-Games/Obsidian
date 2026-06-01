@@ -117,6 +117,48 @@ func TestWorktreeDestroyIdle(t *testing.T) {
 	}
 }
 
+// AC3/AC5 (endpoint): POST /api/v1/worktrees/assign binds Task-0008 onto a chosen idle
+// worktree (202, reusing it — no fresh dir), which then reads as allocated in the pool;
+// AC4: a second assign with no idle worktree left is rejected 409.
+func TestWorktreeAssignBindsIdleThenRejectsWhenNoneIdle(t *testing.T) {
+	mux, _ := poolMux(t)
+	createResp := httptest.NewRecorder()
+	mux.ServeHTTP(createResp, httptest.NewRequest(http.MethodPost, "/api/v1/worktrees/create",
+		strings.NewReader(`{"repo":"obsidian"}`)))
+	var created taskrun.PoolWorktree
+	_ = json.Unmarshal(createResp.Body.Bytes(), &created)
+
+	assignResp := httptest.NewRecorder()
+	mux.ServeHTTP(assignResp, httptest.NewRequest(http.MethodPost, "/api/v1/worktrees/assign",
+		strings.NewReader(`{"task_id":"Task-0008","repo":"obsidian","worktree_id":"`+created.WorktreeID+`"}`)))
+	if assignResp.Code != http.StatusAccepted {
+		t.Fatalf("assign status = %d, want 202: %s", assignResp.Code, assignResp.Body.String())
+	}
+
+	// The assigned worktree now reads allocated, bound to Task-0008, at the SAME path.
+	listResp := httptest.NewRecorder()
+	mux.ServeHTTP(listResp, httptest.NewRequest(http.MethodGet, "/api/v1/worktrees", nil))
+	var payload struct {
+		Worktrees []taskrun.PoolWorktree `json:"worktrees"`
+	}
+	_ = json.Unmarshal(listResp.Body.Bytes(), &payload)
+	if len(payload.Worktrees) != 1 {
+		t.Fatalf("pool = %d, want 1: %s", len(payload.Worktrees), listResp.Body.String())
+	}
+	wt := payload.Worktrees[0]
+	if wt.Status != "allocated" || wt.WorktreeID != created.WorktreeID || wt.WorktreePath != created.WorktreePath {
+		t.Fatalf("assigned worktree = %#v, want allocated %q at the same path", wt, created.WorktreeID)
+	}
+
+	// AC4: with no idle worktree left, a second assign is rejected 409.
+	rejectResp := httptest.NewRecorder()
+	mux.ServeHTTP(rejectResp, httptest.NewRequest(http.MethodPost, "/api/v1/worktrees/assign",
+		strings.NewReader(`{"task_id":"Task-0008","repo":"obsidian"}`)))
+	if rejectResp.Code != http.StatusConflict {
+		t.Fatalf("assign with no idle worktree status = %d, want 409: %s", rejectResp.Code, rejectResp.Body.String())
+	}
+}
+
 // AC10: GET /api/v1/repos returns id + local_root + task_provider_repo from the
 // registry, with NO queue_workers in the response.
 func TestReposEndpointReadsRegistryWithoutQueueWorkers(t *testing.T) {
@@ -155,6 +197,7 @@ func TestWorktreePoolRouteGuards(t *testing.T) {
 		want   int
 	}{
 		{"create wrong method", http.MethodGet, "/api/v1/worktrees/create", http.StatusMethodNotAllowed},
+		{"assign wrong method", http.MethodGet, "/api/v1/worktrees/assign", http.StatusMethodNotAllowed},
 		{"destroy wrong method", http.MethodGet, "/api/v1/worktrees/destroy", http.StatusMethodNotAllowed},
 		{"unknown subpath", http.MethodPost, "/api/v1/worktrees/bogus", http.StatusNotFound},
 		{"repos wrong method", http.MethodPost, "/api/v1/repos", http.StatusMethodNotAllowed},

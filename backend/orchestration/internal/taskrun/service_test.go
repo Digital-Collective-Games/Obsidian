@@ -351,6 +351,9 @@ func TestCanonicalTaskFixtureRepoStartsAndDispatchesTask8And9(t *testing.T) {
 	repo := taskrepo.WriteCanonicalGitRepo(t)
 	runtime := newFakeRuntime()
 	service := NewService(repo.Root, filepath.Join(repo.Root, ".runs"), runtime)
+	// Pool-draw dispatch needs an idle pool worktree to draw and to report dispatch
+	// readiness (Task-0016: dispatch no longer provisions a fresh dir).
+	seedIdleWorktree(t, service)
 
 	tasks, err := service.ListTasks(context.Background())
 	if err != nil {
@@ -671,6 +674,7 @@ Create the durable backend task-run contract so later clients do not guess state
 	runsRoot := filepath.Join(worktreeRoot, ".runs")
 	service := NewService(worktreeRoot, runsRoot, runtime)
 
+	seedIdleWorktree(t, service)
 	run, err := service.Dispatch(context.Background(), "Task-0008")
 	if err != nil {
 		t.Fatalf("dispatch: %v", err)
@@ -765,6 +769,7 @@ Create the durable backend task-run contract so later clients do not guess state
 	runtime := newFakeRuntime()
 	service := NewService(worktreeRoot, filepath.Join(worktreeRoot, ".runs"), runtime)
 
+	seedIdleWorktree(t, service)
 	run, err := service.DispatchWorkloadFailureExercise(context.Background(), "Task-0008")
 	if err != nil {
 		t.Fatalf("dispatch workload failure exercise: %v", err)
@@ -814,6 +819,7 @@ Create the durable backend task-run contract so later clients do not guess state
 	runtime := newFakeRuntime()
 	runsRoot := filepath.Join(worktreeRoot, ".runs")
 	service := NewService(worktreeRoot, runsRoot, runtime)
+	seedIdleWorktree(t, service)
 	run, err := service.Dispatch(context.Background(), "Task-0008")
 	if err != nil {
 		t.Fatalf("dispatch: %v", err)
@@ -882,6 +888,7 @@ Create the durable backend task-run contract so later clients do not guess state
 
 	runtime := newFakeRuntime()
 	service := NewService(worktreeRoot, filepath.Join(worktreeRoot, ".runs"), runtime)
+	seedIdleWorktree(t, service)
 	run, err := service.Dispatch(context.Background(), "Task-0008")
 	if err != nil {
 		t.Fatalf("dispatch: %v", err)
@@ -943,6 +950,7 @@ Create the durable backend task-run contract so later clients do not guess state
 
 	runtime := newFakeRuntime()
 	service := NewService(worktreeRoot, filepath.Join(worktreeRoot, ".runs"), runtime)
+	seedIdleWorktree(t, service)
 	run, err := service.Dispatch(context.Background(), "Task-0008")
 	if err != nil {
 		t.Fatalf("dispatch: %v", err)
@@ -1012,6 +1020,7 @@ Create the durable backend task-run contract so later clients do not guess state
 
 	runtime := newFakeRuntime()
 	service := NewService(worktreeRoot, filepath.Join(worktreeRoot, ".runs"), runtime)
+	seedIdleWorktree(t, service)
 	run, err := service.Dispatch(context.Background(), "Task-0008")
 	if err != nil {
 		t.Fatalf("dispatch: %v", err)
@@ -1122,6 +1131,7 @@ Create the durable backend task-run contract so later clients do not guess state
 
 	runtime := newFakeRuntime()
 	service := NewService(worktreeRoot, filepath.Join(worktreeRoot, ".runs"), runtime)
+	seedIdleWorktree(t, service)
 	run, err := service.Dispatch(context.Background(), "Task-0008")
 	if err != nil {
 		t.Fatalf("dispatch: %v", err)
@@ -1197,6 +1207,7 @@ Create the durable backend task-run contract so later clients do not guess state
 
 	runtime := newFakeRuntime()
 	service := NewService(worktreeRoot, filepath.Join(worktreeRoot, ".runs"), runtime)
+	seedIdleWorktree(t, service)
 	run, err := service.Dispatch(context.Background(), "Task-0008")
 	if err != nil {
 		t.Fatalf("dispatch: %v", err)
@@ -1275,6 +1286,7 @@ Create the durable backend task-run contract so later clients do not guess state
 
 	runtime := newFakeRuntime()
 	service := NewService(worktreeRoot, filepath.Join(worktreeRoot, ".runs"), runtime)
+	seedIdleWorktree(t, service)
 	run, err := service.Dispatch(context.Background(), "Task-0008")
 	if err != nil {
 		t.Fatalf("dispatch: %v", err)
@@ -1338,6 +1350,7 @@ Create the durable backend task-run contract so later clients do not guess state
 
 	runtime := newFakeRuntime()
 	service := NewService(worktreeRoot, filepath.Join(worktreeRoot, ".runs"), runtime)
+	seedIdleWorktree(t, service)
 	run, err := service.Dispatch(context.Background(), "Task-0008")
 	if err != nil {
 		t.Fatalf("dispatch: %v", err)
@@ -1421,6 +1434,7 @@ Create the durable backend task-run contract so later clients do not guess state
 
 	runtime := newFakeRuntime()
 	service := NewService(worktreeRoot, filepath.Join(worktreeRoot, ".runs"), runtime)
+	seedIdleWorktree(t, service)
 	run, err := service.Dispatch(context.Background(), "Task-0008")
 	if err != nil {
 		t.Fatalf("dispatch: %v", err)
@@ -1460,6 +1474,7 @@ Create the durable backend task-run contract so later clients do not guess state
 
 	runtime := newFakeRuntime()
 	service := NewService(worktreeRoot, filepath.Join(worktreeRoot, ".runs"), runtime)
+	seedIdleWorktree(t, service)
 	run, err := service.Dispatch(context.Background(), "Task-0008")
 	if err != nil {
 		t.Fatalf("dispatch: %v", err)
@@ -1547,6 +1562,7 @@ Create the durable backend task-run contract so later clients do not guess state
 
 	runtime := newFakeRuntime()
 	service := NewService(worktreeRoot, filepath.Join(worktreeRoot, ".runs"), runtime)
+	seedIdleWorktree(t, service)
 	run, err := service.Dispatch(context.Background(), "Task-0008")
 	if err != nil {
 		t.Fatalf("dispatch: %v", err)
@@ -1586,6 +1602,7 @@ Create the durable backend task-run contract so later clients do not guess state
 
 	runtime := newFakeRuntime()
 	service := NewService(worktreeRoot, filepath.Join(worktreeRoot, ".runs"), runtime)
+	seedIdleWorktree(t, service)
 	run, err := service.Dispatch(context.Background(), "Task-0008")
 	if err != nil {
 		t.Fatalf("dispatch: %v", err)
@@ -1646,6 +1663,7 @@ Create the durable backend task-run contract so later clients do not guess state
 
 	runtime := newFakeRuntime()
 	service := NewService(worktreeRoot, filepath.Join(worktreeRoot, ".runs"), runtime)
+	seedIdleWorktree(t, service)
 	run, err := service.Dispatch(context.Background(), "Task-0008")
 	if err != nil {
 		t.Fatalf("dispatch: %v", err)
@@ -1682,8 +1700,10 @@ Create the durable backend task-run contract so later clients do not guess state
 	if resolved.RepoLane.LastResetTargetCommit == "" {
 		t.Fatal("expected last reset target commit after release")
 	}
-	if _, err := os.Stat(originalOwnedRoot); !os.IsNotExist(err) {
-		t.Fatalf("expected resolved review to remove the prior owned root, stat err = %v", err)
+	// Pool model (Task-0016): the resolved run returns its pool worktree to IDLE (folder
+	// kept) rather than deleting it; the checkout must still exist for reuse.
+	if _, err := os.Stat(originalOwnedRoot); err != nil {
+		t.Fatalf("expected resolved review to KEEP the prior owned root (returned to idle), stat err = %v", err)
 	}
 	if !strings.Contains(resolved.LastProgressSummary, "Backend released the prior owned lane.") {
 		t.Fatalf("last progress summary = %q", resolved.LastProgressSummary)
@@ -1730,6 +1750,7 @@ Create the durable backend task-run contract so later clients do not guess state
 
 	runtime := newFakeRuntime()
 	service := NewService(worktreeRoot, filepath.Join(worktreeRoot, ".runs"), runtime)
+	seedIdleWorktree(t, service)
 	run, err := service.Dispatch(context.Background(), "Task-0008")
 	if err != nil {
 		t.Fatalf("dispatch: %v", err)
@@ -1757,8 +1778,9 @@ Create the durable backend task-run contract so later clients do not guess state
 	if resolved.RepoLane.OwnedRepoRoot != "" {
 		t.Fatalf("owned repo root = %q, want empty after release", resolved.RepoLane.OwnedRepoRoot)
 	}
-	if _, err := os.Stat(originalOwnedRoot); !os.IsNotExist(err) {
-		t.Fatalf("expected resolved keep_closed review to remove the prior owned root, stat err = %v", err)
+	// Pool model (Task-0016): keep_closed returns the pool worktree to IDLE (folder kept).
+	if _, err := os.Stat(originalOwnedRoot); err != nil {
+		t.Fatalf("expected resolved keep_closed review to KEEP the prior owned root (returned to idle), stat err = %v", err)
 	}
 
 	task, err := service.Task(context.Background(), "Task-0008")
@@ -1802,6 +1824,9 @@ Create the durable backend task-run contract so later clients do not guess state
 
 	runtime := newFakeRuntime()
 	service := NewService(worktreeRoot, filepath.Join(worktreeRoot, ".runs"), runtime)
+	// Pool of one idle worktree (Task-0016): the redispatch reuses the SAME pool worktree
+	// (returned to idle on resolve), not a fresh dir.
+	seedIdleWorktree(t, service)
 	firstRun, err := service.Dispatch(context.Background(), "Task-0008")
 	if err != nil {
 		t.Fatalf("dispatch: %v", err)
@@ -1821,22 +1846,22 @@ Create the durable backend task-run contract so later clients do not guess state
 	}); err != nil {
 		t.Fatalf("resolve interrupt review: %v", err)
 	}
-	if _, err := os.Stat(originalOwnedRoot); !os.IsNotExist(err) {
-		t.Fatalf("expected previous owned root to be removed before redispatch, stat err = %v", err)
+	// Pool model: the resolved run returns its pool worktree to IDLE (folder kept), not
+	// deleted. The previous owned checkout must still exist on disk for reuse.
+	if _, err := os.Stat(originalOwnedRoot); err != nil {
+		t.Fatalf("expected previous owned root to be KEPT (returned to idle) before redispatch, stat err = %v", err)
 	}
 
 	secondRun, err := service.Dispatch(context.Background(), "Task-0008")
 	if err != nil {
 		t.Fatalf("redispatch: %v", err)
 	}
-	if secondRun.RepoLane.OwnedRepoRoot == originalOwnedRoot {
-		t.Fatalf("expected a fresh owned root, still got %q", secondRun.RepoLane.OwnedRepoRoot)
-	}
-	if _, err := os.Stat(originalOwnedRoot); !os.IsNotExist(err) {
-		t.Fatalf("expected previous owned root to be removed, stat err = %v", err)
+	// With a pool of one, the redispatch REUSES the same (only) idle worktree.
+	if secondRun.RepoLane.OwnedRepoRoot != originalOwnedRoot {
+		t.Fatalf("expected the redispatch to REUSE the pool worktree %q, got %q", originalOwnedRoot, secondRun.RepoLane.OwnedRepoRoot)
 	}
 	if _, err := os.Stat(secondRun.RepoLane.OwnedRepoRoot); err != nil {
-		t.Fatalf("expected new owned root to exist: %v", err)
+		t.Fatalf("expected reused owned root to exist: %v", err)
 	}
 }
 
@@ -1869,6 +1894,7 @@ Create the durable backend task-run contract so later clients do not guess state
 
 	runtime := newFakeRuntime()
 	service := NewService(worktreeRoot, filepath.Join(worktreeRoot, ".runs"), runtime)
+	seedIdleWorktree(t, service)
 	run, err := service.Dispatch(context.Background(), "Task-0008")
 	if err != nil {
 		t.Fatalf("dispatch: %v", err)
@@ -1908,6 +1934,7 @@ Create the durable backend task-run contract so later clients do not guess state
 
 	runtime := newFakeRuntime()
 	service := NewService(worktreeRoot, filepath.Join(worktreeRoot, ".runs"), runtime)
+	seedIdleWorktree(t, service)
 	run, err := service.Dispatch(context.Background(), "Task-0008")
 	if err != nil {
 		t.Fatalf("dispatch: %v", err)
@@ -1967,6 +1994,7 @@ Create the durable backend task-run contract so later clients do not guess state
 
 	runtime := newFakeRuntime()
 	service := NewService(worktreeRoot, filepath.Join(worktreeRoot, ".runs"), runtime)
+	seedIdleWorktree(t, service)
 	run, err := service.Dispatch(context.Background(), "Task-0008")
 	if err != nil {
 		t.Fatalf("dispatch: %v", err)
@@ -2032,6 +2060,7 @@ Create the durable backend task-run contract so later clients do not guess state
 
 	runtime := newFakeRuntime()
 	service := NewService(worktreeRoot, filepath.Join(worktreeRoot, ".runs"), runtime)
+	seedIdleWorktree(t, service)
 	run, err := service.Dispatch(context.Background(), "Task-0008")
 	if err != nil {
 		t.Fatalf("dispatch: %v", err)
@@ -2073,6 +2102,24 @@ func hasBlockReason(reasons []ActionBlockReason, code string) bool {
 		}
 	}
 	return false
+}
+
+// seedIdleWorktree provisions one idle pool worktree so a pool-draw Dispatch has a
+// worktree to draw (Task-0016: dispatch no longer provisions a fresh dir — it draws from
+// the pre-created pool). It requires the Service's declared root to be a real git repo
+// (writeGitTaskTrackingRoot). It isolates the Service's owned-lane root under the declared
+// repo (the production default points at a SHARED OS temp dir, which would collide across
+// tests sharing a repoSegment). Returns the created worktree.
+func seedIdleWorktree(t *testing.T, service *Service) PoolWorktree {
+	t.Helper()
+	if service.ownedLaneRoot == defaultOwnedLaneRoot(filepath.Dir(service.runArtifactsRoot)) || strings.Contains(filepath.ToSlash(service.ownedLaneRoot), "/cdxow") {
+		service.ownedLaneRoot = filepath.Join(service.declaredWorktreeRoot, "owned-lanes")
+	}
+	wt, err := service.CreatePoolWorktree("repo")
+	if err != nil {
+		t.Fatalf("seed idle pool worktree: %v", err)
+	}
+	return wt
 }
 
 func hasLaunchTargetEnding(targets []LaunchTarget, label string, suffix string) bool {

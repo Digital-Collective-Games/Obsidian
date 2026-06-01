@@ -28,8 +28,8 @@ func TestActiveOwnedLaneAccountingIsRepoScoped(t *testing.T) {
 	writeLaneRecord(t, runsRoot, "Task-0001", "taskrun--RepoA--Task-0001--active", repoA, wtA, time.Unix(100, 0))
 	writeLaneRecord(t, runsRoot, "Task-0001", "taskrun--RepoB--Task-0001--active", repoB, wtB, time.Unix(200, 0))
 
-	svcA := NewServiceForRepo(repoA, runsRoot, nil, 1)
-	svcB := NewServiceForRepo(repoB, runsRoot, nil, 1)
+	svcA := NewServiceForRepo(repoA, runsRoot, nil)
+	svcB := NewServiceForRepo(repoB, runsRoot, nil)
 
 	tasksA, err := svcA.ActiveOwnedLaneTasks()
 	if err != nil {

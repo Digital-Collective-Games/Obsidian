@@ -104,24 +104,3 @@ func TestDecideQueueActionInvariants(t *testing.T) {
 		t.Fatalf("human-needed issue must park, not free/redispatch, got %#v", d)
 	}
 }
-
-func TestEffectiveFreeConcurrencyIsLimitMinusParked(t *testing.T) {
-	cases := []struct {
-		limit  int
-		parked int
-		want   int
-	}{
-		{limit: 4, parked: 0, want: 4},
-		{limit: 4, parked: 1, want: 3}, // A4.5: 4-slot repo with 1 parked admits 3
-		{limit: 4, parked: 4, want: 0},
-		{limit: 4, parked: 6, want: 0},  // never negative
-		{limit: 0, parked: 1, want: 3},  // non-positive limit -> default 4
-		{limit: -2, parked: 0, want: 4}, // non-positive limit -> default 4
-		{limit: 4, parked: -3, want: 4}, // negative parked normalized to zero
-	}
-	for _, tc := range cases {
-		if got := EffectiveFreeConcurrency(tc.limit, tc.parked); got != tc.want {
-			t.Fatalf("EffectiveFreeConcurrency(%d,%d) = %d, want %d", tc.limit, tc.parked, got, tc.want)
-		}
-	}
-}

@@ -200,6 +200,36 @@ func handleWorktreeAPIRoute(w http.ResponseWriter, r *http.Request, taskService 
 			return
 		}
 		writeJSON(w, http.StatusCreated, created)
+	case "assign":
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		var body struct {
+			TaskID     string `json:"task_id"`
+			Repo       string `json:"repo"`
+			WorktreeID string `json:"worktree_id"`
+		}
+		if err := decodeJSONBody(r, &body); err != nil {
+			writeJSONError(w, http.StatusBadRequest, err)
+			return
+		}
+		ctx, cancel := contextWithTimeout(r, 30*time.Second)
+		defer cancel()
+		run, err := taskService.AssignTaskToPoolWorktree(ctx, body.TaskID, body.Repo, body.WorktreeID)
+		if err != nil {
+			if errors.Is(err, taskrun.ErrNoIdleWorktree) {
+				writeJSONError(w, http.StatusConflict, err)
+				return
+			}
+			if strings.Contains(err.Error(), "not found") {
+				http.NotFound(w, r)
+				return
+			}
+			writeJSONError(w, http.StatusBadRequest, err)
+			return
+		}
+		writeJSON(w, http.StatusAccepted, run)
 	case "destroy":
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)

@@ -29,6 +29,7 @@ func TestSetRunGateStateParksAndStaysListed(t *testing.T) {
 	runsRoot := filepath.Join(worktreeRoot, ".runs")
 	service := NewService(worktreeRoot, runsRoot, runtime)
 
+	seedIdleWorktree(t, service)
 	run, err := service.Dispatch(context.Background(), "Task-0008")
 	if err != nil {
 		t.Fatalf("dispatch: %v", err)
@@ -104,6 +105,7 @@ func TestBindLaunchedSessionReplacesPlaceholders(t *testing.T) {
 	})
 	runtime := newFakeRuntime()
 	service := NewService(worktreeRoot, filepath.Join(worktreeRoot, ".runs"), runtime)
+	seedIdleWorktree(t, service)
 	if _, err := service.Dispatch(context.Background(), "Task-0008"); err != nil {
 		t.Fatalf("dispatch: %v", err)
 	}
@@ -149,6 +151,7 @@ func TestSetRunGateStateRejectsUnknownState(t *testing.T) {
 	})
 	runtime := newFakeRuntime()
 	service := NewService(worktreeRoot, filepath.Join(worktreeRoot, ".runs"), runtime)
+	seedIdleWorktree(t, service)
 	if _, err := service.Dispatch(context.Background(), "Task-0008"); err != nil {
 		t.Fatalf("dispatch: %v", err)
 	}

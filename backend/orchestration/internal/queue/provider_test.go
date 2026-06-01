@@ -90,7 +90,7 @@ func TestGitHubProviderDrivesConsumerLoop(t *testing.T) {
 	}
 	provider := &ghQueueProvider{owner: "Digital-Collective-Games", repo: testRepo, limit: 200, run: fakeRun}
 	dispatcher := newFakeDispatcher("Task-7002") // #7002 parked task already owns a lane
-	consumer := NewConsumer(testRepo, provider, dispatcher, fixedSizer(4))
+	consumer := NewConsumer(testRepo, provider, dispatcher, fixedIdleSizer(4))
 
 	result, err := consumer.DrainOnce(nil)
 	if err != nil {

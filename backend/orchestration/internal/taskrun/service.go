@@ -35,14 +35,12 @@ type Service struct {
 	repoNamespace string
 	runtime       Runtime
 	now           func() time.Time
-	// repoSlotLimit resolves the per-repo queue_workers cap (max concurrent owned
-	// lanes). It is a field so tests can pin the cap without an on-disk manifest;
-	// production wiring reads REPO-MANIFEST.json at the declared worktree root.
-	repoSlotLimit func() int
-	// countActiveOwnedLanes reports how many owned-lane worktrees are currently
-	// checked out for the repo. It is a field so tests can drive slot accounting
-	// deterministically; production wiring counts live git worktrees.
-	countActiveOwnedLanes func() (int, error)
+	// idleWorktreeCount reports how many IDLE worktrees this repo's pool currently has
+	// — the admission budget that replaced the queue_workers cap (Task-0016).
+	// Concurrency is bounded by the idle pool count by construction. It is a field so
+	// tests can drive admission deterministically; production wiring counts idle pool
+	// members on disk (countIdlePoolWorktrees).
+	idleWorktreeCount func() (int, error)
 }
 
 type taskStateFile struct {
@@ -86,26 +84,18 @@ type ownedLaneBootstrapRecord struct {
 
 func NewService(declaredWorktreeRoot string, runsRoot string, runtime Runtime) *Service {
 	s := newService(declaredWorktreeRoot, runsRoot, runtime)
-	s.repoSlotLimit = s.manifestQueueWorkers
-	s.countActiveOwnedLanes = s.countOwnedLaneWorktrees
+	s.idleWorktreeCount = s.countIdlePoolWorktrees
 	return s
 }
 
-// NewServiceForRepo builds a Service bound to a SPECIFIC repo local_root with its
-// per-repo slot cap PASSED IN from the central registry's queue_workers (rather
-// than read from a co-located <local_root>/REPO-MANIFEST.json). It is the
-// repo-parameterized constructor the registry-driven queue-drain consumer uses:
-// one Service per registered local_root, so countOwnedLaneWorktrees (git worktree
-// list under that local_root) yields the correct per-repo used-slot count, and the
-// cap is the registry entry's queue_workers. queueWorkers<=0 falls back to the
-// documented default.
-func NewServiceForRepo(localRoot string, runsRoot string, runtime Runtime, queueWorkers int) *Service {
+// NewServiceForRepo builds a Service bound to a SPECIFIC repo local_root. It is the
+// repo-parameterized constructor the registry-driven queue-drain consumer uses: one
+// Service per registered local_root, so its idle pool worktree count is naturally
+// per-repo. There is no per-repo numeric cap any more (Task-0016 removed queue_workers);
+// concurrency is bounded by the count of idle pool worktrees by construction.
+func NewServiceForRepo(localRoot string, runsRoot string, runtime Runtime) *Service {
 	s := newService(localRoot, runsRoot, runtime)
-	if queueWorkers <= 0 {
-		queueWorkers = queue.DefaultQueueWorkers
-	}
-	s.repoSlotLimit = func() int { return queueWorkers }
-	s.countActiveOwnedLanes = s.countOwnedLaneWorktrees
+	s.idleWorktreeCount = s.countIdlePoolWorktrees
 	return s
 }
 
@@ -132,17 +122,31 @@ func newService(declaredWorktreeRoot string, runsRoot string, runtime Runtime) *
 	}
 }
 
-// manifestQueueWorkers resolves the repo's queue_workers cap from
-// REPO-MANIFEST.json at the declared worktree root. A missing or unmatched
-// manifest falls back to the documented default so a fresh checkout still
-// dispatches rather than pinning concurrency to an undefined value.
-func (s *Service) manifestQueueWorkers() int {
-	manifest, err := queue.LoadManifest(s.declaredWorktreeRoot)
+// countIdlePoolWorktrees counts this repo's IDLE pool worktrees (members with no live
+// run bound) — the admission budget the queue-drain consumer and the manual dispatch
+// gate draw from (Task-0016). It is the production wiring of the idleWorktreeCount seam.
+func (s *Service) countIdlePoolWorktrees() (int, error) {
+	pool, err := s.ListPoolWorktrees()
 	if err != nil {
-		return queue.DefaultQueueWorkers
+		return 0, err
 	}
-	workers, _ := manifest.QueueWorkersForRoot(s.declaredWorktreeRoot)
-	return workers
+	idle := 0
+	for _, wt := range pool {
+		if wt.Status == poolStatusIdle {
+			idle++
+		}
+	}
+	return idle, nil
+}
+
+// IdleWorktreeCount reports how many idle pool worktrees this repo has. It is the
+// queue.PoolSizer the consumer uses for admission (an empty idle pool defers a Ready
+// issue) and mirrors the seam the manual dispatch gate consults.
+func (s *Service) IdleWorktreeCount() (int, error) {
+	if s.idleWorktreeCount == nil {
+		return s.countIdlePoolWorktrees()
+	}
+	return s.idleWorktreeCount()
 }
 
 // countOwnedLaneWorktrees counts the live owned-lane checkouts for the repo by
@@ -585,9 +589,8 @@ func closureRequestedAtRoot(ownedRepoRoot string, taskID string) (bool, error) {
 }
 
 // ActiveOwnedLaneTasks returns the task ids that currently hold an active owned-lane
-// worktree (one per used per-repo slot), deduped and sorted. The consumer uses it
-// for slot accounting (EvaluateSlot / effective free concurrency) and to know which
-// issues already own a worktree to park or reclaim rather than redispatch.
+// worktree (one per allocated pool worktree), deduped and sorted. The consumer uses it
+// to know which issues already own a worktree to park or reclaim rather than redispatch.
 func (s *Service) ActiveOwnedLaneTasks() ([]string, error) {
 	// REPO-SCOPED (repoScoped=true): the consumer's slot/active accounting must only
 	// see THIS repo's lanes, never another registry repo's (BUG-0003: a global view
@@ -608,16 +611,6 @@ func (s *Service) ActiveOwnedLaneTasks() ([]string, error) {
 	}
 	sort.Strings(tasks)
 	return tasks, nil
-}
-
-// RepoSlotLimit reports the per-repo queue_workers cap (max concurrent owned
-// lanes) for this service's repo, resolved from REPO-MANIFEST.json. The consumer's
-// SlotSizer reads it to size EvaluateSlot / effective free concurrency.
-func (s *Service) RepoSlotLimit() int {
-	if s.repoSlotLimit == nil {
-		return queue.DefaultQueueWorkers
-	}
-	return s.repoSlotLimit()
 }
 
 func (s *Service) ListTasks(ctx context.Context) ([]TaskView, error) {
@@ -684,11 +677,22 @@ func (s *Service) dispatchWithDirective(ctx context.Context, taskID string, dire
 		return TaskRunView{}, err
 	}
 
-	repoLane, err := s.provisionOwnedLane(task.TaskID)
+	// Pool-draw (Task-0016): draw an IDLE pool worktree and reset it to baseline instead
+	// of provisioning a fresh os.MkdirTemp dir. An empty pool defers the dispatch (no
+	// auto-create — capacity is operator-owned).
+	drawn, err := s.drawIdlePoolWorktree("")
 	if err != nil {
 		return TaskRunView{}, err
 	}
+	return s.startRunInDrawnLane(ctx, task, directive, drawn)
+}
 
+// startRunInDrawnLane is the shared bootstrap->start tail used by both the queue-drain
+// dispatch path and the manual Assign action: it bootstraps the already-reset drawn pool
+// worktree and starts the run IN IT (no fresh dir), then marks the pool member allocated
+// (records the run id). On a pre-start failure the pool member is left IDLE (never
+// deleted — it is a persistent pool worktree, not a per-dispatch temp dir).
+func (s *Service) startRunInDrawnLane(ctx context.Context, task TaskView, directive *ExecutionDirective, drawn drawnLane) (TaskRunView, error) {
 	request := StartTaskRunRequest{
 		RunID:          s.runID(task.TaskID),
 		TaskID:         task.TaskID,
@@ -704,29 +708,55 @@ func (s *Service) dispatchWithDirective(ctx context.Context, taskID string, dire
 		},
 		ExecutionDirective:  directive,
 		ContextSnapshot:     captureDispatchContext(),
-		RepoLane:            repoLane,
+		RepoLane:            drawn.repoLane,
 		DispatchRequestedAt: s.now(),
 	}
 
 	metadata, err := s.loadTask(taskRootForID(s.trackingRoot, task.TaskID))
 	if err != nil {
-		_ = s.cleanupOwnedLane(repoLane)
 		return TaskRunView{}, err
 	}
 	request.CapturedTaskSnapshot = metadata.snapshot
 	request.RepoLane, err = s.bootstrapOwnedLane(request.TaskID, request.RunID, request.CapturedTaskSnapshot, request.RepoLane, request.ContextSnapshot)
 	if err != nil {
-		_ = s.cleanupOwnedLane(repoLane)
 		return TaskRunView{}, err
 	}
 
 	run, err := s.runtime.StartTaskRun(ctx, request)
 	if err != nil {
-		_ = s.cleanupOwnedLane(repoLane)
 		return TaskRunView{}, err
+	}
+	// Mark the drawn pool member allocated to the started run (idle -> allocated).
+	if err := s.markPoolMemberRun(drawn, request.RunID); err != nil {
+		return TaskRunView{}, fmt.Errorf("record pool worktree run binding: %w", err)
 	}
 	run.DeepContext = runDeepContext(run)
 	return run, nil
+}
+
+// AssignTaskToPoolWorktree binds a chosen open task onto an IDLE pool worktree and starts
+// the run IN THAT EXISTING worktree (Task-0016 manual Assign). With worktreeID set it
+// draws that specific idle member; with worktreeID empty (the consumer auto-assign path)
+// it draws any idle worktree in the repo. It resets the existing checkout to baseline and
+// reuses the dispatch bootstrap->start tail WITHOUT provisioning a fresh dir; an empty
+// pool yields ErrNoIdleWorktree (no run started). The repo argument is accepted for
+// symmetry with the request shape; the worktree is always this Service's repo pool.
+func (s *Service) AssignTaskToPoolWorktree(ctx context.Context, taskID string, repo string, worktreeID string) (TaskRunView, error) {
+	if s.runtime == nil {
+		return TaskRunView{}, fmt.Errorf("task runtime backend is not configured")
+	}
+	task, err := s.Task(ctx, taskID)
+	if err != nil {
+		return TaskRunView{}, err
+	}
+	if err := s.releasePreviousOwnedLane(ctx, task.TaskID); err != nil {
+		return TaskRunView{}, err
+	}
+	drawn, err := s.drawIdlePoolWorktree(worktreeID)
+	if err != nil {
+		return TaskRunView{}, err
+	}
+	return s.startRunInDrawnLane(ctx, task, nil, drawn)
 }
 
 func (s *Service) Run(ctx context.Context, runID string) (TaskRunView, error) {
@@ -1049,8 +1079,17 @@ func (s *Service) releaseResolvedOwnedLane(repoLane RepoLane, summary string) (R
 	if restoreCommit == "" {
 		restoreCommit = repoLane.BaselineCommit
 	}
-	if err := s.cleanupOwnedLane(repoLane); err != nil {
+	// Pool model (Task-0016): if the resolved run occupied a POOL worktree, return it to
+	// idle (folder kept, run_id cleared) for reuse rather than deleting it. A legacy
+	// non-pool (random-temp) lane still uses the delete path.
+	isPoolMember, err := s.returnPoolMemberToIdle(repoLane.OwnedRepoRoot)
+	if err != nil {
 		return repoLane, "", fmt.Errorf("release resolved owned lane: %w", err)
+	}
+	if !isPoolMember {
+		if err := s.cleanupOwnedLane(repoLane); err != nil {
+			return repoLane, "", fmt.Errorf("release resolved owned lane: %w", err)
+		}
 	}
 
 	repoLane.OwnedRepoRoot = ""
@@ -1350,11 +1389,12 @@ func (s *Service) deriveDispatchReadiness(metadata parsedTask, activeRunExists b
 	return readiness
 }
 
-// repoSlotBlock applies the O2 per-repo concurrency gate. It replaces the former
-// hard 1:1 active_run_exists block: a same-repo dispatch is allowed while FEWER
-// than the repo's queue_workers owned lanes are active, and refused only once
-// every slot is occupied. A task that itself already owns the live story is still
-// blocked from a duplicate dispatch (a distinct reason, not the per-repo one).
+// repoSlotBlock applies the Task-0016 pool-draw dispatch gate. A task that already
+// owns the live story is blocked from a duplicate dispatch (task_already_running).
+// Otherwise dispatch requires an IDLE pool worktree to draw: with an empty pool the
+// dispatch is refused (no_idle_worktree) because the consumer/manual dispatch can only
+// draw from existing idle worktrees (no auto-create — capacity is operator-owned). The
+// numeric queue_workers cap is gone; the idle pool count is the bound, by construction.
 func (s *Service) repoSlotBlock(activeRunExists bool) (bool, ActionBlockReason) {
 	if activeRunExists {
 		return true, ActionBlockReason{
@@ -1362,22 +1402,21 @@ func (s *Service) repoSlotBlock(activeRunExists bool) (bool, ActionBlockReason) 
 			Summary: "Dispatch is blocked while this task already owns an active run.",
 		}
 	}
-	if s.countActiveOwnedLanes == nil || s.repoSlotLimit == nil {
+	if s.idleWorktreeCount == nil {
 		return false, ActionBlockReason{}
 	}
-	used, err := s.countActiveOwnedLanes()
+	idle, err := s.idleWorktreeCount()
 	if err != nil {
-		// Slot accounting is best-effort; if the count is unavailable, fall back to
-		// allowing dispatch rather than wedging the queue on a transient git error.
+		// Admission accounting is best-effort; if the idle count is unavailable, fall
+		// back to allowing dispatch rather than wedging the queue on a transient error.
 		return false, ActionBlockReason{}
 	}
-	decision := queue.EvaluateSlot(s.repoSlotLimit(), used)
-	if decision.Admit {
+	if idle > 0 {
 		return false, ActionBlockReason{}
 	}
 	return true, ActionBlockReason{
-		Code:    "repo_slots_exhausted",
-		Summary: fmt.Sprintf("Dispatch is blocked while all %d per-repo worktree slots are occupied.", decision.Limit),
+		Code:    "no_idle_worktree",
+		Summary: "Dispatch is blocked: the repo worktree pool has no idle worktree to draw (create one or eject an allocated one).",
 	}
 }
 
@@ -1550,6 +1589,16 @@ func (s *Service) releasePreviousOwnedLane(ctx context.Context, taskID string) e
 		return err
 	}
 	if runOwnsLiveStory(previousRun) || previousRun.RepoLane.OwnedRepoRoot == "" {
+		return nil
+	}
+	// Pool model (Task-0016): a superseded same-task run that occupied a POOL worktree
+	// returns that worktree to idle (folder kept) for reuse, rather than deleting it. A
+	// legacy non-pool (random-temp) lane still uses the delete path.
+	isPoolMember, err := s.returnPoolMemberToIdle(previousRun.RepoLane.OwnedRepoRoot)
+	if err != nil {
+		return fmt.Errorf("release previous owned lane for %s: %w", taskID, err)
+	}
+	if isPoolMember {
 		return nil
 	}
 	if err := s.cleanupOwnedLane(previousRun.RepoLane); err != nil {

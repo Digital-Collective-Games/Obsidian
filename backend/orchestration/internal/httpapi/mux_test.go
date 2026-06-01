@@ -432,6 +432,7 @@ func TestMuxExposesHealthJobsAndSync(t *testing.T) {
 		t.Fatalf("task deep context = %#v", taskDetail.DeepContext)
 	}
 
+	seedWorktreeViaMux(t, mux)
 	dispatchRequest := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/Task-0008/dispatch", nil)
 	dispatchResponse := httptest.NewRecorder()
 	mux.ServeHTTP(dispatchResponse, dispatchRequest)
@@ -454,6 +455,7 @@ func TestMuxExposesHealthJobsAndSync(t *testing.T) {
 	}
 
 	failureDispatchResponse := httptest.NewRecorder()
+	seedWorktreeViaMux(t, mux)
 	mux.ServeHTTP(failureDispatchResponse, httptest.NewRequest(http.MethodPost, "/api/v1/tasks/Task-0008/dispatch-workload-failure-exercise", nil))
 	if failureDispatchResponse.Code != http.StatusBadRequest {
 		t.Fatalf("POST /api/v1/tasks/{id}/dispatch-workload-failure-exercise status = %d, want 400 while active run exists", failureDispatchResponse.Code)
@@ -563,6 +565,7 @@ func TestTasksAPIUsesCanonicalFixtureRepoForTaskSurfaceSmoke(t *testing.T) {
 	}
 
 	dispatchResponse := httptest.NewRecorder()
+	seedWorktreeViaMux(t, mux)
 	mux.ServeHTTP(dispatchResponse, httptest.NewRequest(http.MethodPost, "/api/v1/tasks/Task-0008/dispatch", nil))
 	if dispatchResponse.Code != http.StatusAccepted {
 		t.Fatalf("dispatch status = %d, want 202", dispatchResponse.Code)
@@ -608,6 +611,7 @@ func TestMuxExposesRetryCleanupRoute(t *testing.T) {
 	}, controlplane.NewService(t.TempDir(), newFakeBackend()), taskService, nil)
 
 	dispatchResponse := httptest.NewRecorder()
+	seedWorktreeViaMux(t, mux)
 	mux.ServeHTTP(dispatchResponse, httptest.NewRequest(http.MethodPost, "/api/v1/tasks/Task-0008/dispatch", nil))
 	if dispatchResponse.Code != http.StatusAccepted {
 		t.Fatalf("dispatch status = %d, want 202", dispatchResponse.Code)
@@ -678,6 +682,7 @@ func TestMuxExposesWorkloadFailureExerciseDispatchRoute(t *testing.T) {
 	}, controlplane.NewService(t.TempDir(), newFakeBackend()), taskService, nil)
 
 	response := httptest.NewRecorder()
+	seedWorktreeViaMux(t, mux)
 	mux.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/v1/tasks/Task-0008/dispatch-workload-failure-exercise", nil))
 	if response.Code != http.StatusAccepted {
 		t.Fatalf("dispatch-workload-failure-exercise status = %d, want 202", response.Code)
@@ -709,6 +714,7 @@ func TestMuxExposesRetryWorkloadRoute(t *testing.T) {
 	}, controlplane.NewService(t.TempDir(), newFakeBackend()), taskService, nil)
 
 	dispatchResponse := httptest.NewRecorder()
+	seedWorktreeViaMux(t, mux)
 	mux.ServeHTTP(dispatchResponse, httptest.NewRequest(http.MethodPost, "/api/v1/tasks/Task-0008/dispatch", nil))
 	if dispatchResponse.Code != http.StatusAccepted {
 		t.Fatalf("dispatch status = %d, want 202", dispatchResponse.Code)
@@ -780,6 +786,7 @@ func TestMuxExposesInterruptReviewResolutionRoute(t *testing.T) {
 	}, controlplane.NewService(t.TempDir(), newFakeBackend()), taskService, nil)
 
 	dispatchResponse := httptest.NewRecorder()
+	seedWorktreeViaMux(t, mux)
 	mux.ServeHTTP(dispatchResponse, httptest.NewRequest(http.MethodPost, "/api/v1/tasks/Task-0008/dispatch", nil))
 	if dispatchResponse.Code != http.StatusAccepted {
 		t.Fatalf("dispatch status = %d, want 202", dispatchResponse.Code)
@@ -909,5 +916,19 @@ func runCommand(t *testing.T, dir string, exe string, args ...string) {
 	cmd.Dir = dir
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("%s %v failed: %v\n%s", exe, args, err, string(output))
+	}
+}
+
+// seedWorktreeViaMux provisions one idle pool worktree through the create endpoint so a
+// pool-draw dispatch has a worktree to draw (Task-0016: dispatch no longer provisions a
+// fresh dir — it draws from the pre-created pool). The mux's worktree root must be a real
+// git repo (writeTaskTrackingRoot).
+func seedWorktreeViaMux(t *testing.T, mux *http.ServeMux) {
+	t.Helper()
+	resp := httptest.NewRecorder()
+	mux.ServeHTTP(resp, httptest.NewRequest(http.MethodPost, "/api/v1/worktrees/create",
+		strings.NewReader(`{"repo":"repo"}`)))
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("seed worktree via create endpoint status = %d, want 201: %s", resp.Code, resp.Body.String())
 	}
 }

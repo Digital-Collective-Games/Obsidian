@@ -30,8 +30,8 @@ type Dispatcher interface {
 	// owned lane is a no-op.
 	Reclaim(ctx context.Context, taskID string) error
 	// ActiveOwnedLaneTasks returns the task ids that currently hold an owned-lane
-	// worktree (one per used slot). The consumer uses it for slot accounting
-	// (EvaluateSlot) and to know which issues already own a worktree to park/reclaim.
+	// worktree (one per allocated pool worktree). The consumer uses it to know which
+	// issues already own a worktree to park/reclaim rather than redispatch.
 	ActiveOwnedLaneTasks() ([]string, error)
 	// ClosureRequested reports whether the task's dispatched agent has ANNOUNCED
 	// completion by setting its worktree TASK-STATE.json current_gate to "closure".
@@ -40,24 +40,26 @@ type Dispatcher interface {
 	ClosureRequested(taskID string) (bool, error)
 }
 
-// SlotSizer resolves the per-repo queue_workers cap (max concurrent owned lanes)
-// for the consumer's repo. Production reads it from REPO-MANIFEST.json; tests pin
-// it directly.
-type SlotSizer interface {
-	RepoSlotLimit() int
+// PoolSizer reports how many IDLE worktrees the consumer's repo pool currently has —
+// the admission budget that replaced the queue_workers cap (Task-0016). Concurrency is
+// bounded by the count of idle pool worktrees by construction: the consumer admits a
+// dispatch only while an idle worktree remains to draw, and an empty pool defers the
+// Ready issue. Production reads it from the on-disk worktree pool; tests pin it directly.
+type PoolSizer interface {
+	IdleWorktreeCount() (int, error)
 }
 
 // Consumer is the GitHub queue-drain consumer core. DrainOnce is the single poll
 // step: it reads the provider's issues, applies DecideQueueAction to each, and
 // for eligible (open + Queue=Ready + not-parked) issues maps #N -> Tracking/Task-N
-// and dispatches into a free per-repo slot. It is pure orchestration over the
-// Dispatcher + DecideQueueAction + EvaluateSlot seams (no Temporal, no GitHub
+// and dispatches by drawing an IDLE pool worktree (Task-0016). It is pure orchestration
+// over the Dispatcher + DecideQueueAction + PoolSizer seams (no Temporal, no GitHub
 // writes), so it is fully unit-testable with a FAKE provider and a FAKE dispatcher.
 type Consumer struct {
 	repo       string
 	provider   QueueProvider
 	dispatcher Dispatcher
-	sizer      SlotSizer
+	sizer      PoolSizer
 	// autoCloseEnabled gates the TEST-ONLY simulated-human auto-close: when true the
 	// consumer closes the GitHub issue of any active dispatched task that announced
 	// completion (current_gate == "closure"). Default false keeps it read-only.
@@ -65,7 +67,7 @@ type Consumer struct {
 }
 
 // NewConsumer builds a consumer for a provider repo.
-func NewConsumer(repo string, provider QueueProvider, dispatcher Dispatcher, sizer SlotSizer) *Consumer {
+func NewConsumer(repo string, provider QueueProvider, dispatcher Dispatcher, sizer PoolSizer) *Consumer {
 	return &Consumer{repo: repo, provider: provider, dispatcher: dispatcher, sizer: sizer}
 }
 
@@ -112,17 +114,18 @@ func TaskIDForIssue(number int) string {
 
 // DrainOnce performs one poll cycle. For each issue, DecideQueueAction yields the
 // action; the consumer wires it to the Dispatcher:
-//   - ActionDispatch: only if a per-repo slot is free (EvaluateSlot over the live
-//     owned-lane count) AND the task does not already own a lane. Skip Queue=Never.
+//   - ActionDispatch: only if an IDLE pool worktree remains to draw (Task-0016) AND the
+//     task does not already own a lane. Skip Queue=Never.
 //   - ActionPark (Human Needed=Yes): record the parked state in place; never
 //     redispatch; never reclaim.
 //   - ActionTerminal (closed): reclaim the worktree + free the slot (only if the
 //     task still owns a lane).
 //   - ActionNone: skip.
 //
-// Used-slot accounting is taken once at the start of the cycle and incremented as
-// the consumer dispatches, so it never over-admits past queue_workers within a
-// single poll.
+// The idle-worktree budget is read once at the start of the cycle and decremented as
+// the consumer dispatches (each dispatch draws one idle worktree), so it never
+// over-admits past the available idle pool within a single poll; an empty pool defers
+// the Ready issue (it is re-picked once an Eject/close frees a worktree).
 func (c *Consumer) DrainOnce(ctx context.Context) (DrainResult, error) {
 	result := DrainResult{}
 	issues, err := c.provider.ListReadyIssues(c.repo)
@@ -138,8 +141,10 @@ func (c *Consumer) DrainOnce(ctx context.Context) (DrainResult, error) {
 	for _, taskID := range activeTasks {
 		active[taskID] = true
 	}
-	limit := c.sizer.RepoSlotLimit()
-	used := len(activeTasks)
+	idleAvailable, err := c.sizer.IdleWorktreeCount()
+	if err != nil {
+		return result, fmt.Errorf("count idle pool worktrees for %s: %w", c.repo, err)
+	}
 
 	// TEST-ONLY simulated-human auto-close (OBSIDIAN_AUTO_CLOSE_QUEUED): for each
 	// active dispatched task that ANNOUNCED completion (current_gate == "closure"),
@@ -189,7 +194,9 @@ func (c *Consumer) DrainOnce(ctx context.Context) (DrainResult, error) {
 				return result, fmt.Errorf("reclaim %s: %w", taskID, err)
 			}
 			delete(active, taskID)
-			used--
+			// A terminal close frees the worktree back to the idle pool, so a later
+			// Ready issue in the SAME poll can draw it.
+			idleAvailable++
 			result.Reclaimed = append(result.Reclaimed, taskID)
 		case ActionPark:
 			if err := c.dispatcher.SetRunGateState(taskID, decision.ParkState); err != nil {
@@ -202,8 +209,9 @@ func (c *Consumer) DrainOnce(ctx context.Context) (DrainResult, error) {
 				result.Skipped = append(result.Skipped, taskID)
 				continue
 			}
-			if !EvaluateSlot(limit, used).Admit {
-				// Full: re-picked on a later poll once a close frees a slot.
+			if idleAvailable <= 0 {
+				// Empty pool: re-picked on a later poll once an Eject/close frees an
+				// idle worktree (no auto-create — capacity is operator-owned).
 				result.Skipped = append(result.Skipped, taskID)
 				continue
 			}
@@ -211,7 +219,8 @@ func (c *Consumer) DrainOnce(ctx context.Context) (DrainResult, error) {
 				return result, fmt.Errorf("dispatch %s: %w", taskID, err)
 			}
 			active[taskID] = true
-			used++
+			// This dispatch drew one idle worktree from the pool.
+			idleAvailable--
 			result.Dispatched = append(result.Dispatched, taskID)
 		default:
 			result.Skipped = append(result.Skipped, taskID)

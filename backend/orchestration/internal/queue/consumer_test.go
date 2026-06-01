@@ -89,10 +89,12 @@ func (d *fakeDispatcher) ClosureRequested(taskID string) (bool, error) {
 	return d.closureRequested[taskID], nil
 }
 
-// fixedSizer pins the per-repo queue_workers cap for deterministic slot tests.
-type fixedSizer int
+// fixedIdleSizer pins the per-repo IDLE worktree count for deterministic pool-admission
+// tests (Task-0016): the consumer admits a dispatch only while an idle worktree remains
+// to draw, so fixedIdleSizer(N) models a pool of N idle worktrees.
+type fixedIdleSizer int
 
-func (s fixedSizer) RepoSlotLimit() int { return int(s) }
+func (s fixedIdleSizer) IdleWorktreeCount() (int, error) { return int(s), nil }
 
 const testRepo = "Digital-Collective-Games/QueueDrainTestbed"
 
@@ -101,12 +103,11 @@ const testRepo = "Digital-Collective-Games/QueueDrainTestbed"
 // exercise the WORKFLOW poll path (which now drives a RegistryConsumer) can reuse
 // the existing per-repo fakes. The fake registry yields exactly one repo whose
 // task_provider.repo is providerRepo and whose local_root is a synthetic path.
-func singleEntryRegistryConsumer(providerRepo string, provider QueueProvider, dispatcher Dispatcher, sizer SlotSizer) *RegistryConsumer {
+func singleEntryRegistryConsumer(providerRepo string, provider QueueProvider, dispatcher Dispatcher, sizer PoolSizer) *RegistryConsumer {
 	loadRegistry := func() (RepoManifest, error) {
 		return RepoManifest{Repos: []RepoEntry{{
 			ID:           "TestRepo",
 			LocalRoot:    "C:\\Agent\\TestRepo",
-			QueueWorkers: sizer.RepoSlotLimit(),
 			TaskProvider: &TaskProvider{Kind: "github_issues", Repo: providerRepo},
 		}}}, nil
 	}
@@ -124,7 +125,7 @@ func TestDrainOnceReadyIssueDispatchesWithoutManualCall(t *testing.T) {
 		{Number: 7001, State: IssueState{Queue: QueueReady}},
 	}}
 	dispatcher := newFakeDispatcher()
-	consumer := NewConsumer(testRepo, provider, dispatcher, fixedSizer(4))
+	consumer := NewConsumer(testRepo, provider, dispatcher, fixedIdleSizer(4))
 
 	result, err := consumer.DrainOnce(context.Background())
 	if err != nil {
@@ -148,7 +149,7 @@ func TestDrainOnceNeverOrUnsetIsNotDispatched(t *testing.T) {
 		{Number: 7003, State: IssueState{}}, // unset Queue
 	}}
 	dispatcher := newFakeDispatcher()
-	consumer := NewConsumer(testRepo, provider, dispatcher, fixedSizer(4))
+	consumer := NewConsumer(testRepo, provider, dispatcher, fixedIdleSizer(4))
 
 	result, err := consumer.DrainOnce(context.Background())
 	if err != nil {
@@ -185,7 +186,7 @@ func TestDrainOnceDispatchesExactTaskIDForIssueNumber(t *testing.T) {
 		{Number: 12, State: IssueState{Queue: QueueReady}},
 	}}
 	dispatcher := newFakeDispatcher()
-	consumer := NewConsumer(testRepo, provider, dispatcher, fixedSizer(4))
+	consumer := NewConsumer(testRepo, provider, dispatcher, fixedIdleSizer(4))
 	if _, err := consumer.DrainOnce(context.Background()); err != nil {
 		t.Fatalf("DrainOnce: %v", err)
 	}
@@ -205,7 +206,7 @@ func TestDrainOnceClosedReclaimsAndHumanNeededParks(t *testing.T) {
 		{Number: 7011, State: IssueState{HumanNeeded: true, Queue: QueueReady}},
 	}}
 	dispatcher := newFakeDispatcher("Task-7010", "Task-7011")
-	consumer := NewConsumer(testRepo, provider, dispatcher, fixedSizer(4))
+	consumer := NewConsumer(testRepo, provider, dispatcher, fixedIdleSizer(4))
 
 	result, err := consumer.DrainOnce(context.Background())
 	if err != nil {
@@ -244,7 +245,7 @@ func TestDrainOnceParkedTaskIsNotRedispatchedAndRetainsSlot(t *testing.T) {
 		{Number: 7011, State: IssueState{HumanNeeded: true, GateHint: GateHintPlan, Queue: QueueReady}},
 	}}
 	dispatcher := newFakeDispatcher("Task-7011")
-	consumer := NewConsumer(testRepo, provider, dispatcher, fixedSizer(4))
+	consumer := NewConsumer(testRepo, provider, dispatcher, fixedIdleSizer(4))
 
 	if _, err := consumer.DrainOnce(context.Background()); err != nil {
 		t.Fatalf("DrainOnce: %v", err)
@@ -265,26 +266,70 @@ func TestDrainOnceParkedTaskIsNotRedispatchedAndRetainsSlot(t *testing.T) {
 	}
 }
 
-// Slot accounting: with queue_workers=2 and 2 Ready issues already filling the
-// slots, a 3rd Ready issue is NOT dispatched (re-picked once a slot frees).
-func TestDrainOnceRespectsPerRepoSlotCap(t *testing.T) {
+// Pool admission (Task-0016): with a pool of 2 idle worktrees and 3 Ready issues, the
+// consumer draws both idle worktrees (dispatches 2) and the 3rd Ready issue is NOT
+// dispatched — it waits for an idle worktree (re-picked once an Eject/close frees one).
+func TestDrainOnceDispatchesUpToIdlePoolThenWaits(t *testing.T) {
 	provider := &fakeProvider{issues: []IssueRef{
 		{Number: 7020, State: IssueState{Queue: QueueReady}},
 		{Number: 7021, State: IssueState{Queue: QueueReady}},
 		{Number: 7022, State: IssueState{Queue: QueueReady}},
 	}}
 	dispatcher := newFakeDispatcher()
-	consumer := NewConsumer(testRepo, provider, dispatcher, fixedSizer(2))
+	consumer := NewConsumer(testRepo, provider, dispatcher, fixedIdleSizer(2))
 
 	result, err := consumer.DrainOnce(context.Background())
 	if err != nil {
 		t.Fatalf("DrainOnce: %v", err)
 	}
 	if want := []string{"Task-7020", "Task-7021"}; !reflect.DeepEqual(dispatcher.dispatched, want) {
-		t.Fatalf("dispatched = %v, want %v (cap of 2)", dispatcher.dispatched, want)
+		t.Fatalf("dispatched = %v, want %v (pool of 2 idle worktrees)", dispatcher.dispatched, want)
 	}
 	if !reflect.DeepEqual(result.Skipped, []string{"Task-7022"}) {
-		t.Fatalf("skipped = %v, want [Task-7022] (refused while full)", result.Skipped)
+		t.Fatalf("skipped = %v, want [Task-7022] (waits for an idle worktree)", result.Skipped)
+	}
+}
+
+// REG-007 "pool of 1": with a single idle worktree and two Ready issues, the consumer
+// dispatches exactly ONE and the second waits (no idle worktree to draw). This is the
+// pool-model reinterpretation of the former cap=1 sub-scenario.
+func TestDrainOncePoolOfOneDispatchesExactlyOne(t *testing.T) {
+	provider := &fakeProvider{issues: []IssueRef{
+		{Number: 7050, State: IssueState{Queue: QueueReady}},
+		{Number: 7051, State: IssueState{Queue: QueueReady}},
+	}}
+	dispatcher := newFakeDispatcher()
+	consumer := NewConsumer(testRepo, provider, dispatcher, fixedIdleSizer(1))
+
+	result, err := consumer.DrainOnce(context.Background())
+	if err != nil {
+		t.Fatalf("DrainOnce: %v", err)
+	}
+	if want := []string{"Task-7050"}; !reflect.DeepEqual(dispatcher.dispatched, want) {
+		t.Fatalf("dispatched = %v, want %v (pool of 1)", dispatcher.dispatched, want)
+	}
+	if !reflect.DeepEqual(result.Skipped, []string{"Task-7051"}) {
+		t.Fatalf("skipped = %v, want [Task-7051] (second waits for an idle worktree)", result.Skipped)
+	}
+}
+
+// Empty pool: with zero idle worktrees, a Ready issue is deferred (no auto-create).
+func TestDrainOnceEmptyPoolDefersReadyIssue(t *testing.T) {
+	provider := &fakeProvider{issues: []IssueRef{
+		{Number: 7060, State: IssueState{Queue: QueueReady}},
+	}}
+	dispatcher := newFakeDispatcher()
+	consumer := NewConsumer(testRepo, provider, dispatcher, fixedIdleSizer(0))
+
+	result, err := consumer.DrainOnce(context.Background())
+	if err != nil {
+		t.Fatalf("DrainOnce: %v", err)
+	}
+	if len(dispatcher.dispatched) != 0 {
+		t.Fatalf("dispatched = %v, want none (empty pool defers)", dispatcher.dispatched)
+	}
+	if !reflect.DeepEqual(result.Skipped, []string{"Task-7060"}) {
+		t.Fatalf("skipped = %v, want [Task-7060] (empty pool, no auto-create)", result.Skipped)
 	}
 }
 
@@ -294,7 +339,7 @@ func TestDrainOnceDoesNotRedispatchAlreadyRunningReadyTask(t *testing.T) {
 		{Number: 7030, State: IssueState{Queue: QueueReady}},
 	}}
 	dispatcher := newFakeDispatcher("Task-7030")
-	consumer := NewConsumer(testRepo, provider, dispatcher, fixedSizer(4))
+	consumer := NewConsumer(testRepo, provider, dispatcher, fixedIdleSizer(4))
 
 	if _, err := consumer.DrainOnce(context.Background()); err != nil {
 		t.Fatalf("DrainOnce: %v", err)
@@ -341,7 +386,7 @@ func TestDrainOnceAutoCloseClosesAnnouncedTaskWhenEnabled(t *testing.T) {
 	}}
 	dispatcher := newFakeDispatcher("Task-7040")
 	dispatcher.closureRequested["Task-7040"] = true
-	consumer := NewConsumer(testRepo, provider, dispatcher, fixedSizer(4))
+	consumer := NewConsumer(testRepo, provider, dispatcher, fixedIdleSizer(4))
 	consumer.SetAutoCloseEnabled(true)
 
 	result, err := consumer.DrainOnce(context.Background())
@@ -369,7 +414,7 @@ func TestDrainOnceAutoCloseDoesNotCloseWhenDisabled(t *testing.T) {
 	}}
 	dispatcher := newFakeDispatcher("Task-7041")
 	dispatcher.closureRequested["Task-7041"] = true
-	consumer := NewConsumer(testRepo, provider, dispatcher, fixedSizer(4)) // auto-close left OFF (default)
+	consumer := NewConsumer(testRepo, provider, dispatcher, fixedIdleSizer(4)) // auto-close left OFF (default)
 
 	result, err := consumer.DrainOnce(context.Background())
 	if err != nil {
@@ -390,7 +435,7 @@ func TestDrainOnceAutoCloseDoesNotCloseWhenNotAnnounced(t *testing.T) {
 		{Number: 7042, State: IssueState{Queue: QueueReady}},
 	}}
 	dispatcher := newFakeDispatcher("Task-7042") // active, but closureRequested stays false
-	consumer := NewConsumer(testRepo, provider, dispatcher, fixedSizer(4))
+	consumer := NewConsumer(testRepo, provider, dispatcher, fixedIdleSizer(4))
 	consumer.SetAutoCloseEnabled(true)
 
 	result, err := consumer.DrainOnce(context.Background())

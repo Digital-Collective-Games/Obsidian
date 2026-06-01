@@ -21,15 +21,15 @@ type RepoManifest struct {
 
 // RepoEntry is one repos[] entry — the first-class per-repo binding the
 // registry-driven consumer iterates. LocalRoot is an ARBITRARY absolute path (no
-// co-location assumption); QueueWorkers is the per-repo max concurrent owned
-// lanes; TaskProvider is the first-class provider abstraction the consumer polls
-// (the consumer constructs its provider from TaskProvider.Repo, not from a single
-// env string). Unknown fields are ignored so the registry can carry config the
-// consumer does not consult.
+// co-location assumption); TaskProvider is the first-class provider abstraction the
+// consumer polls (the consumer constructs its provider from TaskProvider.Repo, not
+// from a single env string). Unknown fields are ignored so the registry can carry
+// config the consumer does not consult — including a legacy queue_workers key, which
+// Task-0016 removed as an admission cap (concurrency is now bounded by the count of
+// idle pool worktrees) and which is simply no longer decoded.
 type RepoEntry struct {
 	ID                    string                 `json:"id"`
 	LocalRoot             string                 `json:"local_root"`
-	QueueWorkers          int                    `json:"queue_workers"`
 	SourceControlProvider *SourceControlProvider `json:"source_control_provider,omitempty"`
 	TaskProvider          *TaskProvider          `json:"task_provider,omitempty"`
 }
@@ -65,8 +65,8 @@ func LoadManifest(repoRoot string) (RepoManifest, error) {
 // LoadRegistry reads the central repo registry from an EXPLICIT file path (the
 // configured OBSIDIAN_REGISTRY_PATH), rather than assuming the file sits at a
 // declared worktree root. It is the single source of truth the registry-driven
-// consumer enumerates: every repos[] binding (id, local_root, task_provider,
-// queue_workers) is returned for the consumer to iterate.
+// consumer enumerates: every repos[] binding (id, local_root, task_provider) is
+// returned for the consumer to iterate.
 func LoadRegistry(registryPath string) (RepoManifest, error) {
 	raw, err := os.ReadFile(registryPath)
 	if err != nil {
@@ -77,24 +77,6 @@ func LoadRegistry(registryPath string) (RepoManifest, error) {
 		return RepoManifest{}, fmt.Errorf("decode %s: %w", registryPath, err)
 	}
 	return manifest, nil
-}
-
-// QueueWorkersForRoot returns the queue_workers configured for the repos[] entry
-// whose local_root matches worktreeRoot. It returns DefaultQueueWorkers (and ok
-// false) when no entry matches or the entry omits a positive queue_workers, so a
-// missing manifest never blocks dispatch — it just falls back to the default cap.
-func (m RepoManifest) QueueWorkersForRoot(worktreeRoot string) (workers int, ok bool) {
-	target := normalizeRoot(worktreeRoot)
-	for _, entry := range m.Repos {
-		if normalizeRoot(entry.LocalRoot) != target {
-			continue
-		}
-		if entry.QueueWorkers > 0 {
-			return entry.QueueWorkers, true
-		}
-		return DefaultQueueWorkers, false
-	}
-	return DefaultQueueWorkers, false
 }
 
 // RepoIDForRoot returns the configured id for the repos[] entry whose local_root

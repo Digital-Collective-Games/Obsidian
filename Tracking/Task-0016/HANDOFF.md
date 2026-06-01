@@ -55,7 +55,18 @@ Backend batch progress:
   [Testing/PASS-0002/PASS-0002-NOTES.md](./Testing/PASS-0002/PASS-0002-NOTES.md),
   [Testing/PASS-0002-CHECKLIST.json](./Testing/PASS-0002-CHECKLIST.json). Full
   `go test ./...` green.
-- **Next:** PASS-0003 Assign + dispatch-path change + `queue_workers` removal.
+- **PASS-0003 — Assign + dispatch-path change + `queue_workers` removal — DONE.** The model
+  swap: `dispatchWithDirective` + the manual `POST /api/v1/worktrees/assign` now **pool-draw**
+  (`drawIdlePoolWorktree` → reset → `startRunInDrawnLane`, no fresh dir), the consumer admits
+  via the new `PoolSizer.IdleWorktreeCount()` seam, and `queue_workers` / `EvaluateSlot` /
+  `EffectiveFreeConcurrency` / `RepoSlotLimit` are removed (idle pool count is the cap).
+  Release/resolve return a pool member to idle (kept) instead of delete; reclaim-on-close is
+  intentionally unchanged (PASS-0005 owns Eject's keep-folder). Pool checkout leaf made
+  unique (`wt-<NNNN>`) to avoid a `git worktree` admin-name collision. Proof:
+  [Testing/PASS-0003/PASS-0003-NOTES.md](./Testing/PASS-0003/PASS-0003-NOTES.md),
+  [Testing/PASS-0003-CHECKLIST.json](./Testing/PASS-0003-CHECKLIST.json). Full
+  `go test ./...` green; AC1 grep proof clean (no live cap). REG-007 "pool of 1" unit-proven.
+- **Next:** PASS-0004 Provider dequeue write + standalone dequeue endpoint.
 
 ### Original planning resume point (superseded by the approval above)
 

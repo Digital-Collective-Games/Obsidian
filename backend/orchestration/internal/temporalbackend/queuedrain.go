@@ -190,10 +190,10 @@ func newQueueDrainActivities(cfg config.Config, runtime taskrun.Runtime) (*queue
 		if err != nil {
 			return queue.RepoDispatch{}, fmt.Errorf("build queue provider: %w", err)
 		}
-		// One Service per registry local_root: its git-worktree-list owned-lane count
-		// is naturally per-repo, and the slot cap is the entry's queue_workers PASSED
-		// IN (no co-located <local_root>/REPO-MANIFEST.json lookup).
-		service := taskrun.NewServiceForRepo(repo.LocalRoot, cfg.RunsRoot, runtime, repo.QueueWorkers)
+		// One Service per registry local_root: its idle pool worktree count
+		// is naturally per-repo and is the dispatch admission budget (Task-0016 removed
+		// the queue_workers cap; concurrency is bounded by the idle pool count).
+		service := taskrun.NewServiceForRepo(repo.LocalRoot, cfg.RunsRoot, runtime)
 		// CUTOVER (BUG-0003): namespace this repo's run ids + artifact paths by the
 		// registry repo id so two repos' identical issue #N can never collide on the
 		// Temporal workflow id or the runs-root path.

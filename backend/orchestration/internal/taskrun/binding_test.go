@@ -56,6 +56,7 @@ Create the durable backend task-run contract so later clients do not guess state
 	runsRoot := filepath.Join(worktreeRoot, ".runs")
 	service := NewService(worktreeRoot, runsRoot, runtime)
 
+	seedIdleWorktree(t, service)
 	run, err := service.Dispatch(context.Background(), "Task-0008")
 	if err != nil {
 		t.Fatalf("dispatch: %v", err)
@@ -125,6 +126,7 @@ func TestListActiveWorktreesReturnsBinding(t *testing.T) {
 	runsRoot := filepath.Join(worktreeRoot, ".runs")
 	service := NewService(worktreeRoot, runsRoot, runtime)
 
+	seedIdleWorktree(t, service)
 	if _, err := service.Dispatch(context.Background(), "Task-0008"); err != nil {
 		t.Fatalf("dispatch: %v", err)
 	}
@@ -175,6 +177,7 @@ func TestListActiveWorktreesSkipsReclaimedWorktree(t *testing.T) {
 	runsRoot := filepath.Join(worktreeRoot, ".runs")
 	service := NewService(worktreeRoot, runsRoot, runtime)
 
+	seedIdleWorktree(t, service)
 	run, err := service.Dispatch(context.Background(), "Task-0008")
 	if err != nil {
 		t.Fatalf("dispatch: %v", err)

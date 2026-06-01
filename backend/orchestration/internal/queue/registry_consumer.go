@@ -8,10 +8,11 @@ import (
 
 // RegistryRepo is one registered repo's per-poll dispatch binding the
 // registry-driven consumer acts on: the provider repo it polls
-// (task_provider.repo), the local_root it dispatches worktrees into, and the
-// per-repo queue_workers slot cap. It is the minimal, first-class slice of a
-// manifest RepoEntry the consumer needs (no co-location assumptions, no single
-// CODEX_ORCHESTRATION_QUEUE_DRAIN_REPO env string).
+// (task_provider.repo) and the local_root it dispatches worktrees into. It is the
+// minimal, first-class slice of a manifest RepoEntry the consumer needs (no
+// co-location assumptions, no single CODEX_ORCHESTRATION_QUEUE_DRAIN_REPO env string).
+// There is no per-repo numeric cap: concurrency is bounded by the count of idle pool
+// worktrees (Task-0016).
 type RegistryRepo struct {
 	// ID is the repos[] id (for logging/proof).
 	ID string
@@ -21,30 +22,22 @@ type RegistryRepo struct {
 	// ProviderRepo is task_provider.repo (owner/name) the consumer polls for
 	// Queue==Ready. The provider abstraction is built from this, not an env string.
 	ProviderRepo string
-	// QueueWorkers is the per-repo slot cap (max concurrent owned lanes).
-	QueueWorkers int
 }
 
 // RegistryRepos extracts the dispatch bindings from a loaded registry: every
 // repos[] entry that carries a usable task_provider.repo and local_root. An entry
 // missing either is skipped (it has nothing for the consumer to poll/dispatch).
-// queue_workers<=0 falls back to DefaultQueueWorkers so a fresh entry still
-// dispatches. Bindings are sorted by id for deterministic iteration/proof.
+// Bindings are sorted by id for deterministic iteration/proof.
 func (m RepoManifest) RegistryRepos() []RegistryRepo {
 	repos := make([]RegistryRepo, 0, len(m.Repos))
 	for _, entry := range m.Repos {
 		if entry.TaskProvider == nil || entry.TaskProvider.Repo == "" || entry.LocalRoot == "" {
 			continue
 		}
-		workers := entry.QueueWorkers
-		if workers <= 0 {
-			workers = DefaultQueueWorkers
-		}
 		repos = append(repos, RegistryRepo{
 			ID:           entry.ID,
 			LocalRoot:    entry.LocalRoot,
 			ProviderRepo: entry.TaskProvider.Repo,
-			QueueWorkers: workers,
 		})
 	}
 	sort.Slice(repos, func(i, j int) bool { return repos[i].ID < repos[j].ID })
@@ -56,23 +49,21 @@ func (m RepoManifest) RegistryRepos() []RegistryRepo {
 // on the next cycle without restarting the consumer (global awareness).
 type RegistryLoader func() (RepoManifest, error)
 
-// RepoDispatch is the per-repo provider + dispatcher + slot sizer the
-// registry-driven consumer drives for one RegistryRepo. Production builds these
-// from the entry (gh provider polling ProviderRepo; a taskrun.Service bound to
-// LocalRoot; a sizer pinned to QueueWorkers); tests inject fakes so the iteration
-// and per-repo slot accounting are provable WITHOUT a real registry, GitHub, or
-// git worktree.
+// RepoDispatch is the per-repo provider + dispatcher + pool sizer the registry-driven
+// consumer drives for one RegistryRepo. Production builds these from the entry (gh
+// provider polling ProviderRepo; a taskrun.Service bound to LocalRoot; a sizer reporting
+// that repo's idle pool worktree count); tests inject fakes so the iteration and
+// per-repo idle accounting are provable WITHOUT a real registry, GitHub, or git worktree.
 type RepoDispatch struct {
 	Provider   QueueProvider
 	Dispatcher Dispatcher
-	Sizer      SlotSizer
+	Sizer      PoolSizer
 }
 
 // RepoDispatchFactory builds the per-repo dispatch binding for one RegistryRepo.
-// It is the seam that keeps the Service repo-parameterized: the consumer passes
-// the registry entry's LocalRoot and QueueWorkers in, and the factory returns a
-// Consumer wired to a per-LocalRoot Service (its git-worktree-list-based owned-lane
-// count is naturally per-repo) capped at the entry's QueueWorkers.
+// It is the seam that keeps the Service repo-parameterized: the consumer passes the
+// registry entry's LocalRoot in, and the factory returns a Consumer wired to a
+// per-LocalRoot Service (its idle pool worktree count is naturally per-repo).
 type RepoDispatchFactory func(repo RegistryRepo) (RepoDispatch, error)
 
 // RegistryConsumer is the registry-driven queue-drain consumer. On each poll it

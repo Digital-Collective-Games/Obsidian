@@ -8,7 +8,8 @@ import (
 )
 
 // twoSiblingFixture builds a git tracking root with two distinct, dispatch-ready
-// sibling tasks so the per-repo slot gate can be exercised with N>1 lanes.
+// sibling tasks so the pool-draw dispatch path can be exercised with N>1 lanes. Its
+// owned-lane root is isolated under the repo so the pool layout is inspectable.
 func twoSiblingFixture(t *testing.T) string {
 	t.Helper()
 	return writeGitTaskTrackingRoot(t, map[string]taskFixture{
@@ -38,60 +39,52 @@ func readyTaskState(taskID string) string {
 }`
 }
 
-// TestNewServiceForRepoBindsRootAndUsesPassedCap proves the repo-parameterized
-// constructor the registry-driven consumer uses: the Service is bound to the
-// passed local_root (declaredWorktreeRoot), and its per-repo slot cap is the
-// queue_workers PASSED IN — NOT a co-located <local_root>/REPO-MANIFEST.json. A
-// decoy manifest with a different queue_workers is written into the local_root to
-// prove the co-located file is no longer consulted for the cap.
-func TestNewServiceForRepoBindsRootAndUsesPassedCap(t *testing.T) {
+// newSiblingPoolService builds a Service over the two-sibling git fixture with an
+// isolated owned-lane root so CreatePoolWorktree provisions stable pool members the
+// pool-draw dispatch path can draw from.
+func newSiblingPoolService(t *testing.T) *Service {
+	t.Helper()
 	worktreeRoot := twoSiblingFixture(t)
-	// Decoy co-located manifest: if the cap were still read from here, the limit
-	// would be 9 instead of the passed-in 2.
-	decoy := `{"repos":[{"id":"Decoy","local_root":"` +
-		filepath.ToSlash(worktreeRoot) + `","queue_workers":9}]}`
-	if err := os.WriteFile(filepath.Join(worktreeRoot, "REPO-MANIFEST.json"), []byte(decoy), 0o644); err != nil {
-		t.Fatalf("write decoy manifest: %v", err)
-	}
+	service := NewService(worktreeRoot, filepath.Join(worktreeRoot, ".runs"), newFakeRuntime())
+	service.ownedLaneRoot = filepath.Join(worktreeRoot, "owned-lanes")
+	return service
+}
 
-	service := NewServiceForRepo(worktreeRoot, filepath.Join(worktreeRoot, ".runs"), newFakeRuntime(), 2)
+// TestNewServiceForRepoBindsRoot proves the repo-parameterized constructor binds the
+// Service to the passed local_root. There is no per-repo numeric cap any more
+// (Task-0016 removed queue_workers); concurrency is bounded by the idle pool count.
+func TestNewServiceForRepoBindsRoot(t *testing.T) {
+	worktreeRoot := twoSiblingFixture(t)
+	service := NewServiceForRepo(worktreeRoot, filepath.Join(worktreeRoot, ".runs"), newFakeRuntime())
 	if service.declaredWorktreeRoot != worktreeRoot {
 		t.Fatalf("declaredWorktreeRoot = %q, want %q (bound to the registry local_root)", service.declaredWorktreeRoot, worktreeRoot)
 	}
-	if got := service.RepoSlotLimit(); got != 2 {
-		t.Fatalf("RepoSlotLimit = %d, want 2 (the passed-in queue_workers, NOT the co-located manifest's 9)", got)
-	}
 }
 
-// TestDispatchGateAdmitsSiblingsWhileSlotsRemainAndRefusesWhenFull table-drives
-// the relaxed per-repo gate over a stub slot count (A2.2/A2.3): with a free slot,
-// no active_run_exists / repo_slots_exhausted block is emitted; once the repo's
-// queue_workers slots are all used, dispatch is refused with repo_slots_exhausted.
-func TestDispatchGateAdmitsSiblingsWhileSlotsRemainAndRefusesWhenFull(t *testing.T) {
+// TestDispatchGateAdmitsWhileIdleWorktreeRemainsAndRefusesWhenEmpty table-drives the
+// Task-0016 pool-draw gate over a stubbed idle worktree count: with an idle worktree, no
+// task_already_running / no_idle_worktree block is emitted; with an empty pool, dispatch
+// is refused with no_idle_worktree.
+func TestDispatchGateAdmitsWhileIdleWorktreeRemainsAndRefusesWhenEmpty(t *testing.T) {
 	worktreeRoot := twoSiblingFixture(t)
 
 	cases := []struct {
 		name             string
-		limit            int
-		used             int
+		idle             int
 		wantReady        bool
 		wantBlockCode    string
 		forbidBlockCodes []string
 	}{
-		{name: "empty repo admits first lane", limit: 4, used: 0, wantReady: true, forbidBlockCodes: []string{"active_run_exists", "repo_slots_exhausted"}},
-		{name: "one sibling active still admits second", limit: 4, used: 1, wantReady: true, forbidBlockCodes: []string{"active_run_exists", "repo_slots_exhausted"}},
-		{name: "three siblings active still admits fourth", limit: 4, used: 3, wantReady: true, forbidBlockCodes: []string{"active_run_exists", "repo_slots_exhausted"}},
-		{name: "fifth dispatch refused when four slots full", limit: 4, used: 4, wantReady: false, wantBlockCode: "repo_slots_exhausted"},
+		{name: "one idle worktree admits", idle: 1, wantReady: true, forbidBlockCodes: []string{"task_already_running", "no_idle_worktree"}},
+		{name: "several idle worktrees admit", idle: 3, wantReady: true, forbidBlockCodes: []string{"task_already_running", "no_idle_worktree"}},
+		{name: "empty pool refuses", idle: 0, wantReady: false, wantBlockCode: "no_idle_worktree"},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			runtime := newFakeRuntime()
-			service := NewService(worktreeRoot, filepath.Join(worktreeRoot, ".runs"), runtime)
-			limit := tc.limit
-			used := tc.used
-			service.repoSlotLimit = func() int { return limit }
-			service.countActiveOwnedLanes = func() (int, error) { return used, nil }
+			service := NewService(worktreeRoot, filepath.Join(worktreeRoot, ".runs"), newFakeRuntime())
+			idle := tc.idle
+			service.idleWorktreeCount = func() (int, error) { return idle, nil }
 
 			task, err := service.Task(context.Background(), "Task-0002")
 			if err != nil {
@@ -105,90 +98,88 @@ func TestDispatchGateAdmitsSiblingsWhileSlotsRemainAndRefusesWhenFull(t *testing
 			}
 			for _, forbidden := range tc.forbidBlockCodes {
 				if hasBlockReason(task.DispatchReadiness.BlockReasons, forbidden) {
-					t.Fatalf("block %q should not be emitted while a free slot remains, blockers = %#v", forbidden, task.DispatchReadiness.BlockReasons)
+					t.Fatalf("block %q should not be emitted while an idle worktree remains, blockers = %#v", forbidden, task.DispatchReadiness.BlockReasons)
 				}
 			}
 		})
 	}
 }
 
-// TestDispatchGateRefusesFifthThenAdmitsAfterSlotFrees proves the A2.2 sequence:
-// a dispatch is refused while slots are full, then admitted once a slot frees.
-func TestDispatchGateRefusesFifthThenAdmitsAfterSlotFrees(t *testing.T) {
+// TestDispatchGateRefusesOnEmptyPoolThenAdmitsAfterIdleFrees proves the sequence: a
+// dispatch is refused while the pool is empty, then admitted once an idle worktree
+// frees (created or ejected back to idle).
+func TestDispatchGateRefusesOnEmptyPoolThenAdmitsAfterIdleFrees(t *testing.T) {
 	worktreeRoot := twoSiblingFixture(t)
-	runtime := newFakeRuntime()
-	service := NewService(worktreeRoot, filepath.Join(worktreeRoot, ".runs"), runtime)
+	service := NewService(worktreeRoot, filepath.Join(worktreeRoot, ".runs"), newFakeRuntime())
 
-	used := 4
-	service.repoSlotLimit = func() int { return 4 }
-	service.countActiveOwnedLanes = func() (int, error) { return used, nil }
+	idle := 0
+	service.idleWorktreeCount = func() (int, error) { return idle, nil }
 
-	full, err := service.Task(context.Background(), "Task-0002")
+	empty, err := service.Task(context.Background(), "Task-0002")
 	if err != nil {
-		t.Fatalf("task detail (full): %v", err)
+		t.Fatalf("task detail (empty pool): %v", err)
 	}
-	if full.DispatchReadiness.Ready {
-		t.Fatalf("dispatch should be refused while all slots are full, blockers = %#v", full.DispatchReadiness.BlockReasons)
+	if empty.DispatchReadiness.Ready {
+		t.Fatalf("dispatch should be refused while the pool is empty, blockers = %#v", empty.DispatchReadiness.BlockReasons)
 	}
-	if !hasBlockReason(full.DispatchReadiness.BlockReasons, "repo_slots_exhausted") {
-		t.Fatalf("expected repo_slots_exhausted, blockers = %#v", full.DispatchReadiness.BlockReasons)
+	if !hasBlockReason(empty.DispatchReadiness.BlockReasons, "no_idle_worktree") {
+		t.Fatalf("expected no_idle_worktree, blockers = %#v", empty.DispatchReadiness.BlockReasons)
 	}
 
-	used = 3 // a terminal close freed one slot
+	idle = 1 // a Create / eject freed an idle worktree
 	freed, err := service.Task(context.Background(), "Task-0002")
 	if err != nil {
-		t.Fatalf("task detail (freed): %v", err)
+		t.Fatalf("task detail (idle freed): %v", err)
 	}
 	if !freed.DispatchReadiness.Ready {
-		t.Fatalf("dispatch should be admitted after a slot frees, blockers = %#v", freed.DispatchReadiness.BlockReasons)
+		t.Fatalf("dispatch should be admitted after an idle worktree frees, blockers = %#v", freed.DispatchReadiness.BlockReasons)
 	}
-	if hasBlockReason(freed.DispatchReadiness.BlockReasons, "repo_slots_exhausted") {
-		t.Fatalf("repo_slots_exhausted should clear after a slot frees, blockers = %#v", freed.DispatchReadiness.BlockReasons)
+	if hasBlockReason(freed.DispatchReadiness.BlockReasons, "no_idle_worktree") {
+		t.Fatalf("no_idle_worktree should clear after an idle worktree frees, blockers = %#v", freed.DispatchReadiness.BlockReasons)
 	}
 }
 
-// TestDispatchGateNeverEmitsActiveRunExistsForSiblingWhileSlotFree locks A2.3:
-// the legacy per-task active_run_exists block reason is gone for a same-repo
-// dispatch while a free slot remains.
-func TestDispatchGateNeverEmitsActiveRunExistsForSiblingWhileSlotFree(t *testing.T) {
-	worktreeRoot := twoSiblingFixture(t)
-	runtime := newFakeRuntime()
-	service := NewService(worktreeRoot, filepath.Join(worktreeRoot, ".runs"), runtime)
+// TestDispatchGateNeverEmitsActiveRunExistsForSiblingWhileIdleFree locks that the legacy
+// per-task active_run_exists block is gone for a same-repo sibling dispatch while an idle
+// worktree remains: Task-0001 owns a lane (drawn from the pool) and Task-0002 still
+// dispatch-ready against the remaining idle worktree.
+func TestDispatchGateNeverEmitsActiveRunExistsForSiblingWhileIdleFree(t *testing.T) {
+	service := newSiblingPoolService(t)
+	// Seed two idle pool worktrees so both siblings can draw one.
+	if _, err := service.CreatePoolWorktree("repo"); err != nil {
+		t.Fatalf("create worktree #1: %v", err)
+	}
+	if _, err := service.CreatePoolWorktree("repo"); err != nil {
+		t.Fatalf("create worktree #2: %v", err)
+	}
 
-	// Task-0001 is dispatched and owns a live story (occupying one slot).
 	if _, err := service.Dispatch(context.Background(), "Task-0001"); err != nil {
 		t.Fatalf("dispatch Task-0001: %v", err)
 	}
-
-	// Task-0002 reads with one sibling slot used and three free.
-	service.repoSlotLimit = func() int { return 4 }
-	service.countActiveOwnedLanes = func() (int, error) { return 1, nil }
 
 	sibling, err := service.Task(context.Background(), "Task-0002")
 	if err != nil {
 		t.Fatalf("sibling task detail: %v", err)
 	}
 	if !sibling.DispatchReadiness.Ready {
-		t.Fatalf("sibling dispatch should be ready while a slot is free, blockers = %#v", sibling.DispatchReadiness.BlockReasons)
+		t.Fatalf("sibling dispatch should be ready while an idle worktree remains, blockers = %#v", sibling.DispatchReadiness.BlockReasons)
 	}
 	if hasBlockReason(sibling.DispatchReadiness.BlockReasons, "active_run_exists") {
-		t.Fatalf("active_run_exists must not block a same-repo sibling while a slot is free, blockers = %#v", sibling.DispatchReadiness.BlockReasons)
+		t.Fatalf("active_run_exists must not block a same-repo sibling while an idle worktree remains, blockers = %#v", sibling.DispatchReadiness.BlockReasons)
 	}
 	if !sibling.Actions[ActionDispatch].Allowed {
-		t.Fatal("sibling dispatch action should be allowed while a slot is free")
+		t.Fatal("sibling dispatch action should be allowed while an idle worktree remains")
 	}
 }
 
-// TestSameTaskReDispatchStaysBlockedWhileOwningLiveStory ensures the relaxation
-// did not let a single task be dispatched twice: a task that already owns the
-// live story is still blocked (with task_already_running, not active_run_exists).
+// TestSameTaskReDispatchStaysBlockedWhileOwningLiveStory ensures a single task that
+// already owns the live story is still blocked from a duplicate dispatch
+// (task_already_running, not active_run_exists).
 func TestSameTaskReDispatchStaysBlockedWhileOwningLiveStory(t *testing.T) {
-	worktreeRoot := twoSiblingFixture(t)
-	runtime := newFakeRuntime()
-	service := NewService(worktreeRoot, filepath.Join(worktreeRoot, ".runs"), runtime)
-	service.repoSlotLimit = func() int { return 4 }
-	service.countActiveOwnedLanes = func() (int, error) { return 1, nil }
-
+	service := newSiblingPoolService(t)
+	if _, err := service.CreatePoolWorktree("repo"); err != nil {
+		t.Fatalf("create worktree: %v", err)
+	}
 	if _, err := service.Dispatch(context.Background(), "Task-0001"); err != nil {
 		t.Fatalf("dispatch Task-0001: %v", err)
 	}
@@ -207,13 +198,19 @@ func TestSameTaskReDispatchStaysBlockedWhileOwningLiveStory(t *testing.T) {
 	}
 }
 
-// TestTwoSiblingsHoldConcurrentOwnedLanesInOneRepo is the unit-level A2.1: two
-// distinct sibling tasks in ONE repo each provision their own owned worktree and
-// BOTH checkouts exist on disk simultaneously, with the live worktree count = 2.
-func TestTwoSiblingsHoldConcurrentOwnedLanesInOneRepo(t *testing.T) {
-	worktreeRoot := twoSiblingFixture(t)
-	runtime := newFakeRuntime()
-	service := NewService(worktreeRoot, filepath.Join(worktreeRoot, ".runs"), runtime)
+// TestTwoSiblingsDrawDistinctIdlePoolWorktrees is the pool-model A2.1: two distinct
+// sibling tasks each DRAW their own idle pool worktree (no fresh dir) and BOTH checkouts
+// are bound simultaneously, leaving zero idle worktrees.
+func TestTwoSiblingsDrawDistinctIdlePoolWorktrees(t *testing.T) {
+	service := newSiblingPoolService(t)
+	wt1, err := service.CreatePoolWorktree("repo")
+	if err != nil {
+		t.Fatalf("create worktree #1: %v", err)
+	}
+	wt2, err := service.CreatePoolWorktree("repo")
+	if err != nil {
+		t.Fatalf("create worktree #2: %v", err)
+	}
 
 	run1, err := service.Dispatch(context.Background(), "Task-0001")
 	if err != nil {
@@ -224,62 +221,68 @@ func TestTwoSiblingsHoldConcurrentOwnedLanesInOneRepo(t *testing.T) {
 		t.Fatalf("dispatch Task-0002: %v", err)
 	}
 
-	if run1.RepoLane.OwnedRepoRoot == "" || run2.RepoLane.OwnedRepoRoot == "" {
-		t.Fatalf("both siblings must own a worktree, got %q and %q", run1.RepoLane.OwnedRepoRoot, run2.RepoLane.OwnedRepoRoot)
+	// Each run reused one of the EXISTING idle pool checkouts (no fresh dir).
+	drawn := map[string]bool{wt1.WorktreePath: false, wt2.WorktreePath: false}
+	if _, ok := drawn[run1.RepoLane.OwnedRepoRoot]; !ok {
+		t.Fatalf("Task-0001 owned root %q is not one of the pre-created pool worktrees", run1.RepoLane.OwnedRepoRoot)
+	}
+	if _, ok := drawn[run2.RepoLane.OwnedRepoRoot]; !ok {
+		t.Fatalf("Task-0002 owned root %q is not one of the pre-created pool worktrees", run2.RepoLane.OwnedRepoRoot)
 	}
 	if run1.RepoLane.OwnedRepoRoot == run2.RepoLane.OwnedRepoRoot {
-		t.Fatalf("siblings must own distinct worktrees, both = %q", run1.RepoLane.OwnedRepoRoot)
+		t.Fatalf("siblings must draw distinct worktrees, both = %q", run1.RepoLane.OwnedRepoRoot)
 	}
 	if _, err := os.Stat(run1.RepoLane.OwnedRepoRoot); err != nil {
-		t.Fatalf("Task-0001 owned checkout missing: %v", err)
+		t.Fatalf("Task-0001 drawn checkout missing: %v", err)
 	}
 	if _, err := os.Stat(run2.RepoLane.OwnedRepoRoot); err != nil {
-		t.Fatalf("Task-0002 owned checkout missing: %v", err)
+		t.Fatalf("Task-0002 drawn checkout missing: %v", err)
 	}
 
-	count, err := service.countOwnedLaneWorktrees()
+	// Both pool worktrees are now allocated -> zero idle (the cap by construction).
+	idle, err := service.countIdlePoolWorktrees()
 	if err != nil {
-		t.Fatalf("count owned-lane worktrees: %v", err)
+		t.Fatalf("count idle pool worktrees: %v", err)
 	}
-	if count != 2 {
-		t.Fatalf("live owned-lane worktree count = %d, want 2", count)
+	if idle != 0 {
+		t.Fatalf("idle worktree count = %d, want 0 (both drawn)", idle)
 	}
 }
 
-// TestReleasePreviousOwnedLaneDoesNotTearDownSiblingLane is the F-O2 guard:
-// dispatching/re-dispatching one task must never remove a same-repo sibling's
-// worktree. releasePreviousOwnedLane only ever acts on the SAME task's superseded
-// run, so the sibling's checkout survives.
-func TestReleasePreviousOwnedLaneDoesNotTearDownSiblingLane(t *testing.T) {
-	worktreeRoot := twoSiblingFixture(t)
-	runtime := newFakeRuntime()
-	service := NewService(worktreeRoot, filepath.Join(worktreeRoot, ".runs"), runtime)
+// TestDispatchDrawsExistingIdleWorktreeNoFreshDir is the AC3 falsifier guard: Assign /
+// dispatch reuses an EXISTING idle pool worktree and never provisions a fresh dir or
+// grows the pool count.
+func TestDispatchDrawsExistingIdleWorktreeNoFreshDir(t *testing.T) {
+	service := newSiblingPoolService(t)
+	created, err := service.CreatePoolWorktree("repo")
+	if err != nil {
+		t.Fatalf("create worktree: %v", err)
+	}
+	poolBefore, _ := service.ListPoolWorktrees()
 
-	run1, err := service.Dispatch(context.Background(), "Task-0001")
+	run, err := service.Dispatch(context.Background(), "Task-0001")
 	if err != nil {
 		t.Fatalf("dispatch Task-0001: %v", err)
 	}
-	siblingRoot := run1.RepoLane.OwnedRepoRoot
+	if run.RepoLane.OwnedRepoRoot != created.WorktreePath {
+		t.Fatalf("dispatch drew %q, want the pre-created idle worktree %q (no fresh dir)", run.RepoLane.OwnedRepoRoot, created.WorktreePath)
+	}
+	poolAfter, _ := service.ListPoolWorktrees()
+	if len(poolAfter) != len(poolBefore) {
+		t.Fatalf("pool count grew from %d to %d on dispatch (must reuse, not provision)", len(poolBefore), len(poolAfter))
+	}
+	if len(poolAfter) != 1 || poolAfter[0].Status != poolStatusAllocated {
+		t.Fatalf("the drawn worktree should be allocated, pool = %#v", poolAfter)
+	}
+}
 
-	// Dispatching Task-0002 runs releasePreviousOwnedLane(Task-0002) first.
-	run2, err := service.Dispatch(context.Background(), "Task-0002")
-	if err != nil {
-		t.Fatalf("dispatch Task-0002: %v", err)
-	}
-
-	if _, err := os.Stat(siblingRoot); err != nil {
-		t.Fatalf("sibling Task-0001 worktree must survive Task-0002 dispatch, stat err = %v", err)
-	}
-	if _, err := os.Stat(run2.RepoLane.OwnedRepoRoot); err != nil {
-		t.Fatalf("Task-0002 worktree missing: %v", err)
-	}
-
-	// Directly invoking the per-task release for Task-0002 must also leave the
-	// Task-0001 sibling lane untouched.
-	if err := service.releasePreviousOwnedLane(context.Background(), "Task-0002"); err != nil {
-		t.Fatalf("releasePreviousOwnedLane(Task-0002): %v", err)
-	}
-	if _, err := os.Stat(siblingRoot); err != nil {
-		t.Fatalf("sibling Task-0001 worktree must survive a Task-0002 release, stat err = %v", err)
+// TestDispatchRefusedWhenPoolEmpty is the AC4/AC5 guard at the service level: with no
+// idle worktree, Dispatch is refused (ErrNoIdleWorktree) and no run starts.
+func TestDispatchRefusedWhenPoolEmpty(t *testing.T) {
+	service := newSiblingPoolService(t)
+	// No CreatePoolWorktree: the pool is empty.
+	_, err := service.Dispatch(context.Background(), "Task-0001")
+	if err == nil {
+		t.Fatal("dispatch into an empty pool must be refused, got nil error")
 	}
 }

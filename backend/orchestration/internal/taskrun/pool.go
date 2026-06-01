@@ -2,6 +2,8 @@ package taskrun
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -35,10 +37,9 @@ import (
 // pool — including idle members — across a backend restart.
 const poolRecordFileName = "worktree-pool.json"
 
-// poolCheckoutDirName is the checkout subdir under a pool member folder. The folder
-// itself holds poolRecordFileName; the `w` child is the git worktree checkout (the
-// same `/w` convention provisionOwnedLane uses).
-const poolCheckoutDirName = "w"
+// (the checkout subdir is named after the member, e.g. wt-0001, so each pool worktree's
+// git worktree admin name is UNIQUE per repo — a shared `w` leaf would collide in
+// .git/worktrees across members.)
 
 // poolMemberPrefix names a pool member folder: wt-<NNNN>.
 const poolMemberPrefix = "wt-"
@@ -82,16 +83,26 @@ type PoolWorktree struct {
 	RepoBinding
 }
 
-// poolRepoSegment is the stable, filesystem-safe per-repo directory segment under the
-// owned-lane root that anchors a repo's pool. It prefers this Service's repoNamespace
-// (the registry repo id set by NewServiceForRepo) and falls back to a sanitized
-// repoIdentity() so the single-repo / manual control plane still groups its pool under
-// a stable segment.
+// poolRepoSegment is the stable, filesystem-safe, SHORT per-repo directory segment under
+// the owned-lane root that anchors a repo's pool. It prefers this Service's repoNamespace
+// (the registry repo id set by NewServiceForRepo). With no namespace it derives a stable
+// segment from repoIdentity(): a manifest-resolved short id is used as-is, but a raw
+// declared-root path (the no-manifest fallback) is hashed to a short, fixed-length
+// segment so the pool path never blows past the OS path/`$GIT_DIR` limits.
 func (s *Service) poolRepoSegment() string {
 	if s.repoNamespace != "" {
 		return sanitizePathSegment(s.repoNamespace)
 	}
-	return sanitizePathSegment(s.repoIdentity())
+	id := s.repoIdentity()
+	// repoIdentity falls back to the full declared worktree root when no manifest entry
+	// matches; that path is too long to use as a directory segment. Use a short stable
+	// hash of it instead. A manifest-resolved id (not equal to the raw root) is short and
+	// used directly.
+	if id == s.declaredWorktreeRoot {
+		sum := sha256.Sum256([]byte(filepath.Clean(s.declaredWorktreeRoot)))
+		return "repo-" + hex.EncodeToString(sum[:6])
+	}
+	return sanitizePathSegment(id)
 }
 
 // poolRepoRoot is the directory that holds all of this repo's pool member folders:
@@ -118,10 +129,13 @@ func (s *Service) poolMemberDir(seq int) string {
 	return filepath.Join(s.poolRepoRoot(), poolMemberFolder(seq))
 }
 
-// poolCheckoutPath is the `w` checkout path for a member sequence number — the stable
-// worktree_path (replacing provisionOwnedLane's random os.MkdirTemp dir).
+// poolCheckoutPath is the stable checkout path for a member sequence number — the stable
+// worktree_path (replacing provisionOwnedLane's random os.MkdirTemp dir). The checkout
+// leaf is the member folder name (wt-<NNNN>) so the git worktree admin name is unique per
+// repo; the durable pool record sits in the parent member folder (sibling of the
+// checkout, so reset/clean never wipes it).
 func (s *Service) poolCheckoutPath(seq int) string {
-	return filepath.Join(s.poolMemberDir(seq), poolCheckoutDirName)
+	return filepath.Join(s.poolMemberDir(seq), poolMemberFolder(seq))
 }
 
 // poolRecordPath is the worktree-pool.json path for a member sequence number.
@@ -461,6 +475,120 @@ var ErrPoolWorktreeAllocated = errors.New("worktree is allocated; eject it befor
 // ErrPoolWorktreeNotFound is returned when a worktree id names no pool member.
 var ErrPoolWorktreeNotFound = errors.New("pool worktree not found")
 
+// ErrNoIdleWorktree is returned by the pool-draw path when no idle worktree is available
+// to draw for a dispatch/assign (an empty pool defers — no auto-create).
+var ErrNoIdleWorktree = errors.New("no idle worktree available in the repo pool")
+
+// drawnLane is one idle pool worktree drawn for a dispatch/assign: its sequence number
+// (to update the record's run_id after the run starts) and a RepoLane pointed at its
+// stable checkout, already reset to baseline.
+type drawnLane struct {
+	seq      int
+	record   poolRecord
+	repoLane RepoLane
+}
+
+// drawIdlePoolWorktree picks an IDLE pool worktree to dispatch into and resets its
+// existing checkout to baseline — the pool-draw that replaced provisionOwnedLane's
+// fresh os.MkdirTemp dir. With worktreeID set it draws that specific idle member
+// (rejecting it if not idle); with worktreeID empty (the consumer auto-assign path) it
+// draws the lowest-sequence idle member. An empty pool yields ErrNoIdleWorktree. It
+// provisions NO new directory: the acceptance bar is reusing an existing idle folder.
+func (s *Service) drawIdlePoolWorktree(worktreeID string) (drawnLane, error) {
+	records, err := s.enumeratePoolRecords()
+	if err != nil {
+		return drawnLane{}, err
+	}
+
+	var chosenID string
+	if strings.TrimSpace(worktreeID) != "" {
+		record, ok := records[worktreeID]
+		if !ok {
+			return drawnLane{}, fmt.Errorf("%w: %s", ErrPoolWorktreeNotFound, worktreeID)
+		}
+		if s.classifyPoolMember(record).Status != poolStatusIdle {
+			return drawnLane{}, fmt.Errorf("%w: %s is allocated", ErrNoIdleWorktree, worktreeID)
+		}
+		chosenID = worktreeID
+	} else {
+		// Lowest-id idle member, for deterministic draw order.
+		ids := make([]string, 0, len(records))
+		for id, record := range records {
+			if s.classifyPoolMember(record).Status == poolStatusIdle {
+				ids = append(ids, id)
+			}
+		}
+		if len(ids) == 0 {
+			return drawnLane{}, ErrNoIdleWorktree
+		}
+		sort.Strings(ids)
+		chosenID = ids[0]
+	}
+
+	record := records[chosenID]
+	seq, err := s.poolSeqForID(chosenID)
+	if err != nil {
+		return drawnLane{}, err
+	}
+
+	baselineCommit := gitRevision(s.declaredWorktreeRoot)
+	if baselineCommit == "" {
+		return drawnLane{}, fmt.Errorf("resolve baseline commit for %s", s.declaredWorktreeRoot)
+	}
+	repoLane := RepoLane{
+		OwnedRepoRoot:         record.WorktreePath,
+		CheckoutMode:          "git_worktree_detached",
+		BaselineCommit:        baselineCommit,
+		ApprovedRestoreCommit: baselineCommit,
+		ResetStatus:           "not_run",
+	}
+	// Reset the EXISTING checkout to baseline (no fresh dir provisioned).
+	repoLane, err = s.restoreOwnedLane(repoLane)
+	if err != nil {
+		return drawnLane{}, fmt.Errorf("reset idle pool worktree %s to baseline: %w", chosenID, err)
+	}
+	return drawnLane{seq: seq, record: record, repoLane: repoLane}, nil
+}
+
+// markPoolMemberRun records the started run id on a drawn pool member's durable record
+// (idle -> allocated). A failure to persist after the run has started is returned so the
+// caller can surface it, but the run itself is already live.
+func (s *Service) markPoolMemberRun(drawn drawnLane, runID string) error {
+	record := drawn.record
+	record.RunID = runID
+	return s.writePoolRecord(drawn.seq, record)
+}
+
+// returnPoolMemberToIdle finds the pool member whose checkout is ownedRepoRoot and, if it
+// is a pool member, clears its run_id (allocated -> idle) WITHOUT deleting the folder, so
+// a superseded same-task run frees its pool worktree for reuse. It reports whether the
+// checkout was a pool member. A non-pool (legacy random-temp) checkout reports false so
+// the caller can fall back to the delete path.
+func (s *Service) returnPoolMemberToIdle(ownedRepoRoot string) (bool, error) {
+	records, err := s.enumeratePoolRecords()
+	if err != nil {
+		return false, err
+	}
+	for id, record := range records {
+		if !sameRepoRoot(record.WorktreePath, ownedRepoRoot) {
+			continue
+		}
+		seq, err := s.poolSeqForID(id)
+		if err != nil {
+			return false, err
+		}
+		if record.RunID == "" {
+			return true, nil // already idle
+		}
+		record.RunID = ""
+		if err := s.writePoolRecord(seq, record); err != nil {
+			return false, fmt.Errorf("return pool member %s to idle: %w", id, err)
+		}
+		return true, nil
+	}
+	return false, nil
+}
+
 // CreatePoolWorktree provisions one new IDLE pool worktree into this Service's repo
 // pool at the next stable path (git worktree add --detach <stablePath> <baselineCommit>
 // — the provisionOwnedLane git mechanics, but at a STABLE, non-temp path and with NO
@@ -542,7 +670,7 @@ func (s *Service) DestroyPoolWorktree(worktreeID string) error {
 	}
 	checkout := record.WorktreePath
 	if checkout == "" {
-		checkout = filepath.Join(memberDir, poolCheckoutDirName)
+		checkout = filepath.Join(memberDir, filepath.Base(memberDir))
 	}
 	if !pathWithinRoot(checkout, s.ownedLaneRoot) {
 		return fmt.Errorf("pool worktree %q is outside the backend-owned lane root", checkout)

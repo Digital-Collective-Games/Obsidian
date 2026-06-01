@@ -50,6 +50,7 @@ func TestWorktreesEndpointReturnsBindingAfterDispatch(t *testing.T) {
 	}
 
 	dispatchResponse := httptest.NewRecorder()
+	seedWorktreeViaMux(t, mux)
 	mux.ServeHTTP(dispatchResponse, httptest.NewRequest(http.MethodPost, "/api/v1/tasks/Task-0008/dispatch", nil))
 	if dispatchResponse.Code != http.StatusAccepted {
 		t.Fatalf("dispatch status = %d, want 202", dispatchResponse.Code)
@@ -115,6 +116,7 @@ func TestWorktreesEndpointListsParkedWorktree(t *testing.T) {
 	}, controlplane.NewService(t.TempDir(), newFakeBackend()), taskService, nil)
 
 	dispatchResponse := httptest.NewRecorder()
+	seedWorktreeViaMux(t, mux)
 	mux.ServeHTTP(dispatchResponse, httptest.NewRequest(http.MethodPost, "/api/v1/tasks/Task-0008/dispatch", nil))
 	if dispatchResponse.Code != http.StatusAccepted {
 		t.Fatalf("dispatch status = %d, want 202", dispatchResponse.Code)

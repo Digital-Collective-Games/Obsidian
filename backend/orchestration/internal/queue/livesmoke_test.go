@@ -24,7 +24,7 @@ func TestLiveGitHubQueueDrainSmoke(t *testing.T) {
 		t.Fatalf("build live provider: %v", err)
 	}
 	dispatcher := newFakeDispatcher()
-	consumer := NewConsumer(repo, provider, dispatcher, fixedSizer(4))
+	consumer := NewConsumer(repo, provider, dispatcher, fixedIdleSizer(4))
 
 	result, err := consumer.DrainOnce(context.Background())
 	if err != nil {
