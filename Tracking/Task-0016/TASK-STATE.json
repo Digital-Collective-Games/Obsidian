@@ -2,34 +2,44 @@
   "schema_version": 1,
   "task_id": "Task-0016",
   "status": "in_progress",
-  "phase": "closure",
+  "phase": "implementation",
   "plan_approved": true,
   "current_pass": null,
   "last_completed_pass": "PASS-0009",
-  "current_gate": "closure",
-  "latest_audit_verdict": "ready",
+  "current_gate": "debugging",
+  "latest_audit_verdict": "not_ready",
   "validation": {
     "build": "passing",
     "unit_tests": "passing",
-    "regression": "passing"
+    "regression": "failing"
   },
   "blockers": [
-    "Awaiting human closure approval on issue #16 (the agent never self-closes).",
-    "Separate human-gated step (optional, not task closure): publish a new pinned dashboard release to roll the WORKTREES tab to the live lane."
+    "BUG-0005 (closure-blocking): in-app/endpoint Eject frees the worktree but leaves the TaskRunWorkflow ACTIVE/orphaned (found during the live roll). Eject must terminate the run; then strengthen REG-015.",
+    "BUG-0004: flaky test TestDashboardEjectAndDestroyResolveRegistryIDSegment (git 'Could not parse object' under ./... / -count>1; package-only passes).",
+    "BUG-0003 FIXED + DEPLOYED, but REG-017 (state-less-task Assign popup, human-surface) not yet executed on a lane.",
+    "Closure of issue #16 remains the human gate (the agent never self-closes)."
+  ],
+  "production_roll": {
+    "rolled_live": true,
+    "backend_release": "20260601T211118Z-07affb0",
+    "dashboard_release": "20260601T202417Z-81626e198eb1",
+    "rollback_backend_release": "20260427T162803Z-3c0fabb2",
+    "rollback_dashboard_release": "20260530T033551Z-8f9839bef26b",
+    "notes": "WORKTREES tab live; pool endpoints serve 200; 8 scheduled jobs intact; auto queue-drain not active on the service lane; #16 untouched (Queue=Never, OPEN)."
+  },
+  "open_bugs": [
+    "BUG-0001 FIXED + live-verified (Eject dequeues via registry-resolved provider)",
+    "BUG-0002 FIXED + live-verified (pool repo-segment registry resolution)",
+    "BUG-0003 FIXED + DEPLOYED (Assign popup 502 on a state-less task)",
+    "BUG-0004 OPEN (flaky eject test)",
+    "BUG-0005 OPEN, closure-blocking (Eject orphans the run workflow)"
   ],
   "live_regression_run": {
     "artifact": "Tracking/Task-0016/Testing/PASS-0009/REGRESSION-RUN-0002.md",
-    "REG-007": "passing_live_after_BUG-0002_fix_create_seed_and_close_reclaim_reuse_proven",
+    "REG-007": "passing_live",
     "REG-008": "passing_live",
     "REG-009": "passing_live",
-    "REG-015_bug0001_fix": "passing_live",
-    "reg014_clean_recapture": "done",
-    "production_untouched": true,
-    "fix_commit": "dddab0e"
+    "REG-015_bug0001_fix": "passing_live"
   },
-  "open_bugs": [
-    "BUG-0001 (fixed + live-verified by REG-015 in this PASS-0009 run)",
-    "BUG-0002 (fixed + live-verified by REG-007 v2 in REGRESSION-RUN-0002; commit dddab0e)"
-  ],
-  "updated_at": "2026-06-01T15:30:00-04:00"
+  "updated_at": "2026-06-01T21:35:00-04:00"
 }

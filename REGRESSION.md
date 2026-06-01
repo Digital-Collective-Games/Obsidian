@@ -871,6 +871,11 @@ Interpretation:
   unit proof supports but does not replace this case
 - run only against throwaway testbed tasks on the isolated lane; the dequeue is a backend
   provider write and must never touch a production-owned queue
+- **Incomplete pending [BUG-0005](./Tracking/Task-0016/BUG-0005.md):** this case currently
+  asserts the worktree returns to idle, but the live smoke showed Eject leaves the run's
+  Temporal workflow ACTIVE/orphaned (worktree freed, run not terminated). Once BUG-0005 is
+  fixed, strengthen this case to also assert the run is terminated (no active run lingers
+  with no worktree after Eject).
 
 ### REG-016 WORKTREES Tab Destroy (Idle Only) And Standalone Dequeue
 
@@ -922,6 +927,49 @@ Interpretation:
 - the allocated-Destroy rejection and the dequeue-is-not-close behavior are load-bearing;
   a Destroy that deletes an allocated worktree, or a Dequeue that closes the issue, fails
 - run only against throwaway testbed tasks on the isolated lane
+
+### REG-017 WORKTREES Assign Popup Loads With A State-less Task In The Tracking Set
+
+Goal:
+
+Confirm the `WORKTREES` tab's Assign popup still loads its open-task list
+(`GET /api/v1/tasks`) when one or more `Tracking/Task-*` directories lack a
+`TASK-STATE.json`. Regression must exercise this against a realistic Tracking set so a
+single state-less task cannot 502 the endpoint and blank the Assign popup (BUG-0003 — found
+on the live registry where Task-0014 had no TASK-STATE.json).
+
+Surface:
+
+The real `WORKTREES` tab Assign popup, backed by `GET /api/v1/tasks` on the isolated
+validation lane, with the lane's Tracking set seeded to include at least one task that has
+`TASK.md` but NO `TASK-STATE.json`.
+
+Steps:
+
+1. Launch the real app + validation-lane backend as in REG-010, with the lane's Tracking
+   root containing several tasks AND at least one Task dir that has `TASK.md` but no
+   `TASK-STATE.json`.
+2. Open the `WORKTREES` tab and an idle worktree's Assign control.
+3. Confirm the Assign popup POPULATES with the open tasks (it does not blank, error, or
+   hang); `GET /api/v1/tasks` returns 200, not 502.
+4. Confirm the state-less task still appears (with an unknown/default state, not fabricated)
+   and that a normal task can be selected and bound.
+5. Capture an artifact showing the populated popup.
+
+Expected result:
+
+- the Assign popup populates even with a state-less task present; `GET /api/v1/tasks` is
+  200 (a single missing `TASK-STATE.json` must NOT 502 the whole list)
+- the state-less task appears with a default/unknown state; no state is fabricated
+
+Interpretation:
+
+- this is the human-surface regression for **BUG-0003** (a state-less task 502'd the Assign
+  popup on the live registry). Unit coverage: `TestListTasksToleratesMissingTaskState`
+  (supports but does not replace this in-app case).
+- lesson (why this case exists): the WORKTREES human-surface cases (REG-010…016) must be run
+  against a REALISTIC Tracking/registry set — including a state-less task — not only a
+  pristine throwaway set, or this class of bug reaches the human instead of regression.
 
 ## Supporting Smoke
 
