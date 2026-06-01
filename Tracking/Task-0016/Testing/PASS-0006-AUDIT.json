@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "task_id": "Task-0016",
+  "pass_id": "PASS-0006",
+  "transition_target": "pass_closeout",
+  "verdict": "ready",
+  "audit_scope": "Backend batch closeout gate covering PASS-0000..PASS-0006 (the manual worktree-pool model swap). Independent clean-context audit; [FE]/in-app surface (PASS-0007..0009) is out of this batch's scope.",
+  "blocking_findings": [],
+  "non_blocking_findings": [
+    {
+      "summary": "RetryWorkloadRun still calls provisionOwnedLane (fresh os.MkdirTemp lane) on the workload-failure recovery path.",
+      "why_it_matters": "A retried workload provisions a fresh random-temp lane rather than drawing from the pool. Not an AC violation (the task only required dispatchWithDirective to switch to pool-draw, which it did), but it is residual inconsistency with the pure-pool model worth a future-pass decision.",
+      "file_refs": ["backend/orchestration/internal/taskrun/service.go#L966"]
+    },
+    {
+      "summary": "Stale commit flags in per-pass CHECKLIST.json (e.g. commit_created=false) although the 7 commits landed on master.",
+      "why_it_matters": "Cosmetic staleness in producer checklist JSON written pre-commit; not a correctness issue.",
+      "file_refs": ["Tracking/Task-0016/Testing/PASS-0005-CHECKLIST.json"]
+    },
+    {
+      "summary": "classifyPoolMember trusts the persisted record (marks allocated) when s.runtime == nil.",
+      "why_it_matters": "Runtime-less test-convenience path; production always has a runtime so the live-classification guarantee holds. Informational.",
+      "file_refs": ["backend/orchestration/internal/taskrun/pool.go#L291"]
+    }
+  ],
+  "missing_evidence": [],
+  "open_questions": [],
+  "evidence_reviewed": [
+    "TASK.md [BE] acceptance criteria 1-15 + What Does Not Count",
+    "PLAN.md PASS-0000..PASS-0006; HANDOFF.md; PASS-000N-CHECKLIST.json + PASS-000N-NOTES.md",
+    "Diff 6b2e533..886e78f (commits 3583da4,071d0f3,14b3305,b0bd3de,e63b17e,5a3ecf8,886e78f; 26 files +2683/-602 under backend/orchestration)",
+    "internal/taskrun/pool.go, service.go; internal/queue/consumer.go, provider.go, slots.go, decision.go, manifest.go, registry_consumer.go; internal/httpapi/mux.go",
+    "Tests: queue/consumer_test.go, queue/provider_test.go, taskrun/pool_test.go, taskrun/slots_test.go, httpapi/worktrees_pool_test.go",
+    "Testing/PASS-0006/SERVER-ONLY-SMOKE.txt (isolated validation lane 127.0.0.1:14318, throwaway repo)",
+    "Independently re-ran: go build ./... (exit 0); go test ./... uncached (all ok, no FAIL); gofmt -l internal/ (clean); grep for cap symbols (only doc-comments/ignored-legacy-key tests remain)"
+  ],
+  "suggested_next_step": "Proceed to the UI batch (PASS-0007..0009) on these endpoints. Carry the RetryWorkloadRun finding forward as a future-pass decision. Do NOT mark Task-0016 closed — closure remains the human gate on the working in-app WORKTREES surface, which this backend batch deliberately does not deliver.",
+  "updated_at": "2026-06-01T06:00:00-04:00"
+}
