@@ -30,8 +30,12 @@ slot, one parked allocated slot (needs review), one idle slot.
 - **Right-justified actions**: Details (ⓘ) + DEQUEUE + EJECT for allocated; Details + a
   Destroy (trash) icon + ASSIGN for idle. Each icon is borderless, accent-on-hover, with a
   hover tooltip naming the action.
+- **Tab + card buttons** are flat mockup-style (grounded in mockup-4): ghost-cyan
+  **`+ NEW WORKTREE`** (renamed from CREATE WORKTREE), quiet **`REFRESH`** (renamed from
+  REFRESH STATUS), ghost-red **`⏏ EJECT`**, quiet **`DEQUEUE`**, solid-cyan **`ASSIGN`** —
+  matching the popup's button family.
 
-## ASSIGN_TASK_OPERATOR popup — mockup conformance
+## ASSIGN_TASK popup — mockup conformance
 
 Redesigned the Assign popup to the second Stitch mockup
 (`stitch_codex_token_velocity_overlay (5)\screen.png` + `code.html`).
@@ -41,7 +45,7 @@ Redesigned the Assign popup to the second Stitch mockup
 - **Cyan top border**; tonal layering (header/footer `surface-container-high` #262a31,
   toolbar/cards `surface-container` #1c2026, list `surface-container-lowest` #0a0e14) with
   toolbar/footer divider hairlines.
-- **Header**: `assignment_add` icon + `ASSIGN_TASK_OPERATOR` title + `Target Worktree:`
+- **Header**: `assignment_add` icon + `ASSIGN_TASK` title + `Target Worktree:`
   subtitle (mono) + close **X**.
 - **Toolbar**: `FILTER_TASKS_BY_ID_OR_DESC...` field (live filter) + `SORT: ID` (toggles
   id asc/desc).
@@ -49,7 +53,7 @@ Redesigned the Assign popup to the second Stitch mockup
   cyan family, `BLOCKED` orange-red) + description. **Selected** = cyan left border + a
   solid filled cyan radio + cyan id; **blocked** = orange border, muted/disabled (not
   selectable).
-- **Footer**: `CANCEL` + a **`BIND_TASK`** primary CTA rendered as a baked image with the
+- **Footer**: `CANCEL` + an **`ASSIGN`** primary CTA rendered as a baked image with the
   mockup's vertical **cyan gradient glow** (`#c3f5ff`→`#00e5ff`), heavy Space Grotesk text,
   and a `check_circle` glyph.
 - New pure helpers (testable): `task_state_category` / `task_state_chip_label` /

@@ -101,6 +101,13 @@ def render_glyph(kind: str, color: str, size: int, supersample: int = SUPERSAMPL
         draw.ellipse([pt(0.4, 0.4), pt(0.6, 0.6)], fill=(255, 255, 255, 255))
     elif kind == "radio_off":
         circle(0.14, 0.14, 0.86, 0.86)
+    elif kind == "plus":
+        line([(0.5, 0.18), (0.5, 0.82)])
+        line([(0.18, 0.5), (0.82, 0.5)])
+    elif kind == "eject":
+        # an eject symbol: a triangle pointing up over a horizontal bar.
+        draw.polygon([pt(0.5, 0.2), pt(0.82, 0.56), pt(0.18, 0.56)], fill=rgba)
+        draw.rectangle([pt(0.18, 0.66), pt(0.82, 0.78)], fill=rgba)
     else:
         raise ValueError(f"unknown glyph kind: {kind!r}")
 
@@ -164,4 +171,6 @@ GLYPH_KINDS = (
     "check",
     "radio_on",
     "radio_off",
+    "plus",
+    "eject",
 )

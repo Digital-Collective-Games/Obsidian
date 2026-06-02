@@ -1090,11 +1090,10 @@ class DashboardApp:
             justify="left",
         )
         self.worktrees_action_status_label.pack(anchor="w", pady=(2, 0))
-        self.worktrees_refresh_button = ttk.Button(
-            header,
-            text="REFRESH STATUS",
-            style="Quiet.TButton",
-            command=self.refresh_worktrees_data,
+        self.worktrees_refresh_button = self._flat_button(
+            header, "REFRESH", self.refresh_worktrees_data,
+            bg="#262a31", fg="#adcbda", hover_bg="#353940", hover_fg="#dfe2eb",
+            font=("Space Grotesk", -12, "bold"), padx=14, pady=7,
         )
         self.worktrees_refresh_button.grid(row=0, column=1, sticky="e")
 
@@ -1112,11 +1111,11 @@ class DashboardApp:
         )
         self.worktrees_repo_combo.pack(side="left", padx=(0, 12))
         self.worktrees_repo_combo.bind("<<ComboboxSelected>>", self._on_worktrees_repo_filter_changed)
-        self.worktrees_create_button = ttk.Button(
-            toolbar,
-            text="CREATE WORKTREE",
-            style="Accent.TButton",
-            command=self.create_worktree_for_selected_repo,
+        self.worktrees_create_button = self._flat_button(
+            toolbar, "NEW WORKTREE", self.create_worktree_for_selected_repo,
+            bg="#1c2026", fg="#00e5ff", hover_bg="#10333a", hover_fg="#c3f5ff",
+            font=("Space Grotesk", -12, "bold"), icon="plus", icon_color="#00e5ff",
+            icon_side="left", border="#0e4a52", padx=14, pady=7,
         )
         self.worktrees_create_button.pack(side="right")
 
@@ -1298,7 +1297,7 @@ class DashboardApp:
             # When the backend is reachable but the (filtered) pool is empty, point the
             # operator at CREATE WORKTREE rather than the generic refresh line.
             if str(self.worktrees_snapshot.get("status") or "") == "ok":
-                empty_text = "No worktrees in this repo yet - use CREATE WORKTREE to add one."
+                empty_text = "No worktrees in this repo yet - use NEW WORKTREE to add one."
             else:
                 empty_text = self.worktrees_status_message
             ttk.Label(
@@ -1440,16 +1439,17 @@ class DashboardApp:
                 parent, "details", lambda wt=dict(worktree): self.open_worktree_details(wt),
                 "Details", row_bg,
             ).pack(side="left", padx=(0, 10))
-            dequeue_button = ttk.Button(
-                parent, text="DEQUEUE", style="Quiet.TButton",
-                command=lambda tid=task_id: self.dequeue_task_action(tid),
-            )
-            if not task_id:
-                dequeue_button.state(["disabled"])
-            dequeue_button.pack(side="left", padx=(0, 8))
-            ttk.Button(
-                parent, text="EJECT", style="Danger.TButton",
-                command=lambda rid=run_id, wid=worktree_id: self.eject_worktree_action(rid, wid),
+            self._flat_button(
+                parent, "DEQUEUE", lambda tid=task_id: self.dequeue_task_action(tid),
+                bg="#303743", fg="#dfe2eb", hover_bg="#3b4450",
+                font=("Space Grotesk", -11, "bold"), padx=12, pady=6,
+                disabled=not task_id,
+            ).pack(side="left", padx=(0, 8))
+            self._flat_button(
+                parent, "EJECT", lambda rid=run_id, wid=worktree_id: self.eject_worktree_action(rid, wid),
+                bg="#2a1719", fg="#ffb4ab", hover_bg="#5a2327",
+                font=("Space Grotesk", -11, "bold"), icon="eject", icon_color="#ffb4ab",
+                icon_side="left", padx=12, pady=6,
             ).pack(side="left")
         else:
             self._worktree_icon_button(
@@ -1460,9 +1460,10 @@ class DashboardApp:
                 parent, "destroy", lambda wid=worktree_id: self.destroy_worktree_action(wid),
                 "Destroy", row_bg,
             ).pack(side="left", padx=(0, 12))
-            ttk.Button(
-                parent, text="ASSIGN", style="Accent.TButton",
-                command=lambda wt=dict(worktree): self.open_assign_popup(wt),
+            self._flat_button(
+                parent, "ASSIGN", lambda wt=dict(worktree): self.open_assign_popup(wt),
+                bg="#00e5ff", fg="#00363d", hover_bg="#2ee8ff",
+                font=("Space Grotesk", -11, "bold"), padx=14, pady=6,
             ).pack(side="left")
 
     def _icon_photo(self, kind: str, color: str, size: int):
@@ -1714,7 +1715,7 @@ class DashboardApp:
         if assign_icon is not None:
             tk.Label(title_row, image=assign_icon, bg="#262a31").pack(side="left", padx=(0, 8))
         tk.Label(
-            title_row, text="ASSIGN_TASK_OPERATOR", bg="#262a31", fg="#c3f5ff",
+            title_row, text="ASSIGN_TASK", bg="#262a31", fg="#c3f5ff",
             font=("Space Grotesk", -17, "bold"),
         ).pack(side="left")
         tk.Label(
@@ -1729,10 +1730,10 @@ class DashboardApp:
         # Full-width footer band with a top divider separating it from the scrollable list.
         tk.Frame(popup, bg="#31353c", height=1).pack(side="bottom", fill="x")
         bind_command = lambda: self._confirm_assign(popup, selection.get(), repo_for_assign, worktree_id)
-        bind_button = self._cta_button(footer, "BIND_TASK", bind_command, "#262a31")
+        bind_button = self._cta_button(footer, "ASSIGN", bind_command, "#262a31")
         if bind_button is None:
             bind_button = self._flat_button(
-                footer, "BIND_TASK", bind_command,
+                footer, "ASSIGN", bind_command,
                 bg="#00e5ff", fg="#00363d", hover_bg="#2ee8ff",
                 font=("Space Grotesk", -14, "bold"), icon="check", icon_color="#00363d",
                 padx=18, pady=9,
@@ -1856,18 +1857,25 @@ class DashboardApp:
     def _flat_button(
         self, parent, text, command, *, bg, fg, hover_bg, hover_fg=None, font,
         icon=None, icon_color=None, icon_side="right", padx=14, pady=8,
+        border=None, disabled=False,
     ):
-        # A flat 0px-radius button (mockup CTAs): solid fill + hover, optional crisp glyph.
-        # Built from tk widgets (not ttk) so the fill, padding, font, and icon match exactly.
+        # A flat 0px-radius button (mockup CTAs): solid fill + hover, optional crisp glyph
+        # and a thin border (ghost buttons). Built from tk widgets (not ttk) so the fill,
+        # padding, font, and icon match the mockup exactly. `disabled` mutes it + drops input.
         hover_fg = hover_fg or fg
-        frame = tk.Frame(parent, bg=bg, cursor="hand2")
+        eff_fg = "#566066" if disabled else fg
+        eff_icon_color = "#566066" if disabled else (icon_color or fg)
+        frame_kwargs = {"bg": bg, "cursor": "" if disabled else "hand2"}
+        if border is not None:
+            frame_kwargs.update(highlightthickness=1, highlightbackground=border, highlightcolor=border)
+        frame = tk.Frame(parent, **frame_kwargs)
         inner = tk.Frame(frame, bg=bg)
         inner.pack(padx=padx, pady=pady)
-        text_label = tk.Label(inner, text=text, bg=bg, fg=fg, font=font)
+        text_label = tk.Label(inner, text=text, bg=bg, fg=eff_fg, font=font)
         widgets = [frame, inner, text_label]
         icon_label = None
         if icon is not None:
-            image = self._icon_photo(icon, icon_color or fg, 16)
+            image = self._icon_photo(icon, eff_icon_color, 16)
             if image is not None:
                 icon_label = tk.Label(inner, image=image, bg=bg)
                 widgets.append(icon_label)
@@ -1878,6 +1886,8 @@ class DashboardApp:
             text_label.pack(side="left")
             if icon_label is not None:
                 icon_label.pack(side="left", padx=(8, 0))
+        if disabled:
+            return frame
 
         def enter(_e):
             for widget in widgets:
