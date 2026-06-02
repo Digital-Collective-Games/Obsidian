@@ -12,6 +12,7 @@ import (
 	"github.com/gregsemple2003/CodexDesktop/backend/orchestration/internal/config"
 	"github.com/gregsemple2003/CodexDesktop/backend/orchestration/internal/controlplane"
 	"github.com/gregsemple2003/CodexDesktop/backend/orchestration/internal/httpapi"
+	"github.com/gregsemple2003/CodexDesktop/backend/orchestration/internal/queue"
 	"github.com/gregsemple2003/CodexDesktop/backend/orchestration/internal/taskrun"
 	"github.com/gregsemple2003/CodexDesktop/backend/orchestration/internal/temporalbackend"
 )
@@ -44,6 +45,18 @@ func main() {
 	// registry-driven queue-drain consumer reads, so a Created worktree is visible to that
 	// repo's pool-draw. A repo not in the registry is a safe fallback to the hashed segment.
 	taskService.SetPoolSegmentRegistry(cfg.RegistryPath)
+	// Launch a top-level Claude agent on manual ASSIGN (and bind its session) so the WORKTREES
+	// tab can open the running session in the editor. Gated on the same launch switch as the
+	// queue-drain consumer (CODEX_ORCHESTRATION_QUEUE_LAUNCH_AGENT). Injected ONLY into this
+	// dashboard Service (the manual-Assign entry); the consumer launches via its own dispatcher,
+	// so the agent is launched exactly once per assign and the consumer path is unchanged.
+	if cfg.LaunchQueueAgent {
+		taskService.SetAgentLauncher(queue.NewLauncher(nil), taskrun.AgentLaunchConfig{
+			Enabled:        true,
+			AllowedTools:   cfg.QueueAgentAllowedTools,
+			PermissionMode: cfg.QueueAgentPermissionMode,
+		})
+	}
 
 	worker, err := backend.StartWorker(cfg, taskService)
 	if err != nil {

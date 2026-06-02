@@ -55,6 +55,38 @@ type Service struct {
 	// Created worktree is visible to that repo's consumer pool-draw. Empty (the per-repo
 	// consumer Service) keeps the namespace-based single-segment behavior unchanged.
 	poolSegmentRegistryPath string
+	// agentLauncher launches a top-level claude agent in the freshly-bound worktree on a
+	// MANUAL Assign and records its session on the binding, so the WORKTREES tab can open the
+	// running session in the editor. Injected ONLY into the dashboard Service (the manual-
+	// Assign entry); nil = legacy bind-only Assign (no agent launched). The queue-drain
+	// consumer launches via its own dispatcher, so the agent is launched exactly once per
+	// dispatch and the consumer path is unchanged.
+	agentLauncher     AgentLauncher
+	agentLaunchConfig AgentLaunchConfig
+}
+
+// AgentLauncher launches a top-level claude agent in an owned worktree and returns the
+// session id + transcript path to bind. *queue.Launcher satisfies it; tests inject a fake
+// that returns a session without spawning a process.
+type AgentLauncher interface {
+	Start(ctx context.Context, spec queue.LaunchSpec, wait bool) (queue.LaunchResult, error)
+}
+
+// AgentLaunchConfig configures the manual-Assign agent launch (mirrors the queue agent
+// knobs). Enabled gates it; AllowedTools / PermissionMode / PromptTemplate pass through to
+// the launcher (empty fields use the launcher's validated defaults).
+type AgentLaunchConfig struct {
+	Enabled        bool
+	AllowedTools   string
+	PermissionMode string
+	PromptTemplate string
+}
+
+// SetAgentLauncher injects the manual-Assign agent launcher + its config (mirrors
+// SetDequeueProvider). Called by the dashboard control-plane wiring when launch is enabled.
+func (s *Service) SetAgentLauncher(l AgentLauncher, cfg AgentLaunchConfig) {
+	s.agentLauncher = l
+	s.agentLaunchConfig = cfg
 }
 
 type taskStateFile struct {
@@ -794,7 +826,48 @@ func (s *Service) AssignTaskToPoolWorktree(ctx context.Context, taskID string, r
 	if err != nil {
 		return TaskRunView{}, err
 	}
-	return s.startRunInDrawnLane(ctx, task, nil, drawn)
+	run, err := s.startRunInDrawnLane(ctx, task, nil, drawn)
+	if err != nil {
+		return TaskRunView{}, err
+	}
+	// Manual Assign launches a real top-level claude agent in the bound worktree and records
+	// its session, so the WORKTREES tab can open the running session in the editor. The run
+	// is already started and the worktree allocated; a launch failure (e.g. claude not on
+	// PATH) is surfaced to the operator's status but the worktree stays allocated (the
+	// operator can Eject + retry). No-op when launch is not enabled/injected.
+	if lerr := s.maybeLaunchAgent(task.TaskID, run.RepoLane.OwnedRepoRoot); lerr != nil {
+		return run, lerr
+	}
+	return run, nil
+}
+
+// maybeLaunchAgent launches a top-level claude agent in the freshly-bound worktree and
+// records its session on the binding (BindLaunchedSession), mirroring the queue-drain
+// consumer's launchAgent for the MANUAL Assign path. No-op when no launcher is injected,
+// launch is disabled, or there is no owned worktree. It launches under a DETACHED context
+// with wait=false: the agent must outlive this request (its lifecycle is owned by Eject /
+// reclaim, not the HTTP call).
+func (s *Service) maybeLaunchAgent(taskID string, worktreePath string) error {
+	if s.agentLauncher == nil || !s.agentLaunchConfig.Enabled || strings.TrimSpace(worktreePath) == "" {
+		return nil
+	}
+	prompt, err := queue.BuildTaskAgentPrompt(s.agentLaunchConfig.PromptTemplate, taskID, worktreePath)
+	if err != nil {
+		return fmt.Errorf("build launch prompt for %s: %w", taskID, err)
+	}
+	res, err := s.agentLauncher.Start(context.Background(), queue.LaunchSpec{
+		WorktreePath:   worktreePath,
+		Prompt:         prompt,
+		AllowedTools:   s.agentLaunchConfig.AllowedTools,
+		PermissionMode: s.agentLaunchConfig.PermissionMode,
+	}, false)
+	if err != nil {
+		return fmt.Errorf("launch agent for %s: %w", taskID, err)
+	}
+	if _, err := s.BindLaunchedSession(taskID, res.SessionID, res.TranscriptPath, res.PID); err != nil {
+		return fmt.Errorf("bind launched session for %s: %w", taskID, err)
+	}
+	return nil
 }
 
 func (s *Service) Run(ctx context.Context, runID string) (TaskRunView, error) {
