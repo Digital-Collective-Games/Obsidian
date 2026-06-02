@@ -13,10 +13,15 @@ WORKTREE_STATUS_BACKGROUNDS = {
 }
 WORKTREE_STATUS_DEFAULT_BACKGROUND = "#181c22"
 
-# Status accent (left rail + chip foreground) per status.
+# Status accent per status, matching the Stitch "Monolithic Terminal" mockup: idle = a
+# subtle gray stripe, allocated (live/running) = bright cyan, needs-human/review (a parked
+# run gate) = error red. The repo name reuses this color when allocated; the status chip
+# fills with it for the bright states (the idle chip stays muted gray — see
+# _build_worktree_status_chip).
 WORKTREE_STATUS_COLORS = {
-    "allocated": "#16d9f5",
-    "idle": "#5ee69a",
+    "idle": "#3b494c",
+    "allocated": "#00e5ff",
+    "needs_human": "#ffb4ab",
 }
 WORKTREE_STATUS_DEFAULT_COLOR = "#8fa8bb"
 
@@ -34,20 +39,31 @@ def worktree_status_background(worktree: dict[str, object]) -> str:
     return WORKTREE_STATUS_BACKGROUNDS.get(status, WORKTREE_STATUS_DEFAULT_BACKGROUND)
 
 
+def worktree_needs_human(worktree: dict[str, object]) -> bool:
+    """Whether an allocated worktree's run is parked awaiting a human (closure / a research,
+    plan, or regression gate, or an interrupt review) — i.e. it "needs human / review". Idle
+    worktrees never need a human."""
+    if str(worktree.get("status") or "").lower() != "allocated":
+        return False
+    gate = str(worktree.get("run_gate_state") or "").lower()
+    return any(token in gate for token in ("parked", "await", "human", "review", "interrupt"))
+
+
 def worktree_status_color(worktree: dict[str, object]) -> str:
     status = str(worktree.get("status") or "").lower()
+    if status == "allocated":
+        if worktree_needs_human(worktree):
+            return WORKTREE_STATUS_COLORS["needs_human"]
+        return WORKTREE_STATUS_COLORS["allocated"]
     return WORKTREE_STATUS_COLORS.get(status, WORKTREE_STATUS_DEFAULT_COLOR)
 
 
 def worktree_status_label(worktree: dict[str, object]) -> str:
     status = str(worktree.get("status") or "").lower()
-    if status == "allocated":
-        gate = str(worktree.get("run_gate_state") or "").strip()
-        if gate:
-            return f"ALLOCATED - {gate.replace('_', ' ').upper()}"
-        return "ALLOCATED"
     if status == "idle":
         return "IDLE"
+    if status == "allocated":
+        return "REVIEW" if worktree_needs_human(worktree) else "ALLOCATED"
     return status.upper() or "UNKNOWN"
 
 
@@ -104,6 +120,25 @@ def worktree_matches_repo(worktree: dict[str, object], repo: dict[str, object]) 
     if repo_root and _same_path(repo_root, str(worktree.get("repo") or "").strip()):
         return True
     return False
+
+
+def worktree_issue_url(worktree: dict[str, object], repos: Iterable[dict[str, object]]) -> str:
+    """The GitHub issue URL for an allocated worktree's bound task, or "" if unresolvable.
+
+    The bound task id (`Task-<n>`) maps to issue `#<n>` in the worktree repo's task provider
+    repo (`owner/name`, resolved from the registry). Returns "" when there is no bound task,
+    the id carries no number, or the repo has no `owner/name` provider — the caller then
+    renders the task id as plain (non-link) text rather than a dead link.
+    """
+    task_id = str(worktree.get("task_id") or "").strip()
+    digits = "".join(ch for ch in task_id if ch.isdigit())
+    if not digits:
+        return ""
+    match = next((repo for repo in repos if worktree_matches_repo(worktree, repo)), None)
+    provider = str((match or {}).get("task_provider_repo") or "").strip().strip("/")
+    if provider.count("/") != 1 or not all(provider.split("/")):
+        return ""
+    return f"https://github.com/{provider}/issues/{int(digits)}"
 
 
 def filter_worktrees_by_repo(

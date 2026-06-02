@@ -32,6 +32,7 @@ from app.codex_dashboard.worktrees_tab import (
     worktree_detail_lines,
     worktree_face_lines,
     worktree_heading_repo,
+    worktree_issue_url,
     worktree_matches_repo,
     worktree_status_background,
     worktree_status_color,
@@ -91,9 +92,29 @@ class WorktreesTabHelperTests(unittest.TestCase):
         self.assertNotEqual(
             worktree_status_color(ALLOCATED_WORKTREE), worktree_status_color(IDLE_WORKTREE)
         )
-        self.assertIn("ALLOCATED", worktree_status_label(ALLOCATED_WORKTREE))
-        self.assertIn("RUNNING", worktree_status_label(ALLOCATED_WORKTREE))
+        # Mockup-style short chips: a live allocated slot reads ALLOCATED, idle reads IDLE.
+        self.assertEqual(worktree_status_label(ALLOCATED_WORKTREE), "ALLOCATED")
         self.assertEqual(worktree_status_label(IDLE_WORKTREE), "IDLE")
+
+    def test_parked_allocated_worktree_needs_review_and_reads_red(self) -> None:
+        # A parked run gate means a human is needed: the chip reads REVIEW and the accent is
+        # the error-red, distinct from a live (cyan) allocated slot.
+        parked = {**ALLOCATED_WORKTREE, "run_gate_state": "parked_awaiting_closure"}
+        self.assertEqual(worktree_status_label(parked), "REVIEW")
+        self.assertEqual(worktree_status_color(parked), "#ffb4ab")
+        self.assertNotEqual(
+            worktree_status_color(parked), worktree_status_color(ALLOCATED_WORKTREE)
+        )
+
+    def test_issue_url_links_bound_task_to_provider_issue(self) -> None:
+        # The bound task id links to issue #<n> in the repo's task_provider_repo (owner/name).
+        self.assertEqual(
+            worktree_issue_url(ALLOCATED_WORKTREE, REPOS),
+            "https://github.com/gregsemple2003/obsidian/issues/7",
+        )
+        # Idle (no bound task) and a repo without a provider both yield no link.
+        self.assertEqual(worktree_issue_url(IDLE_WORKTREE, REPOS), "")
+        self.assertEqual(worktree_issue_url(OTHER_REPO_WORKTREE, REPOS), "")
 
     def test_heading_uses_short_repo_segment_for_both_states(self) -> None:
         # B1: the heading must be the short repo token in BOTH states, NOT the raw `repo`

@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import threading
 import tkinter as tk
+import webbrowser
 from datetime import UTC, datetime, timedelta, tzinfo
 from pathlib import Path
 from tkinter import ttk
@@ -66,10 +67,9 @@ from .worktrees_tab import (
     is_allocated,
     open_task_options,
     repo_filter_options,
-    worktree_chip_mark_filled,
     worktree_detail_lines,
-    worktree_face_lines,
     worktree_heading_repo,
+    worktree_issue_url,
     worktree_status_background,
     worktree_status_color,
     worktree_status_label,
@@ -575,6 +575,19 @@ class DashboardApp:
         style.map(
             "Quiet.TButton",
             background=[("active", "#3b4450")],
+        )
+        # Destructive action (Eject) — the mockup's error-red button.
+        style.configure(
+            "Danger.TButton",
+            background="#5a2327",
+            foreground="#ffb4ab",
+            font=("Inter", 9, "bold"),
+            borderwidth=0,
+            focusthickness=0,
+        )
+        style.map(
+            "Danger.TButton",
+            background=[("active", "#7a2d31")],
         )
         style.configure(
             "HeaderQuiet.TButton",
@@ -1295,142 +1308,198 @@ class DashboardApp:
             self._build_worktree_row(worktree)
 
     def _build_worktree_row(self, worktree: dict[str, object]) -> None:
-        # Allocated vs idle is a perceivable background-color distinction (REG-010), not
-        # just a text label.
+        # The worktree panel matches the Stitch "Monolithic Terminal" mockup: ONE horizontal
+        # row — a short accent stripe, then the repo (UPPERCASE) + status chip over the full
+        # monospace path with an inline copy control, and the action(s) right-justified
+        # (Assign for idle; Eject + Dequeue for allocated, with the bound task id linking to
+        # its GitHub issue). Allocated/idle/needs-review reads from the stripe + chip color
+        # (cyan / gray / red). No bottom button drawer.
         row_bg = worktree_status_background(worktree)
         accent_color = worktree_status_color(worktree)
-        row = tk.Frame(self.worktrees_rows_content, bg=row_bg, padx=10, pady=9)
+        row = tk.Frame(self.worktrees_rows_content, bg=row_bg, padx=12, pady=10)
         row.pack(fill="x", pady=(0, 8))
         row.bind("<MouseWheel>", self._on_worktrees_mousewheel)
 
-        accent = tk.Frame(row, bg=accent_color, width=3)
-        accent.pack(side="left", fill="y", padx=(0, 10))
-        accent.bind("<MouseWheel>", self._on_worktrees_mousewheel)
+        # A wider (2x), shorter (66% height), vertically-centered accent stripe in a fixed
+        # gutter — a status bar, not a full-height hairline.
+        gutter = tk.Frame(row, bg=row_bg, width=6)
+        gutter.pack(side="left", fill="y", padx=(0, 12))
+        gutter.pack_propagate(False)
+        stripe = tk.Frame(gutter, bg=accent_color)
+        stripe.place(relx=0.0, rely=0.5, anchor="w", relheight=0.66, relwidth=1.0)
+
+        # Right-justified action cluster (packed before content so content fills the middle).
+        actions = tk.Frame(row, bg=row_bg)
+        actions.pack(side="right")
+        self._build_worktree_row_actions(actions, worktree, row_bg)
 
         content = tk.Frame(row, bg=row_bg)
-        content.pack(side="left", fill="both", expand=True)
+        content.pack(side="left", fill="x", expand=True)
 
         head = tk.Frame(content, bg=row_bg)
         head.pack(anchor="w", fill="x")
-        chip = self._build_worktree_status_chip(head, worktree)
-        chip.pack(side="left")
-        # The heading shows the SHORT repo token in BOTH idle and allocated states; the
-        # full bound checkout path lives in the Details reveal (B1).
+        # Repo name FIRST, UPPERCASE (mockup): the accent color when allocated, white when idle.
         repo_label = tk.Label(
             head,
-            text=worktree_heading_repo(worktree) or "unknown repo",
+            text=(worktree_heading_repo(worktree) or "unknown repo").upper(),
             bg=row_bg,
-            fg="#dfe2eb",
-            font=("Space Grotesk", 11, "bold"),
+            fg=accent_color if is_allocated(worktree) else "#dfe2eb",
+            font=("Space Grotesk", 12, "bold"),
             anchor="w",
         )
-        repo_label.pack(side="left", padx=(10, 0))
+        repo_label.pack(side="left")
+        chip = self._build_worktree_status_chip(head, worktree)
+        chip.pack(side="left", padx=(10, 0))
+        # The bound-task id rides the heading line as a link to its running GitHub issue
+        # (keeping the full path + copy control unobstructed on the line below).
+        if is_allocated(worktree) and str(worktree.get("task_id") or ""):
+            self._build_worktree_task_link(head, worktree, row_bg).pack(side="left", padx=(12, 0))
 
-        # On-face glanceable fields only (INTERFACE-DESIGNER: default surface optimized
-        # for ordinary interpretation). The bound task reads as cyan data; the short
-        # local dir reads as muted metadata and carries a full-path hover tooltip. The
-        # full path / ids / session / pid / transcript live behind the Details reveal.
+        # The FULL local dir in monospace white, with the copy control inline at the END of
+        # the path (mockup), plus a full-path hover tooltip.
+        path_row = tk.Frame(content, bg=row_bg)
+        path_row.pack(anchor="w", fill="x", pady=(5, 0))
         full_path = str(worktree.get("worktree_path") or "")
-        for label, value in worktree_face_lines(worktree):
-            line = tk.Label(
-                content,
-                text=f"{label}: {value}",
-                bg=row_bg,
-                fg="#c3f5ff" if label == "Task" else "#9fbdcc",
-                font=("Inter", 9),
-                anchor="w",
-                justify="left",
-                wraplength=720,
-            )
-            line.pack(anchor="w", pady=(4, 0), fill="x")
-            line.bind("<MouseWheel>", self._on_worktrees_mousewheel)
-            if label == "Local dir" and full_path:
-                self._bind_tooltip(line, full_path)
+        path_label = tk.Label(
+            path_row,
+            text=full_path or "(no path)",
+            bg=row_bg,
+            fg="#dfe2eb",
+            font=("Courier New", 10),
+            anchor="w",
+        )
+        path_label.pack(side="left")
+        path_label.bind("<MouseWheel>", self._on_worktrees_mousewheel)
+        if full_path:
+            self._bind_tooltip(path_label, full_path)
+            self._worktree_icon_button(
+                path_row,
+                "copy",
+                lambda path=full_path: self.copy_worktree_path(path),
+                "Copy path",
+                row_bg,
+            ).pack(side="left", padx=(8, 0))
 
-        controls = tk.Frame(content, bg=row_bg)
-        controls.pack(anchor="w", pady=(8, 0), fill="x")
-        self._build_worktree_row_controls(controls, worktree)
-
-        for widget in (content, head, chip, repo_label, controls):
+        for widget in (content, head, chip, repo_label, gutter, stripe, actions):
             widget.bind("<MouseWheel>", self._on_worktrees_mousewheel)
 
-    def _build_worktree_status_chip(self, parent: tk.Misc, worktree: dict[str, object]) -> tk.Frame:
-        # The status chip carries a leading STATE MARK, not text only (UPDATE 5 / B2): a
-        # filled cyan/green swatch for allocated, a hollow/outlined one for idle, within
-        # the WORKTREE_STATUS_COLORS family. Drawn as a small 0px-radius Canvas square
-        # (no emoji), matching the Monolithic-Terminal style.
-        chip_bg = "#10141a"
-        accent_color = worktree_status_color(worktree)
-        chip = tk.Frame(parent, bg=chip_bg, padx=8, pady=3)
-        mark = tk.Canvas(
-            chip,
-            width=8,
-            height=8,
-            bg=chip_bg,
-            highlightthickness=0,
-            bd=0,
-        )
-        if worktree_chip_mark_filled(worktree):
-            mark.create_rectangle(0, 0, 7, 7, fill=accent_color, outline=accent_color)
+    def _build_worktree_status_chip(self, parent: tk.Misc, worktree: dict[str, object]) -> tk.Label:
+        # A solid 0px-radius status pill (mockup): the bright states (allocated cyan,
+        # needs-review red) fill the chip with dark uppercase text; the idle chip stays a
+        # muted gray-on-gray so idle reads as quiet next to an active slot.
+        if is_allocated(worktree):
+            chip_bg = worktree_status_color(worktree)
+            chip_fg = "#10141a"
         else:
-            mark.create_rectangle(0, 0, 7, 7, fill=chip_bg, outline=accent_color)
-        mark.pack(side="left", padx=(0, 5))
-        tk.Label(
-            chip,
+            chip_bg = "#31353c"
+            chip_fg = "#bac9cc"
+        return tk.Label(
+            parent,
             text=worktree_status_label(worktree),
             bg=chip_bg,
-            fg=accent_color,
+            fg=chip_fg,
             font=("Space Grotesk", 8, "bold"),
-        ).pack(side="left")
-        return chip
+            padx=6,
+            pady=1,
+        )
 
-    def _build_worktree_row_controls(self, parent: tk.Frame, worktree: dict[str, object]) -> None:
+    def _build_worktree_task_link(self, parent: tk.Misc, worktree: dict[str, object], row_bg: str) -> tk.Label:
+        # The bound-task id as a clickable link to its running GitHub issue (cyan +
+        # underline). Falls back to plain white text when the issue URL can't be resolved.
+        task_id = str(worktree.get("task_id") or "")
+        issue_url = worktree_issue_url(worktree, self.worktrees_repos)
+        label = tk.Label(
+            parent,
+            text=task_id,
+            bg=row_bg,
+            fg="#00e5ff" if issue_url else "#dfe2eb",
+            font=("Courier New", 10, "underline") if issue_url else ("Courier New", 10),
+            cursor="hand2" if issue_url else "",
+        )
+        label.bind("<MouseWheel>", self._on_worktrees_mousewheel)
+        if issue_url:
+            label.bind("<Button-1>", lambda _e, url=issue_url: webbrowser.open(url))
+            self._bind_tooltip(label, f"Open issue: {issue_url}")
+        return label
+
+    def _build_worktree_row_actions(self, parent: tk.Frame, worktree: dict[str, object], row_bg: str) -> None:
+        # The right-justified action cluster (mockup): no bottom drawer. Allocated shows a
+        # Details icon + DEQUEUE + a red EJECT button; idle shows a Details icon + a Destroy
+        # (trash) icon + the ASSIGN button. (The bound-task link lives on the heading line.)
         worktree_id = str(worktree.get("worktree_id") or "")
-        worktree_path = str(worktree.get("worktree_path") or "")
-        ttk.Button(
-            parent,
-            text="COPY PATH",
-            style="Quiet.TButton",
-            command=lambda path=worktree_path: self.copy_worktree_path(path),
-        ).pack(side="left", padx=(0, 6))
-        ttk.Button(
-            parent,
-            text="DETAILS",
-            style="Quiet.TButton",
-            command=lambda wt=dict(worktree): self.open_worktree_details(wt),
-        ).pack(side="left", padx=(0, 6))
-
         if is_allocated(worktree):
             run_id = str(worktree.get("run_id") or "")
             task_id = str(worktree.get("task_id") or "")
-            ttk.Button(
-                parent,
-                text="EJECT",
-                style="Quiet.TButton",
-                command=lambda rid=run_id, wid=worktree_id: self.eject_worktree_action(rid, wid),
-            ).pack(side="left", padx=(0, 6))
+            self._worktree_icon_button(
+                parent, "details", lambda wt=dict(worktree): self.open_worktree_details(wt),
+                "Details", row_bg,
+            ).pack(side="left", padx=(0, 10))
             dequeue_button = ttk.Button(
-                parent,
-                text="DEQUEUE",
-                style="Quiet.TButton",
+                parent, text="DEQUEUE", style="Quiet.TButton",
                 command=lambda tid=task_id: self.dequeue_task_action(tid),
             )
             if not task_id:
                 dequeue_button.state(["disabled"])
-            dequeue_button.pack(side="left", padx=(0, 6))
+            dequeue_button.pack(side="left", padx=(0, 8))
+            ttk.Button(
+                parent, text="EJECT", style="Danger.TButton",
+                command=lambda rid=run_id, wid=worktree_id: self.eject_worktree_action(rid, wid),
+            ).pack(side="left")
         else:
+            self._worktree_icon_button(
+                parent, "details", lambda wt=dict(worktree): self.open_worktree_details(wt),
+                "Details", row_bg,
+            ).pack(side="left", padx=(0, 10))
+            self._worktree_icon_button(
+                parent, "destroy", lambda wid=worktree_id: self.destroy_worktree_action(wid),
+                "Destroy", row_bg,
+            ).pack(side="left", padx=(0, 12))
             ttk.Button(
-                parent,
-                text="ASSIGN TASK",
-                style="Accent.TButton",
+                parent, text="ASSIGN", style="Accent.TButton",
                 command=lambda wt=dict(worktree): self.open_assign_popup(wt),
-            ).pack(side="left", padx=(0, 6))
-            ttk.Button(
-                parent,
-                text="DESTROY",
-                style="Quiet.TButton",
-                command=lambda wid=worktree_id: self.destroy_worktree_action(wid),
-            ).pack(side="left", padx=(0, 6))
+            ).pack(side="left")
+
+    def _worktree_icon_button(self, parent, kind, command, tooltip, row_bg):
+        # A borderless 0px-radius vector-icon button (Monolithic-Terminal: copy / details /
+        # destroy drawn as Tk Canvas line art — no Material font / emoji). Muted at rest, an
+        # accent (or red for destroy) on hover; the tooltip names the action so the glyph is
+        # never ambiguous.
+        canvas = tk.Canvas(
+            parent, width=18, height=18, bg=row_bg, highlightthickness=0, bd=0, cursor="hand2"
+        )
+        rest = "#849396"
+        hot = "#ffb4ab" if kind == "destroy" else "#00e5ff"
+        self._draw_worktree_icon(canvas, kind, rest)
+
+        def repaint(color: str) -> None:
+            canvas.delete("all")
+            self._draw_worktree_icon(canvas, kind, color)
+
+        canvas.bind("<Enter>", lambda _e: repaint(hot))
+        canvas.bind("<Leave>", lambda _e: repaint(rest))
+        canvas.bind("<Button-1>", lambda _e: command())
+        canvas.bind("<MouseWheel>", self._on_worktrees_mousewheel)
+        self._bind_tooltip(canvas, tooltip)
+        return canvas
+
+    def _draw_worktree_icon(self, canvas: tk.Canvas, kind: str, color: str) -> None:
+        if kind == "copy":
+            # content_copy: a back sheet peeking behind a front sheet.
+            canvas.create_rectangle(6, 6, 15, 15, outline=color, width=1)
+            canvas.create_rectangle(3, 3, 12, 12, outline=color, width=1)
+        elif kind == "details":
+            # information "i" in a circle.
+            canvas.create_oval(2, 2, 16, 16, outline=color, width=1)
+            canvas.create_oval(8, 4, 10, 6, fill=color, outline=color)
+            canvas.create_line(9, 8, 9, 13, fill=color, width=1)
+        elif kind == "destroy":
+            # a trash can: lid + handle + tapered body + ribs.
+            canvas.create_line(3, 5, 15, 5, fill=color, width=1)
+            canvas.create_line(7, 3, 11, 3, fill=color, width=2)
+            canvas.create_line(5, 5, 6, 15, fill=color, width=1)
+            canvas.create_line(13, 5, 12, 15, fill=color, width=1)
+            canvas.create_line(6, 15, 12, 15, fill=color, width=1)
+            canvas.create_line(9, 7, 9, 13, fill=color, width=1)
 
     def copy_worktree_path(self, path: str) -> None:
         if not path:
