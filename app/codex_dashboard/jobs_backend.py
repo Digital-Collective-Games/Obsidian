@@ -160,8 +160,8 @@ def reason_text(
     if status == "drifted":
         note = _first_schedule_note(schedules)
         if note:
-            return f"Runtime drift detected. {note}"
-        return "Runtime drift detected between Git desired state and Temporal."
+            return f"Git spec and Temporal differ. {note}"
+        return "Git spec and the Temporal schedule differ; UPDATE re-applies the Git spec."
     if status == "disabled":
         return "Desired state is disabled."
 
@@ -281,9 +281,9 @@ JOB_STATUS_CHIPS = {
     # in-sync = cyan; drifted = amber/warning (diverged but present); missing/blocked = hard
     # error-red (absent / broken) — the two attention states are tellable apart by color.
     "in_sync": ("IN SYNC", "#16323a", "#7fdfe8"),
-    "drifted": ("DRIFTED", "#33280f", "#ffcf8f"),
-    "missing": ("MISSING", "#3a1417", "#ffb4ab"),
-    "blocked": ("BLOCKED", "#3a1417", "#ffb4ab"),
+    "drifted": ("DRIFTED", "#3a1f22", "#ffc1bd"),
+    "missing": ("MISSING", "#4a1418", "#ffb4ab"),
+    "blocked": ("BLOCKED", "#4a1418", "#ffb4ab"),
     "disabled": ("DISABLED", "#31353c", "#adcbda"),
     "unknown": ("UNKNOWN", "#31353c", "#8fa8bb"),
 }
@@ -295,6 +295,25 @@ def job_status_chip(status: str) -> tuple[str, str, str]:
     if key in JOB_STATUS_CHIPS:
         return JOB_STATUS_CHIPS[key]
     return (key.replace("_", " ").replace("-", " ").upper() or "UNKNOWN", "#31353c", "#8fa8bb")
+
+
+def schedule_owner_map(snapshot: dict[str, Any]) -> dict[str, str]:
+    """Map each schedule id to its owning job id, so the SYNC_AUDIT "last UPDATE" lines can
+    name jobs instead of raw schedule ids. Best-effort: only ids the backend exposes."""
+    mapping: dict[str, str] = {}
+    jobs = snapshot.get("jobs", [])
+    for job in jobs if isinstance(jobs, list) else []:
+        if not isinstance(job, dict):
+            continue
+        job_id = str(job.get("job_id") or "")
+        definition = job.get("definition", {})
+        definition = definition if isinstance(definition, dict) else {}
+        for schedule in _dict_list(definition.get("schedules")):
+            for key in ("id", "schedule_id", "schedule_handle", "name"):
+                schedule_id = _text(schedule.get(key))
+                if schedule_id:
+                    mapping[schedule_id] = job_id
+    return mapping
 
 
 def jobs_attention_jobs(snapshot: dict[str, Any]) -> list[dict[str, Any]]:

@@ -116,6 +116,15 @@ def render_glyph(kind: str, color: str, size: int, supersample: int = SUPERSAMPL
         draw.arc(box, 20, 160, fill=rgba, width=stroke)
         line([(0.70, 0.41), (0.82, 0.41), (0.79, 0.52)])
         line([(0.30, 0.59), (0.18, 0.59), (0.21, 0.48)])
+    elif kind == "clock":
+        circle(0.12, 0.12, 0.88, 0.88)
+        line([(0.5, 0.5), (0.5, 0.28)])
+        line([(0.5, 0.5), (0.68, 0.56)])
+    elif kind == "warning":
+        # a warning triangle with an exclamation mark.
+        line([(0.5, 0.16), (0.9, 0.82), (0.1, 0.82), (0.5, 0.16)])
+        line([(0.5, 0.4), (0.5, 0.62)])
+        draw.ellipse([pt(0.45, 0.69), pt(0.55, 0.79)], fill=rgba)
     else:
         raise ValueError(f"unknown glyph kind: {kind!r}")
 
@@ -193,4 +202,6 @@ GLYPH_KINDS = (
     "plus",
     "eject",
     "sync",
+    "clock",
+    "warning",
 )

@@ -42,6 +42,7 @@ from .jobs_backend import (
     job_is_running,
     jobs_attention_jobs,
     jobs_backend_error_snapshot,
+    schedule_owner_map,
     start_job_run,
     summarize_apply_report,
     sync_jobs_snapshot,
@@ -1052,7 +1053,7 @@ class DashboardApp:
         audit_scroll.configure(command=self.jobs_audit_text.yview)
         self.jobs_audit_text.pack(side="left", fill="both", expand=True)
         self.jobs_audit_text.tag_configure("headline", foreground="#dfe2eb", font=("Space Grotesk", -13, "bold"))
-        self.jobs_audit_text.tag_configure("section", foreground="#7fdfe8", font=("Inter", -11, "bold"), spacing1=12)
+        self.jobs_audit_text.tag_configure("section", foreground="#7fdfe8", font=("Inter", -12, "bold"), spacing1=12)
         self.jobs_audit_text.tag_configure("muted", foreground="#849396")
         self.jobs_audit_text.tag_configure("ok", foreground="#7fdfe8")
         self.jobs_audit_text.tag_configure("jobid", foreground="#dfe2eb", font=("Consolas", -12, "bold"), spacing1=8)
@@ -2175,11 +2176,12 @@ class DashboardApp:
                 f"+{changes['created']} created  ~{changes['updated']} updated  -{changes['deleted']} deleted\n",
                 "muted",
             )
+            owner = schedule_owner_map(snapshot)
             for field, sign in (("created_schedule_ids", "+"), ("updated_schedule_ids", "~"), ("deleted_schedule_ids", "-")):
                 ids = report.get(field)
                 if isinstance(ids, list):
                     for schedule_id in ids[:8]:
-                        text.insert("end", f"  {sign} {schedule_id}\n", "muted")
+                        text.insert("end", f"  {sign} {owner.get(str(schedule_id), str(schedule_id))}\n", "muted")
 
         attention_jobs = jobs_attention_jobs(snapshot)
         if not attention_jobs:
@@ -2190,7 +2192,6 @@ class DashboardApp:
             text.insert("end", "UPDATE applies Git → Temporal for:\n", "muted")
             for job in attention_jobs:
                 text.insert("end", f"\n{job.get('job_id', '')}\n", "jobid")
-                text.insert("end", f"{str(job.get('observed_label', '')).upper()}\n", "drift")
                 desired = str(job.get("desired_label", "")).strip()
                 observed = str(job.get("observed_label", "")).strip()
                 if desired:
@@ -2245,16 +2246,20 @@ class DashboardApp:
 
         id_content = cell(widths["JOB_ID"])
         id_color = "#ffb4ab" if status in ("blocked", "missing") else ("#ffc1bd" if attention else "#c3f5ff")
+        icon_kind = "sync" if job_is_running(job) else ("warning" if attention else "clock")
+        id_icon = self._icon_photo(icon_kind, id_color, 14)
+        if id_icon is not None:
+            tk.Label(id_content, image=id_icon, bg=row_bg).pack(side="left", padx=(0, 8))
         tk.Label(id_content, text=str(job.get("job_id", "")), bg=row_bg, fg=id_color,
-                 font=("Consolas", -13, "bold"), anchor="w").pack(anchor="w")
+                 font=("Consolas", -13, "bold")).pack(side="left")
 
         sched_primary, sched_detail = job_schedule_display(job)
         sched_content = cell(widths["SCHEDULE"])
-        tk.Label(sched_content, text=sched_primary or "—", bg=row_bg, fg="#dfe2eb",
-                 font=("Consolas", -12), anchor="w").pack(anchor="w")
+        tk.Label(sched_content, text=sched_primary or "—", bg="#262a31", fg="#dfe2eb",
+                 font=("Consolas", -12), padx=6, pady=1).pack(anchor="w")
         if sched_detail:
             tk.Label(sched_content, text=sched_detail, bg=row_bg, fg="#849396",
-                     font=("Inter", -11), anchor="w").pack(anchor="w")
+                     font=("Inter", -11), anchor="w").pack(anchor="w", pady=(3, 0))
 
         status_content = cell(widths["STATUS"])
         chip_label, chip_bg, chip_fg = job_status_chip(status)
@@ -2264,9 +2269,10 @@ class DashboardApp:
         last_primary, last_detail = job_last_run_display(job)
         last_content = cell(widths["LAST_RUN"])
         tk.Label(last_content, text=last_primary, bg=row_bg, fg="#dfe2eb",
-                 font=("Inter", -12), anchor="w").pack(anchor="w")
+                 font=("Space Grotesk", -13, "bold"), anchor="w").pack(anchor="w")
         if last_detail:
-            tk.Label(last_content, text=last_detail, bg=row_bg, fg="#849396",
+            detail_color = "#ffb4ab" if "fail" in last_detail.lower() else "#849396"
+            tk.Label(last_content, text=last_detail, bg=row_bg, fg=detail_color,
                      font=("Inter", -11), anchor="w").pack(anchor="w")
 
         for widget in (row, inner, actions):

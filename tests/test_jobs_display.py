@@ -11,6 +11,7 @@ from app.codex_dashboard.jobs_backend import (
     job_status_chip,
     jobs_attention_jobs,
     relative_time_label,
+    schedule_owner_map,
     summarize_apply_report,
 )
 
@@ -62,6 +63,16 @@ class JobsDisplayHelperTests(unittest.TestCase):
             {"job_id": "c", "status": "missing"},
         ]}
         self.assertEqual([j["job_id"] for j in jobs_attention_jobs(snapshot)], ["b", "c"])
+
+    def test_schedule_owner_map(self) -> None:
+        snapshot = {"jobs": [
+            {"job_id": "JOB-A", "definition": {"schedules": [{"id": "sched-a"}]}},
+            {"job_id": "JOB-B", "definition": {"schedules": [{"schedule_id": "sched-b"}]}},
+            {"job_id": "JOB-C", "definition": {"schedules": [{}]}},
+        ]}
+        mapping = schedule_owner_map(snapshot)
+        self.assertEqual(mapping.get("sched-a"), "JOB-A")
+        self.assertEqual(mapping.get("sched-b"), "JOB-B")
 
     def test_summarize_apply_report(self) -> None:
         report = {"created_schedule_ids": ["x"], "updated_schedule_ids": ["y", "z"], "deleted_schedule_ids": []}
