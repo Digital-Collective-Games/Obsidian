@@ -18,9 +18,12 @@ slot, one parked allocated slot (needs review), one idle slot.
 - **Mockup color scheme**: allocated = cyan, idle = gray, needs-review (a parked run gate)
   = red; the red also drives the **EJECT** button (Assign stays the cyan accent).
 - **Status chip** = a solid 0px-radius pill: cyan `ALLOCATED` / red `REVIEW` / gray `IDLE`.
-- **Full local dir** shown in monospace (Courier New), **white**, with the **copy control
-  inline at the end of the path** (drawn as Tk Canvas vector art — the mockup's
-  `content_copy` glyph; no Material font / emoji).
+- **Full local dir** shown in monospace (**Consolas**, the mockup's clean mono — not blocky
+  Courier), **white**, with the **copy control inline at the end of the path**.
+- **Crisp icons**: all glyphs (copy / details / destroy / close / filter / sort / radio /
+  check / assignment_add) are rendered via [glyphs.py](../../../../app/codex_dashboard/glyphs.py)
+  with **4× PIL supersampling + LANCZOS downscale** (anti-aliased, not "8-bit" 1px Canvas
+  lines).
 - **Bound task id is a clickable link** to its running GitHub issue (e.g. `Task-0016` →
   `https://github.com/Digital-Collective-Games/Obsidian/issues/16`), on the heading line.
   **No agent-model chip** (the mockup's `smart_toy` "Claude-3.5-Sonnet" is excluded — E4).
@@ -28,14 +31,47 @@ slot, one parked allocated slot (needs review), one idle slot.
   Destroy (trash) icon + ASSIGN for idle. Each icon is borderless, accent-on-hover, with a
   hover tooltip naming the action.
 
+## ASSIGN_TASK_OPERATOR popup — mockup conformance
+
+Redesigned the Assign popup to the second Stitch mockup
+(`stitch_codex_token_velocity_overlay (5)\screen.png` + `code.html`).
+
+![Redesigned Assign popup](./assign-popup.png)
+
+- **Cyan top border**; tonal layering (header/footer `surface-container-high` #262a31,
+  toolbar/cards `surface-container` #1c2026, list `surface-container-lowest` #0a0e14) with
+  toolbar/footer divider hairlines.
+- **Header**: `assignment_add` icon + `ASSIGN_TASK_OPERATOR` title + `Target Worktree:`
+  subtitle (mono) + close **X**.
+- **Toolbar**: `FILTER_TASKS_BY_ID_OR_DESC...` field (live filter) + `SORT: ID` (toggles
+  id asc/desc).
+- **Task cards**: radio + task id + a color-coded status chip (`WAITING_ON_YOU` / `READY`
+  cyan family, `BLOCKED` orange-red) + description. **Selected** = cyan left border + a
+  solid filled cyan radio + cyan id; **blocked** = orange border, muted/disabled (not
+  selectable).
+- **Footer**: `CANCEL` + a **`BIND_TASK`** primary CTA rendered as a baked image with the
+  mockup's vertical **cyan gradient glow** (`#c3f5ff`→`#00e5ff`), heavy Space Grotesk text,
+  and a `check_circle` glyph.
+- New pure helpers (testable): `task_state_category` / `task_state_chip_label` /
+  `task_is_assignable` / `filter_task_options` / `sort_task_options` /
+  `first_assignable_task_id`.
+
 ## Verification
 
-- `python -m py_compile` clean; full unit suite green (184 tests), including the updated
-  status-label/color tests + new `worktree_issue_url` and needs-review (red) coverage.
-- Preview harness: [preview_card.py](../Runtime/preview_card.py) (task-owned, throwaway;
-  `Testing/Runtime/` is gitignored so the harness itself is not committed).
+- `python -m py_compile` clean; full unit suite green (**189 tests**) — added glyph-render
+  tests ([test_glyphs.py](../../../../tests/test_glyphs.py)) and Assign-popup task-helper
+  tests.
+- **Adversarial multi-dimension fidelity review** (8-agent workflow, twice): each reviewer
+  compared the rendered capture against the mockup image **and** its source HTML across
+  typography / layout / spacing / color / icons / buttons / component-semantics. After the
+  first round's fixes, the re-review reported **0 blocking** discrepancies; color, icons,
+  and buttons verdict **match**.
+- Preview harnesses: [preview_card.py](../Runtime/preview_card.py),
+  [preview_popup.py](../Runtime/preview_popup.py) (task-owned, throwaway; `Testing/Runtime/`
+  is gitignored so the harnesses are not committed).
 
 ## Remaining gate
 
-This is a visual redesign of the surface REG-010 covers; before closure it still needs a
-fresh clean-context INTERFACE-DESIGNER review + a REG-010 re-capture against the live tab.
+This is a visual redesign of surfaces REG-010 (cards) and REG-019 (Assign popup) cover;
+before closure it still needs a fresh clean-context INTERFACE-DESIGNER review + REG-010/019
+re-captures against the live tab.

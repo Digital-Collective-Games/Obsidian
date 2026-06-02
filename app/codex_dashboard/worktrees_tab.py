@@ -274,6 +274,65 @@ def open_task_options(tasks_snapshot: dict[str, object]) -> list[dict[str, str]]
     return options
 
 
+def task_state_category(state: str) -> str:
+    """Bucket a task state into the Assign-popup chip categories (mockup): blocked / ready /
+    waiting (a human gate) / other. Substring-matched so it tolerates label variants."""
+    s = str(state or "").lower()
+    if "block" in s:
+        return "blocked"
+    if "ready" in s:
+        return "ready"
+    if any(token in s for token in ("wait", "review", "human", "needs", "park", "you")):
+        return "waiting"
+    return "other"
+
+
+def task_state_chip_label(state: str) -> str:
+    """The terminal-style chip text for a task state, e.g. "Waiting on you" -> WAITING_ON_YOU."""
+    s = str(state or "").strip()
+    if not s:
+        return "UNKNOWN"
+    return s.upper().replace(" ", "_").replace("-", "_")
+
+
+def task_is_assignable(option: dict[str, object]) -> bool:
+    """Whether a task may be bound to a worktree from the Assign popup. Blocked tasks are
+    shown but not selectable (mockup: the radio is disabled)."""
+    return task_state_category(str(option.get("state") or "")) != "blocked"
+
+
+def filter_task_options(
+    options: Iterable[dict[str, object]], query: str
+) -> list[dict[str, object]]:
+    """Case-insensitive substring filter over a task option's id + title (the popup's
+    FILTER_TASKS_BY_ID_OR_DESC box). An empty query returns everything."""
+    needle = str(query or "").strip().lower()
+    option_list = list(options)
+    if not needle:
+        return option_list
+    return [
+        option
+        for option in option_list
+        if needle in f"{option.get('task_id', '')} {option.get('title', '')}".lower()
+    ]
+
+
+def sort_task_options(
+    options: Iterable[dict[str, object]], ascending: bool = True
+) -> list[dict[str, object]]:
+    """Stable sort of task options by task id (the popup's SORT: ID control)."""
+    return sorted(options, key=lambda option: str(option.get("task_id") or ""), reverse=not ascending)
+
+
+def first_assignable_task_id(options: Iterable[dict[str, object]]) -> str:
+    """The id of the first selectable (non-blocked) task, for the popup's default selection,
+    or "" when none are selectable (so BIND_TASK prompts instead of binding a blocked task)."""
+    for option in options:
+        if task_is_assignable(option):
+            return str(option.get("task_id") or "")
+    return ""
+
+
 def _same_path(left: str, right: str) -> bool:
     if not left or not right:
         return False

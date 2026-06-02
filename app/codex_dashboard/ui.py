@@ -63,10 +63,15 @@ from .worktrees_backend import (
 )
 from .worktrees_tab import (
     ALL_REPOS_OPTION,
+    filter_task_options,
     filter_worktrees_by_repo,
+    first_assignable_task_id,
     is_allocated,
     open_task_options,
     repo_filter_options,
+    sort_task_options,
+    task_state_category,
+    task_state_chip_label,
     worktree_detail_lines,
     worktree_heading_repo,
     worktree_issue_url,
@@ -576,10 +581,11 @@ class DashboardApp:
             "Quiet.TButton",
             background=[("active", "#3b4450")],
         )
-        # Destructive action (Eject) — the mockup's error-red button.
+        # Destructive action (Eject) — the mockup's ghost/tinted error button: a subtle red
+        # tint with red text at rest, going to a solid red fill on hover.
         style.configure(
             "Danger.TButton",
-            background="#5a2327",
+            background="#2a1719",
             foreground="#ffb4ab",
             font=("Inter", 9, "bold"),
             borderwidth=0,
@@ -587,7 +593,7 @@ class DashboardApp:
         )
         style.map(
             "Danger.TButton",
-            background=[("active", "#7a2d31")],
+            background=[("active", "#5a2327")],
         )
         style.configure(
             "HeaderQuiet.TButton",
@@ -1365,7 +1371,7 @@ class DashboardApp:
             text=full_path or "(no path)",
             bg=row_bg,
             fg="#dfe2eb",
-            font=("Courier New", 10),
+            font=("Consolas", -12),
             anchor="w",
         )
         path_label.pack(side="left")
@@ -1413,7 +1419,7 @@ class DashboardApp:
             text=task_id,
             bg=row_bg,
             fg="#00e5ff" if issue_url else "#dfe2eb",
-            font=("Courier New", 10, "underline") if issue_url else ("Courier New", 10),
+            font=("Consolas", -12, "underline") if issue_url else ("Consolas", -12),
             cursor="hand2" if issue_url else "",
         )
         label.bind("<MouseWheel>", self._on_worktrees_mousewheel)
@@ -1459,28 +1465,50 @@ class DashboardApp:
                 command=lambda wt=dict(worktree): self.open_assign_popup(wt),
             ).pack(side="left")
 
-    def _worktree_icon_button(self, parent, kind, command, tooltip, row_bg):
-        # A borderless 0px-radius vector-icon button (Monolithic-Terminal: copy / details /
-        # destroy drawn as Tk Canvas line art — no Material font / emoji). Muted at rest, an
-        # accent (or red for destroy) on hover; the tooltip names the action so the glyph is
-        # never ambiguous.
-        canvas = tk.Canvas(
-            parent, width=18, height=18, bg=row_bg, highlightthickness=0, bd=0, cursor="hand2"
-        )
+    def _icon_photo(self, kind: str, color: str, size: int):
+        # Cache + retain crisp PIL-supersampled glyph images (the cache dict keeps the
+        # PhotoImage refs alive so Tk does not garbage-collect them). Returns None when
+        # Pillow is unavailable, so callers can fall back to Canvas line art.
+        cache = getattr(self, "_icon_image_cache", None)
+        if cache is None:
+            cache = {}
+            self._icon_image_cache = cache
+        key = (kind, color, int(size))
+        if key not in cache:
+            try:
+                from PIL import ImageTk
+
+                from .glyphs import render_glyph
+
+                cache[key] = ImageTk.PhotoImage(render_glyph(kind, color, int(size)))
+            except Exception:
+                cache[key] = None
+        return cache[key]
+
+    def _worktree_icon_button(self, parent, kind, command, tooltip, row_bg, size: int = 17):
+        # A borderless 0px-radius icon button: a crisp PIL-supersampled glyph (no Material
+        # font / emoji), muted at rest and accent-on-hover (red for destroy). The tooltip
+        # names the action so the glyph is never ambiguous. Falls back to Canvas line art if
+        # Pillow is unavailable.
         rest = "#849396"
         hot = "#ffb4ab" if kind == "destroy" else "#00e5ff"
-        self._draw_worktree_icon(canvas, kind, rest)
-
-        def repaint(color: str) -> None:
-            canvas.delete("all")
-            self._draw_worktree_icon(canvas, kind, color)
-
-        canvas.bind("<Enter>", lambda _e: repaint(hot))
-        canvas.bind("<Leave>", lambda _e: repaint(rest))
-        canvas.bind("<Button-1>", lambda _e: command())
-        canvas.bind("<MouseWheel>", self._on_worktrees_mousewheel)
-        self._bind_tooltip(canvas, tooltip)
-        return canvas
+        rest_img = self._icon_photo(kind, rest, size)
+        hot_img = self._icon_photo(kind, hot, size)
+        if rest_img is not None:
+            button = tk.Label(parent, image=rest_img, bg=row_bg, bd=0, cursor="hand2")
+            button.bind("<Enter>", lambda _e: button.configure(image=hot_img))
+            button.bind("<Leave>", lambda _e: button.configure(image=rest_img))
+        else:
+            button = tk.Canvas(
+                parent, width=size, height=size, bg=row_bg, highlightthickness=0, bd=0, cursor="hand2"
+            )
+            self._draw_worktree_icon(button, kind, rest)
+            button.bind("<Enter>", lambda _e: (button.delete("all"), self._draw_worktree_icon(button, kind, hot)))
+            button.bind("<Leave>", lambda _e: (button.delete("all"), self._draw_worktree_icon(button, kind, rest)))
+        button.bind("<Button-1>", lambda _e: command())
+        button.bind("<MouseWheel>", self._on_worktrees_mousewheel)
+        self._bind_tooltip(button, tooltip)
+        return button
 
     def _draw_worktree_icon(self, canvas: tk.Canvas, kind: str, color: str) -> None:
         if kind == "copy":
@@ -1640,99 +1668,360 @@ class DashboardApp:
             return
         options = open_task_options(tasks_snapshot)
 
+        # Modal conforming to the ASSIGN_TASK_OPERATOR Stitch mockup: a cyan top border, a
+        # surface-container-high header (assign icon + title + Target-Worktree subtitle +
+        # close X), a filter/sort toolbar, a scrollable list of rich task cards (id + status
+        # chip + description; selected = cyan border/radio, blocked = disabled/orange), and a
+        # pinned footer (CANCEL + cyan BIND_TASK). Tonal layering, 0px radius, no dividers.
         popup = tk.Toplevel(self.overlay)
         popup.title("Assign Task")
         popup.configure(bg="#1c2026")
         popup.transient(self.overlay)
         popup.attributes("-topmost", True)
-        # BUG-0007: center the popup on the dashboard overlay (not the desktop top-left).
-        popup_w, popup_h = 460, 520
+        # Borderless modal: drop the OS title bar so the cyan top border is the only chrome
+        # (the in-modal close X / CANCEL dismiss it), matching the mockup and the overlay.
+        popup.overrideredirect(True)
         self.overlay.update_idletasks()
-        ox, oy = self.overlay.winfo_rootx(), self.overlay.winfo_rooty()
         ow, oh = self.overlay.winfo_width(), self.overlay.winfo_height()
+        popup_w = min(820, max(560, ow - 80))
+        popup_h = min(640, max(440, oh - 80))
+        ox, oy = self.overlay.winfo_rootx(), self.overlay.winfo_rooty()
         cx = ox + max(0, (ow - popup_w) // 2)
         cy = oy + max(0, (oh - popup_h) // 2)
         popup.geometry(f"{popup_w}x{popup_h}+{cx}+{cy}")
+        popup.update_idletasks()
+        popup.lift()
+        popup.focus_force()
+        try:
+            popup.grab_set()  # modal: confine input to the popup while it is open
+        except Exception:
+            pass
 
-        ttk.Label(
-            popup,
-            text=f"ASSIGN A TASK TO {worktree_id}",
-            style="Tiny.TLabel",
-        ).pack(side="top", anchor="w", padx=16, pady=(16, 4))
+        # Cyan top border (mockup: border-t-2 border-primary-container).
+        tk.Frame(popup, bg="#00e5ff", height=2).pack(side="top", fill="x")
+
+        # Header (surface-container-high): icon + title, target-worktree subtitle, close X.
+        header = tk.Frame(popup, bg="#262a31")
+        header.pack(side="top", fill="x")
+        self._icon_only_button(
+            header, "close", popup.destroy, "Close", "#262a31", rest="#adcbda", hot="#ffb4ab", size=20
+        ).pack(side="right", padx=(0, 18), pady=14)
+        header_left = tk.Frame(header, bg="#262a31")
+        header_left.pack(side="left", padx=24, pady=(18, 16))
+        title_row = tk.Frame(header_left, bg="#262a31")
+        title_row.pack(anchor="w")
+        assign_icon = self._icon_photo("assign", "#c3f5ff", 18)
+        if assign_icon is not None:
+            tk.Label(title_row, image=assign_icon, bg="#262a31").pack(side="left", padx=(0, 8))
+        tk.Label(
+            title_row, text="ASSIGN_TASK_OPERATOR", bg="#262a31", fg="#c3f5ff",
+            font=("Space Grotesk", -17, "bold"),
+        ).pack(side="left")
+        tk.Label(
+            header_left, text=f"Target Worktree: {worktree_id}", bg="#262a31", fg="#adcbda",
+            font=("Consolas", -12),
+        ).pack(anchor="w", pady=(2, 0))
+
+        # Footer (pinned bottom FIRST so a long list can never push it off-screen — BUG-0007).
+        selection = tk.StringVar(value=first_assignable_task_id(options))
+        footer = tk.Frame(popup, bg="#262a31")
+        footer.pack(side="bottom", fill="x")
+        # Full-width footer band with a top divider separating it from the scrollable list.
+        tk.Frame(popup, bg="#31353c", height=1).pack(side="bottom", fill="x")
+        bind_command = lambda: self._confirm_assign(popup, selection.get(), repo_for_assign, worktree_id)
+        bind_button = self._cta_button(footer, "BIND_TASK", bind_command, "#262a31")
+        if bind_button is None:
+            bind_button = self._flat_button(
+                footer, "BIND_TASK", bind_command,
+                bg="#00e5ff", fg="#00363d", hover_bg="#2ee8ff",
+                font=("Space Grotesk", -14, "bold"), icon="check", icon_color="#00363d",
+                padx=18, pady=9,
+            )
+        bind_button.pack(side="right", padx=(0, 24), pady=12)
+        self._flat_button(
+            footer, "CANCEL", popup.destroy,
+            bg="#181c22", fg="#adcbda", hover_bg="#353940", hover_fg="#dfe2eb",
+            font=("Space Grotesk", -14, "bold"), padx=18, pady=9,
+        ).pack(side="right", padx=(0, 12), pady=12)
 
         if not options:
-            ttk.Label(
-                popup,
-                text="No open tasks were returned by the backend (GET /api/v1/tasks).",
-                style="Status.TLabel",
-                wraplength=380,
-                justify="left",
-            ).pack(side="top", anchor="w", padx=16, pady=(8, 0))
-            ttk.Button(popup, text="CLOSE", style="Quiet.TButton", command=popup.destroy).pack(
-                side="bottom", anchor="e", padx=16, pady=12
-            )
+            tk.Label(
+                popup, text="No open tasks were returned by the backend (GET /api/v1/tasks).",
+                bg="#0a0e14", fg="#adcbda", font=("Inter", -13), wraplength=popup_w - 80,
+                justify="left", anchor="nw",
+            ).pack(side="top", fill="both", expand=True, padx=24, pady=24)
             return
 
-        # BUG-0007: pin ASSIGN/CANCEL to the bottom FIRST so a long task list can never
-        # push them off-screen, regardless of how many tasks the list holds.
-        selection = tk.StringVar(value=options[0]["task_id"])
-        button_row = tk.Frame(popup, bg="#1c2026")
-        button_row.pack(side="bottom", fill="x", padx=16, pady=(8, 14))
-        ttk.Button(button_row, text="CANCEL", style="Quiet.TButton", command=popup.destroy).pack(side="right")
-        ttk.Button(
-            button_row,
-            text="ASSIGN",
-            style="Accent.TButton",
-            command=lambda: self._confirm_assign(popup, selection.get(), repo_for_assign, worktree_id),
-        ).pack(side="right", padx=(0, 8))
-
-        # BUG-0007: scrollable task list filling the space between the header and the
-        # pinned buttons (scrolls when tasks exceed the view).
-        list_shell = tk.Frame(popup, bg="#10141a")
-        list_shell.pack(side="top", fill="both", expand=True, padx=16, pady=(8, 8))
-        canvas = tk.Canvas(list_shell, bg="#10141a", highlightthickness=0, bd=0)
+        # Scrollable list (built now so the render closure can bind it; packed below the
+        # toolbar). Pinned footer means a long list never hides the actions (BUG-0007).
+        list_shell = tk.Frame(popup, bg="#0a0e14")
+        canvas = tk.Canvas(list_shell, bg="#0a0e14", highlightthickness=0, bd=0)
         scrollbar = ttk.Scrollbar(list_shell, orient="vertical", command=canvas.yview)
         canvas.configure(yscrollcommand=scrollbar.set)
         scrollbar.pack(side="right", fill="y")
         canvas.pack(side="left", fill="both", expand=True)
-        inner = tk.Frame(canvas, bg="#10141a")
+        inner = tk.Frame(canvas, bg="#0a0e14")
         inner_id = canvas.create_window((0, 0), window=inner, anchor="nw")
-
-        def _sync_scrollregion(_event=None):
-            canvas.configure(scrollregion=canvas.bbox("all"))
-
-        def _match_width(event):
-            canvas.itemconfigure(inner_id, width=event.width)
 
         def _on_mousewheel(event):
             canvas.yview_scroll(-1 if event.delta > 0 else 1, "units")
 
-        inner.bind("<Configure>", _sync_scrollregion)
-        canvas.bind("<Configure>", _match_width)
+        canvas.bind("<Configure>", lambda e: canvas.itemconfigure(inner_id, width=e.width))
+        inner.bind("<Configure>", lambda _e: canvas.configure(scrollregion=canvas.bbox("all")))
         for wheel_target in (canvas, inner):
             wheel_target.bind("<MouseWheel>", _on_mousewheel)
 
-        for option in options:
-            text = f"{option['task_id']}  -  {option['title']}"
-            if option["state"]:
-                text += f"  [{option['state']}]"
-            radio = tk.Radiobutton(
-                inner,
-                text=text,
-                value=option["task_id"],
-                variable=selection,
-                bg="#10141a",
-                fg="#dfe2eb",
-                selectcolor="#173a44",
-                activebackground="#10141a",
-                activeforeground="#c3f5ff",
-                anchor="w",
-                justify="left",
-                wraplength=380,
-                font=("Inter", 9),
+        sort_state = {"ascending": True}
+        wrap = popup_w - 130
+
+        def render() -> None:
+            top_fraction = canvas.yview()[0] if inner.winfo_children() else 0.0
+            for child in inner.winfo_children():
+                child.destroy()
+            tk.Frame(inner, bg="#0a0e14", height=16).pack(fill="x")  # list p-6 top inset
+            visible = sort_task_options(
+                filter_task_options(options, current_query()), sort_state["ascending"]
             )
-            radio.pack(anchor="w", fill="x", padx=8, pady=2)
-            radio.bind("<MouseWheel>", _on_mousewheel)
+            if not visible:
+                tk.Label(
+                    inner, text="No tasks match the filter.", bg="#0a0e14", fg="#849396",
+                    font=("Inter", -13), anchor="w",
+                ).pack(anchor="w", padx=24, pady=12)
+            for option in visible:
+                self._build_assign_task_card(inner, option, selection, render, wrap, _on_mousewheel)
+            tk.Frame(inner, bg="#0a0e14", height=8).pack(fill="x")  # list bottom inset
+            inner.update_idletasks()
+            canvas.configure(scrollregion=canvas.bbox("all"))
+            canvas.yview_moveto(top_fraction)
+
+        def toggle_sort() -> None:
+            sort_state["ascending"] = not sort_state["ascending"]
+            render()
+
+        # Toolbar (filter input + SORT button), above the list.
+        toolbar = tk.Frame(popup, bg="#1c2026")
+        toolbar.pack(side="top", fill="x")
+        tk.Frame(popup, bg="#31353c", height=1).pack(side="top", fill="x")  # toolbar/list divider
+        toolbar_inner = tk.Frame(toolbar, bg="#1c2026")
+        toolbar_inner.pack(fill="x", padx=24, pady=12)
+        filter_wrap = tk.Frame(toolbar_inner, bg="#181c22")
+        filter_wrap.pack(side="left", fill="x", expand=True)
+        filter_icon = self._icon_photo("filter", "#adcbda", 16)
+        if filter_icon is not None:
+            tk.Label(filter_wrap, image=filter_icon, bg="#181c22").pack(side="left", padx=(10, 6))
+        filter_entry = tk.Entry(
+            filter_wrap, bg="#181c22", fg="#5d6b6e", insertbackground="#00e5ff",
+            relief="flat", bd=0, font=("Consolas", -14),
+        )
+        filter_entry.pack(side="left", fill="x", expand=True, ipady=7, padx=(0, 10))
+
+        placeholder = "FILTER_TASKS_BY_ID_OR_DESC..."
+        ph_state = {"on": True}
+
+        def set_placeholder() -> None:
+            filter_entry.delete(0, "end")
+            filter_entry.insert(0, placeholder)
+            filter_entry.configure(fg="#5d6b6e")
+            ph_state["on"] = True
+
+        def current_query() -> str:
+            return "" if ph_state["on"] else filter_entry.get()
+
+        def on_filter_focus_in(_e) -> None:
+            if ph_state["on"]:
+                filter_entry.delete(0, "end")
+                filter_entry.configure(fg="#dfe2eb")
+                ph_state["on"] = False
+
+        def on_filter_focus_out(_e) -> None:
+            if not filter_entry.get():
+                set_placeholder()
+
+        filter_entry.bind("<FocusIn>", on_filter_focus_in)
+        filter_entry.bind("<FocusOut>", on_filter_focus_out)
+        filter_entry.bind("<KeyRelease>", lambda _e: render())
+        set_placeholder()
+
+        self._flat_button(
+            toolbar_inner, "SORT: ID", toggle_sort,
+            bg="#353940", fg="#dfe2eb", hover_bg="#3f444c",
+            font=("Space Grotesk", -12, "bold"), icon="sort", icon_color="#dfe2eb",
+            icon_side="left", padx=12, pady=8,
+        ).pack(side="left", padx=(12, 0))
+
+        # The list fills the remaining space between the toolbar and the pinned footer.
+        list_shell.pack(side="top", fill="both", expand=True)
+        render()
+
+    def _flat_button(
+        self, parent, text, command, *, bg, fg, hover_bg, hover_fg=None, font,
+        icon=None, icon_color=None, icon_side="right", padx=14, pady=8,
+    ):
+        # A flat 0px-radius button (mockup CTAs): solid fill + hover, optional crisp glyph.
+        # Built from tk widgets (not ttk) so the fill, padding, font, and icon match exactly.
+        hover_fg = hover_fg or fg
+        frame = tk.Frame(parent, bg=bg, cursor="hand2")
+        inner = tk.Frame(frame, bg=bg)
+        inner.pack(padx=padx, pady=pady)
+        text_label = tk.Label(inner, text=text, bg=bg, fg=fg, font=font)
+        widgets = [frame, inner, text_label]
+        icon_label = None
+        if icon is not None:
+            image = self._icon_photo(icon, icon_color or fg, 16)
+            if image is not None:
+                icon_label = tk.Label(inner, image=image, bg=bg)
+                widgets.append(icon_label)
+        if icon_label is not None and icon_side == "left":
+            icon_label.pack(side="left", padx=(0, 8))
+            text_label.pack(side="left")
+        else:
+            text_label.pack(side="left")
+            if icon_label is not None:
+                icon_label.pack(side="left", padx=(8, 0))
+
+        def enter(_e):
+            for widget in widgets:
+                widget.configure(bg=hover_bg)
+            text_label.configure(fg=hover_fg)
+
+        def leave(_e):
+            for widget in widgets:
+                widget.configure(bg=bg)
+            text_label.configure(fg=fg)
+
+        for widget in widgets:
+            widget.bind("<Enter>", enter)
+            widget.bind("<Leave>", leave)
+            widget.bind("<Button-1>", lambda _e: command())
+        return frame
+
+    def _icon_only_button(self, parent, kind, command, tooltip, bg, *, rest, hot, size):
+        # An icon-only button (e.g. the modal close X): crisp glyph, hover recolor, tooltip.
+        rest_img = self._icon_photo(kind, rest, size)
+        hot_img = self._icon_photo(kind, hot, size)
+        if rest_img is not None:
+            button = tk.Label(parent, image=rest_img, bg=bg, bd=0, cursor="hand2")
+            button.bind("<Enter>", lambda _e: button.configure(image=hot_img))
+            button.bind("<Leave>", lambda _e: button.configure(image=rest_img))
+        else:
+            button = tk.Label(parent, text="X", bg=bg, fg=rest, cursor="hand2",
+                              font=("Space Grotesk", -16, "bold"))
+        button.bind("<Button-1>", lambda _e: command())
+        if tooltip:
+            self._bind_tooltip(button, tooltip)
+        return button
+
+    def _cta_button(self, parent, text, command, bg):
+        # The primary CTA (BIND_TASK) baked as one image: a vertical cyan gradient (the
+        # mockup's terminal glow), heavy Space Grotesk text, and a check glyph. Returns None
+        # if Pillow / the bundled font is unavailable so the caller falls back to a flat fill.
+        try:
+            from PIL import ImageTk
+
+            from .glyphs import render_cta
+
+            font_path = FONT_ASSET_DIR / "SpaceGrotesk[wght].ttf"
+            rest = ImageTk.PhotoImage(render_cta(text, font_path))
+            hot = ImageTk.PhotoImage(
+                render_cta(text, font_path, top_color="#d8faff", bottom_color="#2ee8ff")
+            )
+        except Exception:
+            return None
+        button = tk.Label(parent, image=rest, bg=bg, bd=0, cursor="hand2")
+        button._cta_rest = rest  # retain refs so Tk does not garbage-collect the images
+        button._cta_hot = hot
+        button.bind("<Enter>", lambda _e: button.configure(image=hot))
+        button.bind("<Leave>", lambda _e: button.configure(image=rest))
+        button.bind("<Button-1>", lambda _e: command())
+        return button
+
+    def _build_assign_task_card(self, parent, option, selection, rerender, wrap, on_wheel):
+        # One task row in the Assign popup (mockup): a left status border, a radio, the task
+        # id + a color-coded status chip on one line, and the description below. Selected =
+        # cyan border + filled cyan radio + cyan id; blocked = orange border, muted, disabled.
+        task_id = str(option.get("task_id") or "")
+        title = str(option.get("title") or task_id)
+        state = str(option.get("state") or "")
+        category = task_state_category(state)
+        assignable = category != "blocked"
+        selected = selection.get() == task_id
+
+        chip_palette = {
+            "waiting": ("#0e2e34", "#7fdfe8"),
+            "ready": ("#262a31", "#c3f5ff"),
+            "blocked": ("#2a2125", "#ffc1bd"),
+            "other": ("#262a31", "#adcbda"),
+        }
+        card_bg = "#1c2026"
+        # Blocked rows recede (mockup opacity-80): dimmer id + heavily-muted description,
+        # with a clearly-orange left border distinct from the normal gray.
+        border_color = "#00e5ff" if selected else ("#5a3a3e" if not assignable else "#31353c")
+        id_fg = "#c3f5ff" if selected else ("#6b757a" if not assignable else "#bac9cc")
+        desc_fg = "#dfe2eb" if selected else ("#4e565b" if not assignable else "#adcbda")
+
+        card = tk.Frame(parent, bg=card_bg)
+        card.pack(fill="x", padx=24, pady=(0, 8))
+        tk.Frame(card, bg=border_color, width=2).pack(side="left", fill="y")
+        body = tk.Frame(card, bg=card_bg)
+        body.pack(side="left", fill="x", expand=True, padx=16, pady=12)
+
+        top = tk.Frame(body, bg=card_bg)
+        top.pack(fill="x")
+        radio_kind = "radio_on" if selected else "radio_off"
+        radio_color = "#00e5ff" if selected else ("#566066" if not assignable else "#849396")
+        radio_img = self._icon_photo(radio_kind, radio_color, 16)
+        radio_label = None
+        if radio_img is not None:
+            radio_label = tk.Label(top, image=radio_img, bg=card_bg)
+            radio_label.pack(side="left", padx=(0, 12))
+        chip_bg, chip_fg = chip_palette[category]
+        tk.Label(
+            top, text=task_state_chip_label(state), bg=chip_bg, fg=chip_fg,
+            font=("Inter", -10), padx=8, pady=2,
+        ).pack(side="right")
+        id_label = tk.Label(top, text=task_id, bg=card_bg, fg=id_fg, font=("Consolas", -14, "bold"))
+        id_label.pack(side="left")
+        desc_label = tk.Label(
+            body, text=title, bg=card_bg, fg=desc_fg, font=("Inter", -13),
+            anchor="w", justify="left", wraplength=wrap,
+        )
+        desc_label.pack(anchor="w", fill="x", pady=(4, 0))
+
+        hoverable = [card, body, top, id_label, desc_label]
+        if radio_label is not None:
+            hoverable.append(radio_label)
+        for widget in hoverable:
+            widget.bind("<MouseWheel>", on_wheel)
+
+        if assignable:
+            def select(_e):
+                selection.set(task_id)
+                rerender()
+
+            for widget in hoverable:
+                widget.configure(cursor="hand2")
+                widget.bind("<Button-1>", select)
+
+            if not selected:
+                def enter(_e):
+                    for widget in (card, body, top, id_label, desc_label):
+                        widget.configure(bg="#353940")
+                    if radio_label is not None:
+                        radio_label.configure(bg="#353940")
+                    id_label.configure(fg="#c3f5ff")
+                    desc_label.configure(fg="#dfe2eb")
+
+                def leave(_e):
+                    for widget in (card, body, top, id_label, desc_label):
+                        widget.configure(bg=card_bg)
+                    if radio_label is not None:
+                        radio_label.configure(bg=card_bg)
+                    id_label.configure(fg=id_fg)
+                    desc_label.configure(fg=desc_fg)
+
+                for widget in hoverable:
+                    widget.bind("<Enter>", enter)
+                    widget.bind("<Leave>", leave)
 
     def _confirm_assign(self, popup: tk.Toplevel, task_id: str, repo: str, worktree_id: str) -> None:
         popup.destroy()

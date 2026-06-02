@@ -22,10 +22,16 @@ from app.codex_dashboard.worktrees_backend import (
 )
 from app.codex_dashboard.worktrees_tab import (
     ALL_REPOS_OPTION,
+    filter_task_options,
     filter_worktrees_by_repo,
+    first_assignable_task_id,
     is_allocated,
     open_task_options,
     repo_filter_options,
+    sort_task_options,
+    task_is_assignable,
+    task_state_category,
+    task_state_chip_label,
     shorten_path,
     sort_worktrees,
     worktree_chip_mark_filled,
@@ -200,6 +206,39 @@ class WorktreesTabHelperTests(unittest.TestCase):
     def test_summary_counts(self) -> None:
         counts = worktree_summary_counts([ALLOCATED_WORKTREE, IDLE_WORKTREE, OTHER_REPO_WORKTREE])
         self.assertEqual(counts, {"allocated": 1, "idle": 2, "total": 3})
+
+    def test_assign_popup_task_helpers(self) -> None:
+        # The ASSIGN_TASK_OPERATOR popup's pure logic: chip category/label, blocked-is-not-
+        # assignable, default selection skipping blocked, filter, and sort.
+        opts = [
+            {"task_id": "Task-0015", "title": "Queue drain consumer", "state": "Blocked"},
+            {"task_id": "Task-0010", "title": "Run Dream daily", "state": "Waiting on you"},
+            {"task_id": "Task-0012", "title": "GitHub-backed task state", "state": "Ready"},
+        ]
+        self.assertEqual(task_state_category("Blocked"), "blocked")
+        self.assertEqual(task_state_category("Ready"), "ready")
+        self.assertEqual(task_state_category("Waiting on you"), "waiting")
+        self.assertEqual(task_state_category("Running"), "other")
+        self.assertEqual(task_state_chip_label("Waiting on you"), "WAITING_ON_YOU")
+        self.assertEqual(task_state_chip_label(""), "UNKNOWN")
+        self.assertFalse(task_is_assignable(opts[0]))
+        self.assertTrue(task_is_assignable(opts[1]))
+        # Default selection skips the blocked task; "" when none are assignable.
+        self.assertEqual(first_assignable_task_id(opts), "Task-0010")
+        self.assertEqual(first_assignable_task_id([opts[0]]), "")
+        # Filter on id OR title, case-insensitive.
+        self.assertEqual([o["task_id"] for o in filter_task_options(opts, "dream")], ["Task-0010"])
+        self.assertEqual(len(filter_task_options(opts, "task-001")), 3)
+        self.assertEqual(len(filter_task_options(opts, "")), 3)
+        # Sort by id, ascending and descending.
+        self.assertEqual(
+            [o["task_id"] for o in sort_task_options(opts, True)],
+            ["Task-0010", "Task-0012", "Task-0015"],
+        )
+        self.assertEqual(
+            [o["task_id"] for o in sort_task_options(opts, False)],
+            ["Task-0015", "Task-0012", "Task-0010"],
+        )
 
     def test_open_task_options_id_title_state_no_progress(self) -> None:
         snapshot = {
