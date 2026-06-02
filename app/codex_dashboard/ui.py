@@ -1691,12 +1691,14 @@ class DashboardApp:
         cy = oy + max(0, (oh - popup_h) // 2)
         popup.geometry(f"{popup_w}x{popup_h}+{cx}+{cy}")
         popup.update_idletasks()
+        # NOT grab_set(): a modal grab on this borderless topmost popup froze every click in
+        # the overlay (the popup can sit behind the topmost overlay and swallow all input).
+        # The popup is non-modal; re-assert topmost + lift so it rides above the overlay, and
+        # Escape (plus the close X / CANCEL) dismiss it.
+        popup.attributes("-topmost", True)
         popup.lift()
         popup.focus_force()
-        try:
-            popup.grab_set()  # modal: confine input to the popup while it is open
-        except Exception:
-            pass
+        popup.bind("<Escape>", lambda _e: popup.destroy())
 
         # Cyan top border (mockup: border-t-2 border-primary-container).
         tk.Frame(popup, bg="#00e5ff", height=2).pack(side="top", fill="x")
