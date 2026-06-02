@@ -19,10 +19,10 @@
   "production_roll": {
     "rolled_live": true,
     "backend_release": "20260601T223712Z-354c1e1",
-    "dashboard_release": "20260602T030505Z-516e6208d8ff",
+    "dashboard_release": "20260602T035615Z-70027b95ebb1",
     "rollback_backend_release": "20260427T162803Z-3c0fabb2",
-    "rollback_dashboard_release": "20260602T023242Z-7ae623ad4bbf",
-    "notes": "WORKTREES tab live; worktree cards redesigned to conform to the Stitch mockup (516e620): horizontal row, repo CAPS + cyan/gray/red status chip, full mono white path + inline copy icon, bound-task GitHub issue link, right-justified Details/Dequeue/Eject (red) and Details/Destroy/Assign actions, no bottom drawer. Live on pid 42188. Backend untouched. #16 untouched (Queue=Never, OPEN)."
+    "rollback_dashboard_release": "20260602T030505Z-516e6208d8ff",
+    "notes": "WORKTREES tab live. Cards redesigned to the Stitch mockup (516e620) + ASSIGN_TASK_OPERATOR popup redesigned to mockup-5 with crisp PIL-supersampled icons, Consolas mono, and a gradient BIND_TASK CTA (70027b9): borderless modal, header/toolbar/rich task cards/pinned footer, verified by an 8-agent adversarial fidelity review (0 blocking). Live on pid 56052. Backend untouched. #16 untouched (Queue=Never, OPEN)."
   },
   "open_bugs": [
     "BUG-0001 FIXED + live-verified (Eject dequeues via registry-resolved provider)",
