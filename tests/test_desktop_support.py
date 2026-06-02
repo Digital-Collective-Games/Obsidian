@@ -296,20 +296,10 @@ class DesktopSupportTests(unittest.TestCase):
         self.assertEqual(app.jobs_status_message, "Jobs state loaded from orchestration backend.")
         app._render_jobs_snapshot.assert_called_once_with()
 
-    def test_show_job_details_includes_backend_payload(self) -> None:
-        jobs_detail_title = mock.Mock()
-        jobs_detail_text = mock.Mock()
-        jobs_detail_shell = mock.Mock()
-        jobs_detail_shell.winfo_manager.return_value = False
-        app = SimpleNamespace(
-            jobs_detail_title=jobs_detail_title,
-            jobs_detail_text=jobs_detail_text,
-            jobs_detail_shell=jobs_detail_shell,
-            jobs_rows_shell=object(),
-        )
+    def test_job_detail_text_includes_facts_and_backend_definition(self) -> None:
+        from app.codex_dashboard.jobs_backend import job_detail_text
 
-        DashboardApp._show_job_details(
-            app,
+        detail = job_detail_text(
             {
                 "job_id": "codex-dashboard-startup",
                 "label": "Obsidian overlay at sign-in",
@@ -317,19 +307,19 @@ class DesktopSupportTests(unittest.TestCase):
                 "desired_state": "enabled",
                 "desired_label": "Enabled",
                 "observed_label": "Enabled",
+                "mechanism_label": "Schedule",
                 "status": "in_sync",
                 "reason": "Backend state is current.",
                 "definition": {
                     "executor": {"entrypoint": "agentic-swe-digest"},
                     "recent_runs": [{"workflow_id": "job/example"}],
                 },
-            },
+            }
         )
 
-        inserted_text = jobs_detail_text.insert.call_args.args[1]
-        self.assertIn('"executor"', inserted_text)
-        self.assertIn('"recent_runs"', inserted_text)
-        jobs_detail_shell.pack.assert_called_once()
+        self.assertIn("Label: Obsidian overlay at sign-in", detail)
+        self.assertIn('"executor"', detail)
+        self.assertIn('"recent_runs"', detail)
 
     def test_refresh_jobs_data_syncs_backend_when_apply_changes(self) -> None:
         app = SimpleNamespace(
@@ -351,9 +341,11 @@ class DesktopSupportTests(unittest.TestCase):
             DashboardApp.refresh_jobs_data(app, apply_changes=True)
 
         self.assertEqual(app.jobs_snapshot, snapshot)
-        self.assertEqual(app.jobs_status_message, "Jobs sync completed. 1 schedule changes.")
-        app.status_label.configure.assert_called_once_with(text="Jobs sync completed. 1 schedule changes.")
+        expected = "UPDATE applied Git desired state to Temporal: 1 schedule changes (+1 ~0 -0)."
+        self.assertEqual(app.jobs_status_message, expected)
+        app.status_label.configure.assert_called_once_with(text=expected)
         app._render_jobs_snapshot.assert_called_once_with()
+        self.assertEqual(app.jobs_apply_report, report)
 
     def test_run_job_now_starts_manual_run_and_refreshes_snapshot(self) -> None:
         app = SimpleNamespace(

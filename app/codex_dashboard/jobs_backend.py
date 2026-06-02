@@ -183,6 +183,157 @@ def local_clock_label(raw_value: str) -> str:
     return parsed.astimezone().strftime("%I:%M %p").lstrip("0")
 
 
+def relative_time_label(raw_value: str, now: datetime | None = None) -> str:
+    """A compact "2h 14m ago" / "just now" / "in 5m" label for a timestamp (jobs LAST_RUN /
+    next-run). `now` is injectable for tests."""
+    parsed = _parse_timestamp(raw_value)
+    if now is None:
+        now = datetime.now(parsed.tzinfo) if parsed.tzinfo else datetime.now()
+    seconds = int((now - parsed).total_seconds())
+    future = seconds < 0
+    seconds = abs(seconds)
+    if seconds < 45:
+        return "just now"
+    if seconds >= 86400:
+        label = f"{seconds // 86400}d {(seconds % 86400) // 3600}h"
+    elif seconds >= 3600:
+        label = f"{seconds // 3600}h {(seconds % 3600) // 60}m"
+    else:
+        label = f"{max(1, seconds // 60)}m"
+    return f"in {label}" if future else f"{label} ago"
+
+
+def cron_human(cron: str) -> str:
+    """Plain-English cadence for a standard 5-field cron expression, or "" if unrecognized."""
+    parts = str(cron or "").split()
+    if len(parts) != 5:
+        return ""
+    minute, hour, dom, mon, dow = parts
+    every_day = dom == "*" and mon == "*" and dow == "*"
+    if every_day and hour == "*" and minute.startswith("*/") and minute[2:].isdigit():
+        return f"Every {minute[2:]} minutes"
+    if every_day and hour == "*" and minute == "0":
+        return "Hourly"
+    if every_day and minute.isdigit() and hour.isdigit():
+        h, m = int(hour), int(minute)
+        return f"Daily at {(h % 12) or 12}:{m:02d} {'AM' if h < 12 else 'PM'}"
+    return ""
+
+
+def job_schedule_display(job: dict[str, Any]) -> tuple[str, str]:
+    """(primary, detail) for the SCHEDULE column: the cron expression with a plain-English
+    cadence beneath it when available, falling back to the trigger mechanism + next run."""
+    definition = job.get("definition", {})
+    definition = definition if isinstance(definition, dict) else {}
+    mechanism = _text(job.get("mechanism_label")) or "Backend"
+    schedules = _dict_list(definition.get("schedules"))
+    cron = ""
+    for schedule in schedules:
+        for key in ("cron", "spec", "calendar", "expression", "interval"):
+            value = _text(schedule.get(key))
+            if value:
+                cron = value
+                break
+        if cron:
+            break
+    if cron:
+        return cron, (cron_human(cron) or mechanism)
+    next_run = _next_schedule_time(schedules)
+    if next_run:
+        return mechanism, f"next {local_clock_label(next_run)}"
+    return mechanism, ""
+
+
+def job_is_running(job: dict[str, Any]) -> bool:
+    """Whether the job's most recent run is still in flight (so Run-now should be disabled)."""
+    definition = job.get("definition", {})
+    definition = definition if isinstance(definition, dict) else {}
+    recent = _dict_list(definition.get("recent_runs"))
+    if not recent:
+        latest = _latest_schedule_run(_dict_list(definition.get("schedules")))
+        recent = [latest] if latest else []
+    if not recent:
+        return False
+    status = (_text(recent[0].get("status")) or _text(recent[0].get("result")) or "").lower()
+    return status == "running"
+
+
+def job_last_run_display(job: dict[str, Any], now: datetime | None = None) -> tuple[str, str]:
+    """(when, detail) for the LAST_RUN column from the backend's recent runs; ("Never run",
+    "") when the job has no recorded run."""
+    definition = job.get("definition", {})
+    definition = definition if isinstance(definition, dict) else {}
+    recent = _dict_list(definition.get("recent_runs"))
+    if not recent:
+        latest = _latest_schedule_run(_dict_list(definition.get("schedules")))
+        recent = [latest] if latest else []
+    if not recent:
+        return "Never run", ""
+    run = recent[0]
+    stamp = _text(run.get("actual_time")) or _text(run.get("schedule_time"))
+    when = relative_time_label(stamp, now=now) if stamp else "—"
+    result = _text(run.get("status")) or _text(run.get("result"))
+    detail = result.replace("_", " ").title() if result else ""
+    return when, detail
+
+
+JOB_STATUS_CHIPS = {
+    # in-sync = cyan; drifted = amber/warning (diverged but present); missing/blocked = hard
+    # error-red (absent / broken) — the two attention states are tellable apart by color.
+    "in_sync": ("IN SYNC", "#16323a", "#7fdfe8"),
+    "drifted": ("DRIFTED", "#33280f", "#ffcf8f"),
+    "missing": ("MISSING", "#3a1417", "#ffb4ab"),
+    "blocked": ("BLOCKED", "#3a1417", "#ffb4ab"),
+    "disabled": ("DISABLED", "#31353c", "#adcbda"),
+    "unknown": ("UNKNOWN", "#31353c", "#8fa8bb"),
+}
+
+
+def job_status_chip(status: str) -> tuple[str, str, str]:
+    """(label, background, foreground) for a job's drift-status chip."""
+    key = str(status or "").lower()
+    if key in JOB_STATUS_CHIPS:
+        return JOB_STATUS_CHIPS[key]
+    return (key.replace("_", " ").replace("-", " ").upper() or "UNKNOWN", "#31353c", "#8fa8bb")
+
+
+def jobs_attention_jobs(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
+    """The jobs that are NOT in sync (drift / missing / blocked / disabled) — i.e. exactly
+    what an UPDATE (git -> Temporal apply) would reconcile. The SYNC_AUDIT panel lists these."""
+    jobs = snapshot.get("jobs", [])
+    jobs = jobs if isinstance(jobs, list) else []
+    return [job for job in jobs if isinstance(job, dict) and str(job.get("status")) != "in_sync"]
+
+
+def summarize_apply_report(report: dict[str, Any]) -> dict[str, int]:
+    """Counts of schedule changes from a /sync apply report (what the last UPDATE changed)."""
+    def count(field: str) -> int:
+        value = report.get(field)
+        return len(value) if isinstance(value, list) else 0
+
+    created, updated, deleted = count("created_schedule_ids"), count("updated_schedule_ids"), count("deleted_schedule_ids")
+    return {"created": created, "updated": updated, "deleted": deleted, "total": created + updated + deleted}
+
+
+def job_detail_text(job: dict[str, Any]) -> str:
+    """The per-job detail readout (key facts + the raw backend definition) shown in the
+    Jobs row's Details popup."""
+    lines = []
+    for label, key in (
+        ("Label", "label"),
+        ("Status", "observed_label"),
+        ("Desired", "desired_label"),
+        ("Trigger", "mechanism_label"),
+        ("Reason", "reason"),
+    ):
+        value = _text(job.get(key))
+        if value:
+            lines.append(f"{label}: {value}")
+    definition = job.get("definition", {})
+    definition = definition if isinstance(definition, dict) else {}
+    return "\n".join(lines) + "\n\nDEFINITION\n" + json.dumps(definition, indent=2, sort_keys=True)
+
+
 def _latest_schedule_run(schedules: list[dict[str, Any]]) -> dict[str, Any] | None:
     for schedule in schedules:
         recent_runs = _dict_list(schedule.get("recent_runs"))

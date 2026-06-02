@@ -74,6 +74,32 @@ Redesigned the Assign popup to the second Stitch mockup
   [preview_popup.py](../Runtime/preview_popup.py) (task-owned, throwaway; `Testing/Runtime/`
   is gitignored so the harnesses are not committed).
 
+## JOBS_ORCHESTRATOR tab — mockup 6 conformance
+
+Rebuilt the Jobs tab to the Stitch mockup (6): a JOBS_ORCHESTRATOR header with the
+Git↔Temporal sync summary (TOTAL_JOBS / IN_SYNC / NEEDS_ATTENTION / LAST_SYNC), gradient
+**REFRESH** (re-read) + **UPDATE** (applies Git desired state to Temporal, sync icon), and a
+table (JOB_ID / SCHEDULE cron + human cadence / STATUS chip / LAST_RUN / ACTIONS) with a
+compact per-row RUN NOW (disabled while a run is in flight).
+
+![Jobs tab](./jobs-tab.png)
+
+- **No log stream.** The mockup's LOG_STREAM is intentionally replaced by a **SYNC_AUDIT**
+  sidestrip: in-sync/drift counts, the last UPDATE's changes (with the changed schedule ids),
+  and the exact jobs an UPDATE would reconcile (a Git→Runtime delta + the backend reason per
+  job). The per-row info button opens a borderless job-detail popup (no log stream).
+- Status chips are color-separated: IN SYNC (cyan), DRIFTED (amber), MISSING/BLOCKED (red).
+- All buttons use the shared gradient-glow style (consistent with WORKTREES + Assign).
+- Verified by an 8-agent adversarial fidelity review vs mockup 6 + INTERFACE-DESIGNER; the
+  2 blocking items (UPDATE's missing sync icon; DRIFTED vs MISSING indistinguishable) were
+  fixed.
+
+## Darker page (global)
+
+Per feedback ("the UI is way too light"), the tab page background was darkened to **`#11151b`**
+— the midpoint of the summary-card surface (`#181c22`) and the outer border (`#0a0e14`) — so
+the panels and cards (which keep their lighter surfaces) pop on a darker page across every tab.
+
 ## Remaining gate
 
 This is a visual redesign of surfaces REG-010 (cards) and REG-019 (Assign popup) cover;
