@@ -1510,26 +1510,67 @@ class DashboardApp:
     def open_worktree_session_action(self, worktree: dict[str, object]) -> None:
         # Open the allocated worktree's running CLAUDE SESSION in VSCodium's Claude extension
         # (anthropic.claude-code) so the operator can read the agent's chat/thinking and
-        # continue it. The extension resolves a session against the OPEN workspace, so open the
-        # worktree folder first, then fire vscodium://anthropic.claude-code/open?session=<id>.
-        # If the backend captured no session id for this worktree (e.g. it was assigned without
-        # an agent ever being launched into it), say so honestly — do NOT open a weaker proxy.
+        # continue it. The extension resolves a session against the workspace currently OPEN,
+        # so open the worktree folder FIRST and fire the session URI a beat LATER (firing both
+        # at once raced — the session was looked up before the workspace window was up). We
+        # drive VSCodium.exe directly (the registered GUI exe) so the dispatch is deterministic
+        # from the windowless dashboard process, with the OS URL handler as a fallback. If the
+        # backend captured no session id (e.g. the worktree was assigned BEFORE agent launch
+        # was enabled), say so honestly — do NOT open a weaker proxy.
         session_id = str(worktree.get("agent_session_id") or "").strip()
         workspace = worktree_session_target(worktree)
         label = str(worktree.get("task_id") or worktree.get("worktree_id") or "session")
         if not session_id:
             self._set_worktrees_status(
-                f"No Claude session is bound to {label} yet — nothing to open. "
-                "(A worktree gets a session only once an agent is launched into it.)"
+                f"{label}: no Claude session is bound to this worktree yet — nothing to open. "
+                "Assign a task to an idle worktree to launch an agent and capture its session."
             )
             return
+        session_uri = claude_session_uri(session_id)
         try:
             if workspace:
-                webbrowser.open(vscodium_uri(workspace))
-            webbrowser.open(claude_session_uri(session_id))
+                self._open_vscodium_folder(workspace)
+            # Let the workspace window come up before resolving the session against it
+            # (non-blocking; stays on the Tk UI thread).
+            self.root.after(4000, lambda uri=session_uri: self._open_vscodium_uri(uri))
             self._set_worktrees_status(f"Opening {label}'s Claude session in VSCodium…")
         except Exception as exc:
             self._set_worktrees_status(f"Could not open VSCodium: {exc}")
+
+    def _vscodium_executable(self) -> str | None:
+        # Resolve the VSCodium GUI executable (the registered vscodium:// handler is
+        # "<...>\\VSCodium.exe --open-url ..."). Cached. None => caller falls back to the OS
+        # URL handler.
+        cached = getattr(self, "_vscodium_exe_cache", "?")
+        if cached != "?":
+            return cached
+        candidates = [
+            os.path.join(os.environ.get("ProgramFiles", ""), "VSCodium", "VSCodium.exe"),
+            os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "VSCodium", "VSCodium.exe"),
+            shutil.which("VSCodium"),
+            shutil.which("codium"),
+        ]
+        resolved = next((c for c in candidates if c and os.path.exists(c)), None)
+        self._vscodium_exe_cache = resolved
+        return resolved
+
+    def _open_vscodium_folder(self, folder: str) -> None:
+        # Open a folder as a (new) VSCodium window — the worktree checkout becomes the workspace
+        # the Claude extension resolves the session against. No console window, non-blocking.
+        exe = self._vscodium_executable()
+        if exe:
+            subprocess.Popen([exe, folder], creationflags=0x08000000)  # CREATE_NO_WINDOW
+        else:
+            webbrowser.open(vscodium_uri(folder))
+
+    def _open_vscodium_uri(self, uri: str) -> None:
+        # Dispatch a vscodium:// URI (the open?session= deep link) to VSCodium. Drives the exe
+        # with --open-url (deterministic), falling back to the OS URL handler.
+        exe = self._vscodium_executable()
+        if exe:
+            subprocess.Popen([exe, "--open-url", "--", uri], creationflags=0x08000000)
+        else:
+            webbrowser.open(uri)
 
     def open_worktree_details(self, worktree: dict[str, object]) -> None:
         # The explicit Details reveal: the full secondary/diagnostic fields the panel face
