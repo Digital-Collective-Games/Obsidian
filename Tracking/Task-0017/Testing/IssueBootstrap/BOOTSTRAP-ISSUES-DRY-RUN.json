@@ -1,0 +1,18 @@
+{
+    "status":  "dry_run",
+    "provider_repo":  "Digital-Collective-Games/Obsidian",
+    "task_count":  1,
+    "start_task_number":  17,
+    "end_task_number":  17,
+    "output_dir":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0017\\Testing\\IssueBootstrap",
+    "results":  [
+                    {
+                        "task_id":  "Task-0017",
+                        "expected_issue_number":  17,
+                        "action":  "dry_run_create",
+                        "provider_repo":  "Digital-Collective-Games/Obsidian",
+                        "title":  "Task-0017: Make ASSIGN feel instant on the WORKTREES tab — clicking ASSIGN opens the popup immediately (no ~500 ms freeze) while the open-task list loads in the background — and prove the bind→done→clear lifecycle: a worktree assigned to a task visibly returns to idle once that task is done.",
+                        "body_path":  "C:\\Agent\\CodexDashboard\\Tracking\\Task-0017\\Testing\\IssueBootstrap\\Task-0017-BODY.md"
+                    }
+                ]
+}
