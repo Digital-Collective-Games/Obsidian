@@ -1576,13 +1576,20 @@ class DashboardApp:
         popup.configure(bg="#1c2026")
         popup.transient(self.overlay)
         popup.attributes("-topmost", True)
-        popup.geometry("420x420")
+        # BUG-0007: center the popup on the dashboard overlay (not the desktop top-left).
+        popup_w, popup_h = 460, 520
+        self.overlay.update_idletasks()
+        ox, oy = self.overlay.winfo_rootx(), self.overlay.winfo_rooty()
+        ow, oh = self.overlay.winfo_width(), self.overlay.winfo_height()
+        cx = ox + max(0, (ow - popup_w) // 2)
+        cy = oy + max(0, (oh - popup_h) // 2)
+        popup.geometry(f"{popup_w}x{popup_h}+{cx}+{cy}")
 
         ttk.Label(
             popup,
             text=f"ASSIGN A TASK TO {worktree_id}",
             style="Tiny.TLabel",
-        ).pack(anchor="w", padx=16, pady=(16, 4))
+        ).pack(side="top", anchor="w", padx=16, pady=(16, 4))
 
         if not options:
             ttk.Label(
@@ -1591,21 +1598,57 @@ class DashboardApp:
                 style="Status.TLabel",
                 wraplength=380,
                 justify="left",
-            ).pack(anchor="w", padx=16, pady=(8, 0))
+            ).pack(side="top", anchor="w", padx=16, pady=(8, 0))
             ttk.Button(popup, text="CLOSE", style="Quiet.TButton", command=popup.destroy).pack(
-                anchor="e", padx=16, pady=12
+                side="bottom", anchor="e", padx=16, pady=12
             )
             return
 
-        list_shell = tk.Frame(popup, bg="#10141a")
-        list_shell.pack(fill="both", expand=True, padx=16, pady=(8, 8))
+        # BUG-0007: pin ASSIGN/CANCEL to the bottom FIRST so a long task list can never
+        # push them off-screen, regardless of how many tasks the list holds.
         selection = tk.StringVar(value=options[0]["task_id"])
+        button_row = tk.Frame(popup, bg="#1c2026")
+        button_row.pack(side="bottom", fill="x", padx=16, pady=(8, 14))
+        ttk.Button(button_row, text="CANCEL", style="Quiet.TButton", command=popup.destroy).pack(side="right")
+        ttk.Button(
+            button_row,
+            text="ASSIGN",
+            style="Accent.TButton",
+            command=lambda: self._confirm_assign(popup, selection.get(), repo_for_assign, worktree_id),
+        ).pack(side="right", padx=(0, 8))
+
+        # BUG-0007: scrollable task list filling the space between the header and the
+        # pinned buttons (scrolls when tasks exceed the view).
+        list_shell = tk.Frame(popup, bg="#10141a")
+        list_shell.pack(side="top", fill="both", expand=True, padx=16, pady=(8, 8))
+        canvas = tk.Canvas(list_shell, bg="#10141a", highlightthickness=0, bd=0)
+        scrollbar = ttk.Scrollbar(list_shell, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+        inner = tk.Frame(canvas, bg="#10141a")
+        inner_id = canvas.create_window((0, 0), window=inner, anchor="nw")
+
+        def _sync_scrollregion(_event=None):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+
+        def _match_width(event):
+            canvas.itemconfigure(inner_id, width=event.width)
+
+        def _on_mousewheel(event):
+            canvas.yview_scroll(-1 if event.delta > 0 else 1, "units")
+
+        inner.bind("<Configure>", _sync_scrollregion)
+        canvas.bind("<Configure>", _match_width)
+        for wheel_target in (canvas, inner):
+            wheel_target.bind("<MouseWheel>", _on_mousewheel)
+
         for option in options:
             text = f"{option['task_id']}  -  {option['title']}"
             if option["state"]:
                 text += f"  [{option['state']}]"
-            tk.Radiobutton(
-                list_shell,
+            radio = tk.Radiobutton(
+                inner,
                 text=text,
                 value=option["task_id"],
                 variable=selection,
@@ -1616,19 +1659,11 @@ class DashboardApp:
                 activeforeground="#c3f5ff",
                 anchor="w",
                 justify="left",
-                wraplength=360,
+                wraplength=380,
                 font=("Inter", 9),
-            ).pack(anchor="w", fill="x", padx=8, pady=2)
-
-        button_row = tk.Frame(popup, bg="#1c2026")
-        button_row.pack(fill="x", padx=16, pady=(0, 14))
-        ttk.Button(button_row, text="CANCEL", style="Quiet.TButton", command=popup.destroy).pack(side="right")
-        ttk.Button(
-            button_row,
-            text="ASSIGN",
-            style="Accent.TButton",
-            command=lambda: self._confirm_assign(popup, selection.get(), repo_for_assign, worktree_id),
-        ).pack(side="right", padx=(0, 8))
+            )
+            radio.pack(anchor="w", fill="x", padx=8, pady=2)
+            radio.bind("<MouseWheel>", _on_mousewheel)
 
     def _confirm_assign(self, popup: tk.Toplevel, task_id: str, repo: str, worktree_id: str) -> None:
         popup.destroy()

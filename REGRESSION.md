@@ -1036,6 +1036,50 @@ Interpretation:
   state-less task; the BUG-0005 run-termination fix introduced it, so the post-Eject Assign-popup
   load must be exercised in-app or this class of bug reaches the human again.
 
+### REG-019 WORKTREES Assign Popup Layout (buttons always visible, list scrolls, centered)
+
+Goal:
+
+Confirm the WORKTREES tab's Assign popup keeps its **ASSIGN / CANCEL buttons visible no matter
+how many tasks the list holds**, **scrolls** the task list when it overflows, and opens
+**centered on the dashboard overlay** (not the desktop top-left). Found live (BUG-0007): a long
+task list pushed the ASSIGN button off-screen and the list did not scroll, so the operator
+could not complete an Assign.
+
+Surface:
+
+The real desktop overlay WORKTREES tab Assign popup, backed by `GET /api/v1/tasks` on the
+isolated validation lane, with the lane's task set seeded so the open-task list OVERFLOWS the
+popup height.
+
+Steps:
+
+1. Launch the real app + validation-lane backend as in REG-010, with enough open tasks (long
+   titles) that the Assign list exceeds the popup height.
+2. Open the WORKTREES tab and click Assign on an idle worktree.
+3. Confirm the ASSIGN and CANCEL buttons are visible at the bottom of the popup.
+4. Confirm the task list scrolls (scrollbar drag and/or mousewheel) to reach tasks below the
+   initial view.
+5. Confirm the popup is centered over the dashboard overlay window (not at the desktop
+   top-left corner).
+6. Scroll to a task beyond the first screen, select it, click ASSIGN, and confirm it binds.
+7. Capture an app-surface artifact showing the popup with the buttons visible and the list
+   scrolled.
+
+Expected result:
+
+- ASSIGN/CANCEL stay visible regardless of list length (a list that pushes the buttons
+  off-screen fails this case)
+- the task list scrolls when it overflows; tasks below the fold are reachable and selectable
+- the popup is centered on the overlay, not the desktop corner
+- a task selected from beyond the initial view binds successfully
+
+Interpretation:
+
+- this is the human-surface regression for BUG-0007 (Assign popup layout). The buttons-always-
+  visible + scroll + centered requirements are load-bearing; a fixed-size popup that hides the
+  action button behind a long list is a closure-blocking human-surface failure, not polish.
+
 ## Supporting Smoke
 
 ### SMOKE-001 Ingest Core
