@@ -40,10 +40,12 @@ from app.codex_dashboard.worktrees_tab import (
     worktree_heading_repo,
     worktree_issue_url,
     worktree_matches_repo,
+    worktree_session_target,
     worktree_status_background,
     worktree_status_color,
     worktree_status_label,
     worktree_summary_counts,
+    vscodium_uri,
 )
 
 
@@ -121,6 +123,28 @@ class WorktreesTabHelperTests(unittest.TestCase):
         # Idle (no bound task) and a repo without a provider both yield no link.
         self.assertEqual(worktree_issue_url(IDLE_WORKTREE, REPOS), "")
         self.assertEqual(worktree_issue_url(OTHER_REPO_WORKTREE, REPOS), "")
+
+    def test_session_target_prefers_checkout_then_transcript(self) -> None:
+        # The "open session" button opens the worktree CHECKOUT (always present for an
+        # allocated member; where you watch live edits + open a terminal). It falls back to
+        # the transcript only when the checkout path is empty, and an idle/empty worktree
+        # yields no target.
+        self.assertEqual(worktree_session_target(ALLOCATED_WORKTREE), "C:\\owned\\obsidian\\wt-0001\\wt-0001")
+        no_path = {**ALLOCATED_WORKTREE, "worktree_path": ""}
+        self.assertEqual(worktree_session_target(no_path), "C:\\transcripts\\sess-abc.jsonl")
+        self.assertEqual(worktree_session_target({"worktree_path": "", "session_transcript_path": ""}), "")
+
+    def test_vscodium_uri_uses_forward_slashes_and_encodes_spaces(self) -> None:
+        # vscodium://file/<path>: backslashes -> forward slashes, the drive colon and
+        # separators stay literal, and spaces are percent-encoded so the URI is well-formed.
+        self.assertEqual(
+            vscodium_uri("C:\\owned\\obsidian\\wt-0001"),
+            "vscodium://file/C:/owned/obsidian/wt-0001",
+        )
+        self.assertEqual(
+            vscodium_uri("C:\\My Worktrees\\wt-1"),
+            "vscodium://file/C:/My%20Worktrees/wt-1",
+        )
 
     def test_heading_uses_short_repo_segment_for_both_states(self) -> None:
         # B1: the heading must be the short repo token in BOTH states, NOT the raw `repo`

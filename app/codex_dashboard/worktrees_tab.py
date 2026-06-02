@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Iterable
+from urllib.parse import quote
 
 
 # Allocated vs idle is the load-bearing visual distinction (Goal 13 / REG-010): the two
@@ -139,6 +140,34 @@ def worktree_issue_url(worktree: dict[str, object], repos: Iterable[dict[str, ob
     if provider.count("/") != 1 or not all(provider.split("/")):
         return ""
     return f"https://github.com/{provider}/issues/{int(digits)}"
+
+
+def worktree_session_target(worktree: dict[str, object]) -> str:
+    """The local path to open in VSCodium to watch / interact with an allocated worktree's
+    running session.
+
+    Prefer the worktree CHECKOUT folder: it is always present for an allocated member, it is
+    where the agent's live edits land (you can watch the diff and open a terminal to interact),
+    and for a Claude Code session it is the folder you resume the conversation from. Fall back
+    to the captured session transcript path only when the checkout path is empty, and return
+    "" when neither is known (e.g. an idle worktree, which has no running session).
+    """
+    path = str(worktree.get("worktree_path") or "").strip()
+    if path:
+        return path
+    return str(worktree.get("session_transcript_path") or "").strip()
+
+
+def vscodium_uri(path: str) -> str:
+    """Build a ``vscodium://file/<path>`` URI for a local file or folder.
+
+    The registered VSCodium protocol handler opens it (``VSCodium.exe --open-url``). The
+    backend deliberately exposes the raw worktree/session fields and never emits this link
+    itself — constructing it is the client's job. Backslashes become forward slashes and the
+    path is percent-encoded except for the drive colon and separators, so spaces are handled.
+    """
+    forward = str(path or "").replace("\\", "/")
+    return "vscodium://file/" + quote(forward, safe="/:")
 
 
 def filter_worktrees_by_repo(

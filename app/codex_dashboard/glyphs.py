@@ -125,6 +125,13 @@ def render_glyph(kind: str, color: str, size: int, supersample: int = SUPERSAMPL
         line([(0.5, 0.16), (0.9, 0.82), (0.1, 0.82), (0.5, 0.16)])
         line([(0.5, 0.4), (0.5, 0.62)])
         draw.ellipse([pt(0.45, 0.69), pt(0.55, 0.79)], fill=rgba)
+    elif kind == "launch":
+        # open_in_new: a box opened at its top-right corner with a diagonal arrow exiting to
+        # the NE — the standard "open in an external window" affordance.
+        line([(0.18, 0.4), (0.18, 0.82), (0.72, 0.82), (0.72, 0.5)])
+        line([(0.18, 0.4), (0.4, 0.4)])
+        line([(0.48, 0.52), (0.82, 0.18)])
+        line([(0.62, 0.18), (0.82, 0.18), (0.82, 0.38)])
     else:
         raise ValueError(f"unknown glyph kind: {kind!r}")
 
@@ -204,4 +211,5 @@ GLYPH_KINDS = (
     "sync",
     "clock",
     "warning",
+    "launch",
 )

@@ -81,10 +81,12 @@ from .worktrees_tab import (
     worktree_detail_lines,
     worktree_heading_repo,
     worktree_issue_url,
+    worktree_session_target,
     worktree_status_background,
     worktree_status_color,
     worktree_status_label,
     worktree_summary_counts,
+    vscodium_uri,
 )
 
 
@@ -1364,6 +1366,10 @@ class DashboardApp:
                 parent, "details", lambda wt=dict(worktree): self.open_worktree_details(wt),
                 "Details", row_bg,
             ).pack(side="left", padx=(0, 10))
+            self._worktree_icon_button(
+                parent, "launch", lambda wt=dict(worktree): self.open_worktree_session_action(wt),
+                "Open session in VSCodium", row_bg,
+            ).pack(side="left", padx=(0, 10))
             self._cta_button(
                 parent, "DEQUEUE", lambda tid=task_id: self.dequeue_task_action(tid), bg=row_bg,
                 top="#3a3f47", bottom="#23272d", fg="#dfe2eb",
@@ -1453,6 +1459,12 @@ class DashboardApp:
             canvas.create_line(13, 5, 12, 15, fill=color, width=1)
             canvas.create_line(6, 15, 12, 15, fill=color, width=1)
             canvas.create_line(9, 7, 9, 13, fill=color, width=1)
+        elif kind == "launch":
+            # open_in_new: a box opened at the top-right with a NE arrow.
+            canvas.create_line(3, 7, 3, 15, 13, 15, 13, 9, fill=color, width=1)
+            canvas.create_line(3, 7, 7, 7, fill=color, width=1)
+            canvas.create_line(8, 9, 15, 3, fill=color, width=1)
+            canvas.create_line(11, 3, 15, 3, 15, 7, fill=color, width=1)
 
     def copy_worktree_path(self, path: str) -> None:
         if not path:
@@ -1493,6 +1505,24 @@ class DashboardApp:
 
         widget.bind("<Enter>", show)
         widget.bind("<Leave>", hide)
+
+    def open_worktree_session_action(self, worktree: dict[str, object]) -> None:
+        # Open the allocated worktree's live session in VSCodium so the operator can watch the
+        # agent work (and open a terminal there to interact). Opens the worktree CHECKOUT
+        # folder through the registered vscodium:// protocol; the backend deliberately exposes
+        # the raw fields and never emits the link itself, so constructing it is the client's
+        # job. webbrowser.open routes the custom scheme through the OS handler (same path the
+        # bound-task issue link already uses), so it never blocks the UI or pops a console.
+        target = worktree_session_target(worktree)
+        if not target:
+            self._set_worktrees_status("No session location is available for this worktree yet.")
+            return
+        label = str(worktree.get("task_id") or worktree.get("worktree_id") or "session")
+        try:
+            webbrowser.open(vscodium_uri(target))
+            self._set_worktrees_status(f"Opening {label} in VSCodium: {target}")
+        except Exception as exc:
+            self._set_worktrees_status(f"Could not open VSCodium: {exc}")
 
     def open_worktree_details(self, worktree: dict[str, object]) -> None:
         # The explicit Details reveal: the full secondary/diagnostic fields the panel face
