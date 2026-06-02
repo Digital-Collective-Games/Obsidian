@@ -345,7 +345,6 @@ class DesktopSupportTests(unittest.TestCase):
         self.assertEqual(app.jobs_status_message, expected)
         app.status_label.configure.assert_called_once_with(text=expected)
         app._render_jobs_snapshot.assert_called_once_with()
-        self.assertEqual(app.jobs_apply_report, report)
 
     def test_run_job_now_starts_manual_run_and_refreshes_snapshot(self) -> None:
         app = SimpleNamespace(

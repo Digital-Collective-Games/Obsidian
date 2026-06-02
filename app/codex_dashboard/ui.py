@@ -36,13 +36,11 @@ from .jobs_backend import (
     configured_jobs_backend_url,
     fetch_jobs_snapshot,
     job_detail_text,
-    job_last_run_display,
-    job_schedule_display,
-    job_status_chip,
     job_is_running,
-    jobs_attention_jobs,
+    job_last_run_display,
+    job_next_run_display,
+    job_status_chip,
     jobs_backend_error_snapshot,
-    schedule_owner_map,
     start_job_run,
     summarize_apply_report,
     sync_jobs_snapshot,
@@ -943,62 +941,38 @@ class DashboardApp:
 
     def _build_jobs_lane(self) -> None:
         self.jobs_body = ttk.Frame(self.content_stack, style="BodyPanel.TFrame", padding=(16, 14))
-        self.jobs_apply_report: dict[str, object] | None = None
 
-        # Header module (mockup JOBS_ORCHESTRATOR): title + Git<->Temporal sync summary, with
-        # REFRESH (re-read backend state) and UPDATE (apply Git desired state to Temporal)
-        # buttons in the shared gradient-CTA style.
-        header = tk.Frame(self.jobs_body, bg="#1c2026")
-        header.pack(fill="x", pady=(0, 12))
-        header_inner = tk.Frame(header, bg="#1c2026")
-        header_inner.pack(fill="x", padx=16, pady=14)
-        header_actions = tk.Frame(header_inner, bg="#1c2026")
-        header_actions.pack(side="right")
+        # Action row: REFRESH (re-read) + UPDATE (apply Git desired state to Temporal),
+        # right-aligned above the summary cards (mirrors the WORKTREES toolbar button row).
+        action_row = ttk.Frame(self.jobs_body, style="BodyPanel.TFrame")
+        action_row.pack(fill="x", pady=(0, 12))
+        actions = tk.Frame(action_row, bg="#11151b")
+        actions.pack(side="right")
         self._cta_button(
-            header_actions, "REFRESH", self.refresh_jobs_data, bg="#1c2026",
+            actions, "REFRESH", self.refresh_jobs_data, bg="#11151b",
             top="#3a3f47", bottom="#23272d", fg="#cdd6da",
             hover_top="#454b54", hover_bottom="#2d323a", icon=None,
         ).pack(side="left", padx=(0, 10))
         self._cta_button(
-            header_actions, "UPDATE", lambda: self.refresh_jobs_data(apply_changes=True), bg="#1c2026",
+            actions, "UPDATE", lambda: self.refresh_jobs_data(apply_changes=True), bg="#11151b",
             top="#c3f5ff", bottom="#00e5ff", fg="#00363d",
             hover_top="#d8faff", hover_bottom="#2ee8ff", icon="sync", icon_side="left",
         ).pack(side="left")
-        title_col = tk.Frame(header_inner, bg="#1c2026")
-        title_col.pack(side="left", fill="x", expand=True)
-        tk.Label(
-            title_col, text="JOBS_ORCHESTRATOR", bg="#1c2026", fg="#c3f5ff",
-            font=("Space Grotesk", -22, "bold"),
-        ).pack(anchor="w")
-        metrics = tk.Frame(title_col, bg="#1c2026")
-        metrics.pack(anchor="w", pady=(10, 0))
-        self.jobs_metric_values: dict[str, tk.Label] = {}
-        for key, label, fg in (
-            ("total", "TOTAL_JOBS", "#dfe2eb"),
-            ("in_sync", "IN_SYNC", "#7fdfe8"),
-            ("attention", "NEEDS_ATTENTION", "#dfe2eb"),
-            ("last_sync", "LAST_SYNC", "#dfe2eb"),
+
+        # Summary cards in the WORKTREES format (three equal cards): TOTAL_JOBS / IN_SYNC /
+        # NEEDS_ATTENTION. No tab title — the active tab already names the surface.
+        summary_row = ttk.Frame(self.jobs_body, style="BodyPanel.TFrame")
+        summary_row.pack(fill="x", pady=(0, 12))
+        self.jobs_metric_values: dict[str, ttk.Label] = {}
+        for column, (key, title) in enumerate(
+            (("total", "TOTAL_JOBS"), ("in_sync", "IN_SYNC"), ("attention", "NEEDS_ATTENTION"))
         ):
-            cell = tk.Frame(metrics, bg="#1c2026")
-            cell.pack(side="left", padx=(0, 26))
-            tk.Label(cell, text=label, bg="#1c2026", fg="#adcbda", font=("Inter", -11)).pack(anchor="w")
-            value = tk.Label(cell, text="--", bg="#1c2026", fg=fg, font=("Space Grotesk", -18, "bold"))
-            value.pack(anchor="w")
-            self.jobs_metric_values[key] = value
+            summary_row.columnconfigure(column, weight=1)
+            self.jobs_metric_values[key] = self._build_worktrees_summary_card(summary_row, column, title, "0")
 
-        # Asymmetric split (mockup): the jobs table (primary) + a SYNC_AUDIT sidestrip.
-        split = ttk.Frame(self.jobs_body, style="BodyPanel.TFrame")
-        split.pack(fill="both", expand=True)
-        audit = tk.Frame(split, bg="#0a0e14", width=240)
-        audit.pack(side="right", fill="y")
-        audit.pack_propagate(False)
-        self._build_jobs_audit_panel(audit)
-        left = ttk.Frame(split, style="BodyPanel.TFrame")
-        left.pack(side="left", fill="both", expand=True, padx=(0, 12))
-
-        # Table header (fixed column widths so every row aligns under it).
-        self._jobs_columns = (("JOB_ID", 156), ("SCHEDULE", 132), ("STATUS", 92), ("LAST_RUN", 102))
-        table_head = tk.Frame(left, bg="#262a31")
+        # Full-width jobs table (NEXT shows the next scheduled run time).
+        self._jobs_columns = (("JOB_ID", 312), ("NEXT", 90), ("STATUS", 110), ("LAST_RUN", 130))
+        table_head = tk.Frame(self.jobs_body, bg="#262a31")
         table_head.pack(fill="x")
         head_inner = tk.Frame(table_head, bg="#262a31")
         head_inner.pack(fill="x", padx=14, pady=9)
@@ -1010,7 +984,7 @@ class DashboardApp:
             tk.Label(cell, text=text, bg="#262a31", fg="#adcbda", font=("Inter", -11)).pack(side="left")
 
         # Scrollable rows.
-        rows_shell = tk.Frame(left, bg="#0a0e14")
+        rows_shell = tk.Frame(self.jobs_body, bg="#0a0e14")
         rows_shell.pack(fill="both", expand=True)
         self.jobs_scroll_canvas = tk.Canvas(rows_shell, bg="#0a0e14", highlightthickness=0, borderwidth=0)
         self.jobs_scrollbar = ttk.Scrollbar(rows_shell, orient="vertical", command=self.jobs_scroll_canvas.yview)
@@ -1025,42 +999,6 @@ class DashboardApp:
         self.jobs_scroll_canvas.bind("<Configure>", self._resize_jobs_scroll_content)
         self.jobs_scroll_canvas.bind("<MouseWheel>", self._on_jobs_mousewheel)
         self.jobs_rows_container.bind("<MouseWheel>", self._on_jobs_mousewheel)
-
-    def _build_jobs_audit_panel(self, parent: tk.Frame) -> None:
-        # SYNC_AUDIT sidestrip (replaces the mockup's LOG_STREAM, which is not needed): a
-        # terminal-style readout of the Git<->Temporal reconcile — how many jobs are in sync,
-        # what the last UPDATE changed, and which jobs an UPDATE would still reconcile (with
-        # the drift reason for each). Truthful: it shows only backend-reported state.
-        head = tk.Frame(parent, bg="#1c2026")
-        head.pack(fill="x")
-        head_inner = tk.Frame(head, bg="#1c2026")
-        head_inner.pack(fill="x", padx=14, pady=10)
-        audit_icon = self._icon_photo("sync", "#c3f5ff", 15)
-        if audit_icon is not None:
-            tk.Label(head_inner, image=audit_icon, bg="#1c2026").pack(side="left", padx=(0, 8))
-        tk.Label(
-            head_inner, text="SYNC_AUDIT", bg="#1c2026", fg="#c3f5ff", font=("Space Grotesk", -13, "bold")
-        ).pack(side="left")
-        body = tk.Frame(parent, bg="#0a0e14")
-        body.pack(fill="both", expand=True)
-        audit_scroll = ttk.Scrollbar(body, orient="vertical")
-        audit_scroll.pack(side="right", fill="y")
-        self.jobs_audit_text = tk.Text(
-            body, bg="#0a0e14", fg="#bac9cc", relief="flat", bd=0, wrap="word",
-            font=("Consolas", -12), padx=14, pady=12, highlightthickness=0, cursor="arrow",
-            yscrollcommand=audit_scroll.set,
-        )
-        audit_scroll.configure(command=self.jobs_audit_text.yview)
-        self.jobs_audit_text.pack(side="left", fill="both", expand=True)
-        self.jobs_audit_text.tag_configure("headline", foreground="#dfe2eb", font=("Space Grotesk", -13, "bold"))
-        self.jobs_audit_text.tag_configure("section", foreground="#7fdfe8", font=("Inter", -12, "bold"), spacing1=12)
-        self.jobs_audit_text.tag_configure("muted", foreground="#849396")
-        self.jobs_audit_text.tag_configure("ok", foreground="#7fdfe8")
-        self.jobs_audit_text.tag_configure("jobid", foreground="#dfe2eb", font=("Consolas", -12, "bold"), spacing1=8)
-        self.jobs_audit_text.tag_configure("drift", foreground="#ffc1bd")
-        self.jobs_audit_text.tag_configure("reason", foreground="#bac9cc", spacing3=6)
-        self.jobs_audit_text.tag_configure("delta", foreground="#7fdfe8")
-        self.jobs_audit_text.configure(state="disabled")
 
     def _build_worktrees_lane(self) -> None:
         # Task-0016 (D1=replace): this lane replaces the old TASKS tab's task
@@ -2096,7 +2034,6 @@ class DashboardApp:
         try:
             if apply_changes:
                 self.jobs_snapshot, report = sync_jobs_snapshot(self.jobs_backend_url)
-                self.jobs_apply_report = report
                 changes = summarize_apply_report(report)
                 self.jobs_status_message = (
                     f"UPDATE applied Git desired state to Temporal: {changes['total']} schedule changes "
@@ -2131,13 +2068,7 @@ class DashboardApp:
         jobs = list(snapshot.get("jobs", []))
         self.jobs_metric_values["total"].configure(text=f"{len(jobs):02d}")
         self.jobs_metric_values["in_sync"].configure(text=f"{int(summary.get('in_sync', 0)):02d}")
-        attention = jobs_needs_attention_count(summary)
-        self.jobs_metric_values["attention"].configure(
-            text=f"{attention:02d}", fg="#ffb4ab" if attention else "#dfe2eb"
-        )
-        self.jobs_metric_values["last_sync"].configure(
-            text=format_jobs_timestamp(snapshot.get("last_reconciled_at"))
-        )
+        self.jobs_metric_values["attention"].configure(text=f"{jobs_needs_attention_count(summary):02d}")
 
         for child in self.jobs_rows_container.winfo_children():
             child.destroy()
@@ -2152,58 +2083,9 @@ class DashboardApp:
         else:
             for job in jobs:
                 self._build_jobs_row(job)
-        self._render_jobs_audit()
-
-    def _render_jobs_audit(self) -> None:
-        # The SYNC_AUDIT readout: in-sync/drift counts, the last UPDATE's changes, and the
-        # jobs an UPDATE would still reconcile (with the backend-reported drift reason).
-        text = self.jobs_audit_text
-        snapshot = self.jobs_snapshot
-        summary = dict(snapshot.get("summary", {}))
-        in_sync = int(summary.get("in_sync", 0))
-        attention = jobs_needs_attention_count(summary)
-        text.configure(state="normal")
-        text.delete("1.0", "end")
-        text.insert("end", f"{in_sync:02d} in sync   {attention:02d} drift\n", "headline")
-        text.insert("end", f"Last sync {format_jobs_timestamp(snapshot.get('last_reconciled_at'))}\n", "muted")
-
-        report = getattr(self, "jobs_apply_report", None)
-        if report:
-            changes = summarize_apply_report(report)
-            text.insert("end", "LAST UPDATE\n", "section")
-            text.insert(
-                "end",
-                f"+{changes['created']} created  ~{changes['updated']} updated  -{changes['deleted']} deleted\n",
-                "muted",
-            )
-            owner = schedule_owner_map(snapshot)
-            for field, sign in (("created_schedule_ids", "+"), ("updated_schedule_ids", "~"), ("deleted_schedule_ids", "-")):
-                ids = report.get(field)
-                if isinstance(ids, list):
-                    for schedule_id in ids[:8]:
-                        text.insert("end", f"  {sign} {owner.get(str(schedule_id), str(schedule_id))}\n", "muted")
-
-        attention_jobs = jobs_attention_jobs(snapshot)
-        if not attention_jobs:
-            text.insert("end", "RECONCILE\n", "section")
-            text.insert("end", "All jobs match Git desired state.\nNothing for UPDATE to apply.\n", "ok")
-        else:
-            text.insert("end", "NEEDS RECONCILE\n", "section")
-            text.insert("end", "UPDATE applies Git → Temporal for:\n", "muted")
-            for job in attention_jobs:
-                text.insert("end", f"\n{job.get('job_id', '')}\n", "jobid")
-                desired = str(job.get("desired_label", "")).strip()
-                observed = str(job.get("observed_label", "")).strip()
-                if desired:
-                    text.insert("end", f"Git: {desired}  -  Runtime: {observed}\n", "delta")
-                reason = str(job.get("reason", "")).strip()
-                if reason:
-                    text.insert("end", f"{reason}\n", "reason")
-        text.configure(state="disabled")
-        text.yview_moveto(0.0)
 
     def _build_jobs_row(self, job: dict[str, object]) -> None:
-        # One table row aligned under the fixed-width header columns (JOB_ID / SCHEDULE /
+        # One table row aligned under the fixed-width header columns (JOB_ID / NEXT /
         # STATUS / LAST_RUN) with right-justified actions (Details icon + Run now).
         status = str(job.get("status", "unknown"))
         attention = status != "in_sync"
@@ -2245,21 +2127,17 @@ class DashboardApp:
             return content
 
         id_content = cell(widths["JOB_ID"])
-        id_color = "#ffb4ab" if status in ("blocked", "missing") else ("#ffc1bd" if attention else "#c3f5ff")
+        icon_color = "#ffb4ab" if status in ("blocked", "missing") else ("#ffc1bd" if attention else "#849396")
         icon_kind = "sync" if job_is_running(job) else ("warning" if attention else "clock")
-        id_icon = self._icon_photo(icon_kind, id_color, 14)
+        id_icon = self._icon_photo(icon_kind, icon_color, 14)
         if id_icon is not None:
             tk.Label(id_content, image=id_icon, bg=row_bg).pack(side="left", padx=(0, 8))
-        tk.Label(id_content, text=str(job.get("job_id", "")), bg=row_bg, fg=id_color,
+        tk.Label(id_content, text=str(job.get("job_id", "")), bg=row_bg, fg="#dfe2eb",
                  font=("Consolas", -13, "bold")).pack(side="left")
 
-        sched_primary, sched_detail = job_schedule_display(job)
-        sched_content = cell(widths["SCHEDULE"])
-        tk.Label(sched_content, text=sched_primary or "—", bg="#262a31", fg="#dfe2eb",
-                 font=("Consolas", -12), padx=6, pady=1).pack(anchor="w")
-        if sched_detail:
-            tk.Label(sched_content, text=sched_detail, bg=row_bg, fg="#849396",
-                     font=("Inter", -11), anchor="w").pack(anchor="w", pady=(3, 0))
+        next_content = cell(widths["NEXT"])
+        tk.Label(next_content, text=job_next_run_display(job), bg=row_bg, fg="#dfe2eb",
+                 font=("Space Grotesk", -13, "bold"), anchor="w").pack(anchor="w")
 
         status_content = cell(widths["STATUS"])
         chip_label, chip_bg, chip_fg = job_status_chip(status)
@@ -3258,7 +3136,7 @@ class DashboardApp:
                     f"jobs_declared={self.jobs_metric_values['total'].cget('text')}",
                     f"jobs_in_sync={self.jobs_metric_values['in_sync'].cget('text')}",
                     f"jobs_needs_attention={self.jobs_metric_values['attention'].cget('text')}",
-                    f"jobs_last_reconciled={self.jobs_metric_values['last_sync'].cget('text')}",
+                    f"jobs_last_reconciled={format_jobs_timestamp(self.jobs_snapshot.get('last_reconciled_at'))}",
                 ]
             )
         else:

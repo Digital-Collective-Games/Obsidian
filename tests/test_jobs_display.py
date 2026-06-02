@@ -7,6 +7,7 @@ from app.codex_dashboard.jobs_backend import (
     cron_human,
     job_is_running,
     job_last_run_display,
+    job_next_run_display,
     job_schedule_display,
     job_status_chip,
     jobs_attention_jobs,
@@ -38,6 +39,13 @@ class JobsDisplayHelperTests(unittest.TestCase):
         self.assertEqual(cron_human("0 * * * *"), "Hourly")
         self.assertEqual(cron_human("30 14 * * *"), "Daily at 2:30 PM")
         self.assertEqual(cron_human("nonsense"), "")
+
+    def test_job_next_run_display(self) -> None:
+        job = {"definition": {"schedules": [{"next_action_times": ["2026-06-02T13:00:00Z"]}]}}
+        result = job_next_run_display(job)
+        self.assertNotEqual(result, "—")
+        self.assertTrue(result)
+        self.assertEqual(job_next_run_display({"definition": {}}), "—")
 
     def test_job_is_running(self) -> None:
         self.assertTrue(job_is_running({"definition": {"recent_runs": [{"status": "running"}]}}))

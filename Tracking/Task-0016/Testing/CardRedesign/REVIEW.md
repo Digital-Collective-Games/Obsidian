@@ -74,25 +74,25 @@ Redesigned the Assign popup to the second Stitch mockup
   [preview_popup.py](../Runtime/preview_popup.py) (task-owned, throwaway; `Testing/Runtime/`
   is gitignored so the harnesses are not committed).
 
-## JOBS_ORCHESTRATOR tab — mockup 6 conformance
+## JOBS tab
 
-Rebuilt the Jobs tab to the Stitch mockup (6): a JOBS_ORCHESTRATOR header with the
-Git↔Temporal sync summary (TOTAL_JOBS / IN_SYNC / NEEDS_ATTENTION / LAST_SYNC), gradient
-**REFRESH** (re-read) + **UPDATE** (applies Git desired state to Temporal, sync icon), and a
-table (JOB_ID / SCHEDULE cron + human cadence / STATUS chip / LAST_RUN / ACTIONS) with a
-compact per-row RUN NOW (disabled while a run is in flight).
+The Jobs tab uses the WORKTREES layout (per human feedback — no tab title, no audit
+sidestrip): gradient **REFRESH** (re-read) + **UPDATE** (applies Git desired state to
+Temporal, sync icon) above **three equal summary cards** (`TOTAL_JOBS` / `IN_SYNC` /
+`NEEDS_ATTENTION`), then a **full-width** table.
 
 ![Jobs tab](./jobs-tab.png)
 
-- **No log stream.** The mockup's LOG_STREAM is intentionally replaced by a **SYNC_AUDIT**
-  sidestrip: in-sync/drift counts, the last UPDATE's changes (with the changed schedule ids),
-  and the exact jobs an UPDATE would reconcile (a Git→Runtime delta + the backend reason per
-  job). The per-row info button opens a borderless job-detail popup (no log stream).
-- Status chips are color-separated: IN SYNC (cyan), DRIFTED (amber), MISSING/BLOCKED (red).
-- All buttons use the shared gradient-glow style (consistent with WORKTREES + Assign).
-- Verified by an 8-agent adversarial fidelity review vs mockup 6 + INTERFACE-DESIGNER; the
-  2 blocking items (UPDATE's missing sync icon; DRIFTED vs MISSING indistinguishable) were
-  fixed.
+- Table columns: **JOB_ID** (white text, 2×-wide, with a leading status glyph
+  clock/sync/warning) / **NEXT** (just the next-run clock time) / **STATUS** chip / **LAST_RUN**
+  (Space-Grotesk value + red "Failed") / **ACTIONS** (Details + a compact **RUN NOW**,
+  disabled while running). Per-row Details opens a borderless job-detail popup.
+- Status chips: IN SYNC (cyan), DRIFTED (softer red), MISSING/BLOCKED (harder red) — all
+  in-palette.
+- The earlier SYNC_AUDIT sidestrip was removed (the human found it not useful and the screen
+  was cramped); UPDATE outcomes surface in the summary counts.
+- It went through three 8-agent adversarial fidelity reviews against mockup 6 +
+  INTERFACE-DESIGNER (all blocking findings fixed) before the layout was simplified to this.
 
 ## Darker page (global)
 

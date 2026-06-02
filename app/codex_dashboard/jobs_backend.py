@@ -244,6 +244,15 @@ def job_schedule_display(job: dict[str, Any]) -> tuple[str, str]:
     return mechanism, ""
 
 
+def job_next_run_display(job: dict[str, Any]) -> str:
+    """The next scheduled run as a clock time ("4:00 AM"), or "—" when there is no upcoming
+    scheduled run (e.g. a manual-only job)."""
+    definition = job.get("definition", {})
+    definition = definition if isinstance(definition, dict) else {}
+    next_run = _next_schedule_time(_dict_list(definition.get("schedules")))
+    return local_clock_label(next_run) if next_run else "—"
+
+
 def job_is_running(job: dict[str, Any]) -> bool:
     """Whether the job's most recent run is still in flight (so Run-now should be disabled)."""
     definition = job.get("definition", {})
