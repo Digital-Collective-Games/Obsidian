@@ -1530,45 +1530,53 @@ class DashboardApp:
         try:
             if workspace:
                 self._open_vscodium_folder(workspace)
-            # Let the workspace window come up before resolving the session against it
-            # (non-blocking; stays on the Tk UI thread).
-            self.root.after(4000, lambda uri=session_uri: self._open_vscodium_uri(uri))
+            # Let the worktree window come up + the extension activate before resolving the
+            # session against it (the session is workspace-scoped — fired too early / into the
+            # wrong window it opens a fresh EMPTY chat). Non-blocking; stays on the Tk thread.
+            self.root.after(7000, lambda uri=session_uri: self._open_vscodium_uri(uri))
             self._set_worktrees_status(f"Opening {label}'s Claude session in VSCodium…")
         except Exception as exc:
             self._set_worktrees_status(f"Could not open VSCodium: {exc}")
 
-    def _vscodium_executable(self) -> str | None:
-        # Resolve the VSCodium GUI executable (the registered vscodium:// handler is
-        # "<...>\\VSCodium.exe --open-url ..."). Cached. None => caller falls back to the OS
-        # URL handler.
-        cached = getattr(self, "_vscodium_exe_cache", "?")
+    def _vscodium_cli(self) -> str | None:
+        # The codium CLI wrapper (bin\\codium.cmd) — NOT VSCodium.exe — is what actually routes
+        # a folder-open + --open-url deep link to the running instance and its extension
+        # (verified: VSCodium.exe --open-url is silently dropped; the CLI loads the session).
+        # Cached. None => fall back to the OS URL handler.
+        cached = getattr(self, "_vscodium_cli_cache", "?")
         if cached != "?":
             return cached
         candidates = [
-            os.path.join(os.environ.get("ProgramFiles", ""), "VSCodium", "VSCodium.exe"),
-            os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "VSCodium", "VSCodium.exe"),
-            shutil.which("VSCodium"),
+            os.path.join(os.environ.get("ProgramFiles", ""), "VSCodium", "bin", "codium.cmd"),
+            os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "VSCodium", "bin", "codium.cmd"),
             shutil.which("codium"),
+            shutil.which("codium.cmd"),
         ]
         resolved = next((c for c in candidates if c and os.path.exists(c)), None)
-        self._vscodium_exe_cache = resolved
+        self._vscodium_cli_cache = resolved
         return resolved
 
+    def _run_codium(self, args: list[str]) -> None:
+        # Run the codium CLI (a .cmd, via cmd /c) without a console window, non-blocking.
+        cli = self._vscodium_cli()
+        if not cli:
+            return
+        comspec = os.environ.get("ComSpec", "cmd.exe")
+        subprocess.Popen([comspec, "/c", cli, *args], creationflags=0x08000000)  # CREATE_NO_WINDOW
+
     def _open_vscodium_folder(self, folder: str) -> None:
-        # Open a folder as a (new) VSCodium window — the worktree checkout becomes the workspace
-        # the Claude extension resolves the session against. No console window, non-blocking.
-        exe = self._vscodium_executable()
-        if exe:
-            subprocess.Popen([exe, folder], creationflags=0x08000000)  # CREATE_NO_WINDOW
+        # Open the worktree checkout as the workspace (the extension resolves the session
+        # against the OPEN workspace). OS URL handler fallback when the CLI is absent.
+        if self._vscodium_cli():
+            self._run_codium([folder])
         else:
             webbrowser.open(vscodium_uri(folder))
 
     def _open_vscodium_uri(self, uri: str) -> None:
-        # Dispatch a vscodium:// URI (the open?session= deep link) to VSCodium. Drives the exe
-        # with --open-url (deterministic), falling back to the OS URL handler.
-        exe = self._vscodium_executable()
-        if exe:
-            subprocess.Popen([exe, "--open-url", "--", uri], creationflags=0x08000000)
+        # Route the open?session= deep link via the codium CLI (the only path that delivers it
+        # to the extension here). OS URL handler fallback when the CLI is absent.
+        if self._vscodium_cli():
+            self._run_codium(["--open-url", uri])
         else:
             webbrowser.open(uri)
 
