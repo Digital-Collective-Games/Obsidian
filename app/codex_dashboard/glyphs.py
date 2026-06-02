@@ -108,6 +108,14 @@ def render_glyph(kind: str, color: str, size: int, supersample: int = SUPERSAMPL
         # an eject symbol: a triangle pointing up over a horizontal bar.
         draw.polygon([pt(0.5, 0.2), pt(0.82, 0.56), pt(0.18, 0.56)], fill=rgba)
         draw.rectangle([pt(0.18, 0.66), pt(0.82, 0.78)], fill=rgba)
+    elif kind == "sync":
+        # two circular arrows (the refresh/sync glyph): a top arc + a bottom arc with a gap
+        # on each side, each ending in a tangential arrowhead chevron.
+        box = [pt(0.2, 0.2), pt(0.8, 0.8)]
+        draw.arc(box, 200, 340, fill=rgba, width=stroke)
+        draw.arc(box, 20, 160, fill=rgba, width=stroke)
+        line([(0.70, 0.41), (0.82, 0.41), (0.79, 0.52)])
+        line([(0.30, 0.59), (0.18, 0.59), (0.21, 0.48)])
     else:
         raise ValueError(f"unknown glyph kind: {kind!r}")
 
@@ -184,4 +192,5 @@ GLYPH_KINDS = (
     "radio_off",
     "plus",
     "eject",
+    "sync",
 )
