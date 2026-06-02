@@ -39,6 +39,7 @@ from app.codex_dashboard.worktrees_tab import (
     worktree_face_lines,
     worktree_heading_repo,
     worktree_issue_url,
+    claude_session_uri,
     worktree_matches_repo,
     worktree_session_target,
     worktree_status_background,
@@ -145,6 +146,15 @@ class WorktreesTabHelperTests(unittest.TestCase):
             vscodium_uri("C:\\My Worktrees\\wt-1"),
             "vscodium://file/C:/My%20Worktrees/wt-1",
         )
+
+    def test_claude_session_uri_opens_the_extension_to_a_session(self) -> None:
+        # The ↗ button opens the agent's session in VSCodium's Claude extension
+        # (anthropic.claude-code); the session id is fully percent-encoded. No id -> "".
+        self.assertEqual(
+            claude_session_uri("a1b2c3d4-e5f6-7890-abcd-ef1234567890"),
+            "vscodium://anthropic.claude-code/open?session=a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+        )
+        self.assertEqual(claude_session_uri(""), "")
 
     def test_heading_uses_short_repo_segment_for_both_states(self) -> None:
         # B1: the heading must be the short repo token in BOTH states, NOT the raw `repo`

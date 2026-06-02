@@ -69,6 +69,7 @@ from .worktrees_backend import (
 )
 from .worktrees_tab import (
     ALL_REPOS_OPTION,
+    claude_session_uri,
     filter_task_options,
     filter_worktrees_by_repo,
     first_assignable_task_id,
@@ -1507,20 +1508,26 @@ class DashboardApp:
         widget.bind("<Leave>", hide)
 
     def open_worktree_session_action(self, worktree: dict[str, object]) -> None:
-        # Open the allocated worktree's live session in VSCodium so the operator can watch the
-        # agent work (and open a terminal there to interact). Opens the worktree CHECKOUT
-        # folder through the registered vscodium:// protocol; the backend deliberately exposes
-        # the raw fields and never emits the link itself, so constructing it is the client's
-        # job. webbrowser.open routes the custom scheme through the OS handler (same path the
-        # bound-task issue link already uses), so it never blocks the UI or pops a console.
-        target = worktree_session_target(worktree)
-        if not target:
-            self._set_worktrees_status("No session location is available for this worktree yet.")
-            return
+        # Open the allocated worktree's running CLAUDE SESSION in VSCodium's Claude extension
+        # (anthropic.claude-code) so the operator can read the agent's chat/thinking and
+        # continue it. The extension resolves a session against the OPEN workspace, so open the
+        # worktree folder first, then fire vscodium://anthropic.claude-code/open?session=<id>.
+        # If the backend captured no session id for this worktree (e.g. it was assigned without
+        # an agent ever being launched into it), say so honestly — do NOT open a weaker proxy.
+        session_id = str(worktree.get("agent_session_id") or "").strip()
+        workspace = worktree_session_target(worktree)
         label = str(worktree.get("task_id") or worktree.get("worktree_id") or "session")
+        if not session_id:
+            self._set_worktrees_status(
+                f"No Claude session is bound to {label} yet — nothing to open. "
+                "(A worktree gets a session only once an agent is launched into it.)"
+            )
+            return
         try:
-            webbrowser.open(vscodium_uri(target))
-            self._set_worktrees_status(f"Opening {label} in VSCodium: {target}")
+            if workspace:
+                webbrowser.open(vscodium_uri(workspace))
+            webbrowser.open(claude_session_uri(session_id))
+            self._set_worktrees_status(f"Opening {label}'s Claude session in VSCodium…")
         except Exception as exc:
             self._set_worktrees_status(f"Could not open VSCodium: {exc}")
 

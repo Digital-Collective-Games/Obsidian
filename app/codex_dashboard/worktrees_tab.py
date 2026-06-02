@@ -170,6 +170,22 @@ def vscodium_uri(path: str) -> str:
     return "vscodium://file/" + quote(forward, safe="/:")
 
 
+def claude_session_uri(session_id: str) -> str:
+    """Build the URI that opens a specific Claude Code session in VSCodium's Claude extension
+    chat panel (extension id ``anthropic.claude-code``), so the operator can read the agent's
+    thinking and continue the conversation.
+
+    The extension resolves the session against the workspace currently OPEN in the editor, so
+    the caller opens the worktree folder first (``vscodium_uri``) and then fires this. The
+    registered editor scheme on this machine is ``vscodium://`` (plain VS Code would be
+    ``vscode://``). Returns "" when there is no session id to open.
+    """
+    sid = str(session_id or "").strip()
+    if not sid:
+        return ""
+    return "vscodium://anthropic.claude-code/open?session=" + quote(sid, safe="")
+
+
 def filter_worktrees_by_repo(
     worktrees: Iterable[dict[str, object]],
     selected_repo_id: str,
