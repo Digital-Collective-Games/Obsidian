@@ -19,10 +19,10 @@
   "production_roll": {
     "rolled_live": true,
     "backend_release": "20260601T223712Z-354c1e1",
-    "dashboard_release": "20260602T040951Z-a6625e0c0f6c",
+    "dashboard_release": "20260602T042325Z-6cf14f1caddb",
     "rollback_backend_release": "20260427T162803Z-3c0fabb2",
     "rollback_dashboard_release": "20260602T035615Z-70027b95ebb1",
-    "notes": "WORKTREES tab + ASSIGN_TASK popup conformed to the Stitch mockups with crisp PIL-supersampled icons, Consolas mono, gradient ASSIGN CTA, and flat mockup-style buttons (a6625e0): NEW WORKTREE (ghost-cyan+plus) / REFRESH / ghost-red EJECT / DEQUEUE / cyan ASSIGN; borderless modal. Verified by an 8-agent adversarial fidelity review (0 blocking). Live on pid 68324. Backend untouched. #16 untouched (Queue=Never, OPEN)."
+    "notes": "WORKTREES tab + ASSIGN_TASK popup conformed to the Stitch mockups (crisp PIL icons, Consolas mono, gradient ASSIGN CTA, flat mockup buttons). BUGFIX 6cf14f1: the borderless popup's grab_set() froze every overlay click (modal grab on a behind-the-overlay popup); dropped the grab (non-modal + Escape-to-close), diagnosed via interactive repro (grab_current None, clicks fire). Live on pid 51880. Backend untouched. #16 untouched (Queue=Never, OPEN)."
   },
   "open_bugs": [
     "BUG-0001 FIXED + live-verified (Eject dequeues via registry-resolved provider)",
