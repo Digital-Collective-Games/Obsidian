@@ -1090,10 +1090,10 @@ class DashboardApp:
             justify="left",
         )
         self.worktrees_action_status_label.pack(anchor="w", pady=(2, 0))
-        self.worktrees_refresh_button = self._flat_button(
-            header, "REFRESH", self.refresh_worktrees_data,
-            bg="#262a31", fg="#adcbda", hover_bg="#353940", hover_fg="#dfe2eb",
-            font=("Space Grotesk", -12, "bold"), padx=14, pady=7,
+        self.worktrees_refresh_button = self._cta_button(
+            header, "REFRESH", self.refresh_worktrees_data, bg="#1c2026",
+            top="#3a3f47", bottom="#23272d", fg="#cdd6da",
+            hover_top="#454b54", hover_bottom="#2d323a", icon=None,
         )
         self.worktrees_refresh_button.grid(row=0, column=1, sticky="e")
 
@@ -1111,11 +1111,10 @@ class DashboardApp:
         )
         self.worktrees_repo_combo.pack(side="left", padx=(0, 12))
         self.worktrees_repo_combo.bind("<<ComboboxSelected>>", self._on_worktrees_repo_filter_changed)
-        self.worktrees_create_button = self._flat_button(
-            toolbar, "NEW WORKTREE", self.create_worktree_for_selected_repo,
-            bg="#1c2026", fg="#00e5ff", hover_bg="#10333a", hover_fg="#c3f5ff",
-            font=("Space Grotesk", -12, "bold"), icon="plus", icon_color="#00e5ff",
-            icon_side="left", border="#0e4a52", padx=14, pady=7,
+        self.worktrees_create_button = self._cta_button(
+            toolbar, "NEW WORKTREE", self.create_worktree_for_selected_repo, bg="#1c2026",
+            top="#c3f5ff", bottom="#00e5ff", fg="#00363d",
+            hover_top="#d8faff", hover_bottom="#2ee8ff", icon="plus", icon_side="left",
         )
         self.worktrees_create_button.pack(side="right")
 
@@ -1439,17 +1438,16 @@ class DashboardApp:
                 parent, "details", lambda wt=dict(worktree): self.open_worktree_details(wt),
                 "Details", row_bg,
             ).pack(side="left", padx=(0, 10))
-            self._flat_button(
-                parent, "DEQUEUE", lambda tid=task_id: self.dequeue_task_action(tid),
-                bg="#303743", fg="#dfe2eb", hover_bg="#3b4450",
-                font=("Space Grotesk", -11, "bold"), padx=12, pady=6,
+            self._cta_button(
+                parent, "DEQUEUE", lambda tid=task_id: self.dequeue_task_action(tid), bg=row_bg,
+                top="#3a3f47", bottom="#23272d", fg="#dfe2eb",
+                hover_top="#454b54", hover_bottom="#2d323a", icon=None,
                 disabled=not task_id,
             ).pack(side="left", padx=(0, 8))
-            self._flat_button(
+            self._cta_button(
                 parent, "EJECT", lambda rid=run_id, wid=worktree_id: self.eject_worktree_action(rid, wid),
-                bg="#2a1719", fg="#ffb4ab", hover_bg="#5a2327",
-                font=("Space Grotesk", -11, "bold"), icon="eject", icon_color="#ffb4ab",
-                icon_side="left", padx=12, pady=6,
+                bg=row_bg, top="#b3474a", bottom="#5a1f22", fg="#ffe7e4",
+                hover_top="#c85457", hover_bottom="#742a2e", icon="eject", icon_side="left",
             ).pack(side="left")
         else:
             self._worktree_icon_button(
@@ -1460,10 +1458,10 @@ class DashboardApp:
                 parent, "destroy", lambda wid=worktree_id: self.destroy_worktree_action(wid),
                 "Destroy", row_bg,
             ).pack(side="left", padx=(0, 12))
-            self._flat_button(
-                parent, "ASSIGN", lambda wt=dict(worktree): self.open_assign_popup(wt),
-                bg="#00e5ff", fg="#00363d", hover_bg="#2ee8ff",
-                font=("Space Grotesk", -11, "bold"), padx=14, pady=6,
+            self._cta_button(
+                parent, "ASSIGN", lambda wt=dict(worktree): self.open_assign_popup(wt), bg=row_bg,
+                top="#c3f5ff", bottom="#00e5ff", fg="#00363d",
+                hover_top="#d8faff", hover_bottom="#2ee8ff", icon=None,
             ).pack(side="left")
 
     def _icon_photo(self, kind: str, color: str, size: int):
@@ -1732,14 +1730,11 @@ class DashboardApp:
         # Full-width footer band with a top divider separating it from the scrollable list.
         tk.Frame(popup, bg="#31353c", height=1).pack(side="bottom", fill="x")
         bind_command = lambda: self._confirm_assign(popup, selection.get(), repo_for_assign, worktree_id)
-        bind_button = self._cta_button(footer, "ASSIGN", bind_command, "#262a31")
-        if bind_button is None:
-            bind_button = self._flat_button(
-                footer, "ASSIGN", bind_command,
-                bg="#00e5ff", fg="#00363d", hover_bg="#2ee8ff",
-                font=("Space Grotesk", -14, "bold"), icon="check", icon_color="#00363d",
-                padx=18, pady=9,
-            )
+        bind_button = self._cta_button(
+            footer, "ASSIGN", bind_command, bg="#262a31",
+            top="#c3f5ff", bottom="#00e5ff", fg="#00363d",
+            hover_top="#d8faff", hover_bottom="#2ee8ff", icon="check",
+        )
         bind_button.pack(side="right", padx=(0, 24), pady=12)
         self._flat_button(
             footer, "CANCEL", popup.destroy,
@@ -1923,24 +1918,48 @@ class DashboardApp:
             self._bind_tooltip(button, tooltip)
         return button
 
-    def _cta_button(self, parent, text, command, bg):
-        # The primary CTA (BIND_TASK) baked as one image: a vertical cyan gradient (the
-        # mockup's terminal glow), heavy Space Grotesk text, and a check glyph. Returns None
-        # if Pillow / the bundled font is unavailable so the caller falls back to a flat fill.
+    def _cta_button(
+        self, parent, text, command, *, bg, top, bottom, fg, hover_top, hover_bottom,
+        icon="check", icon_side="right", disabled=False,
+    ):
+        # The gradient "glow" button style (the ASSIGN/CTA look) baked as one image, so every
+        # worktree action button shares one size/font/treatment; only the colors vary by role
+        # (cyan create/assign, error-red eject, neutral refresh/dequeue). Falls back to a flat
+        # solid button (the gradient's base color) if Pillow is unavailable. Retains image
+        # refs on the widget so Tk does not garbage-collect them.
         try:
             from PIL import ImageTk
 
             from .glyphs import render_cta
 
             font_path = FONT_ASSET_DIR / "SpaceGrotesk[wght].ttf"
-            rest = ImageTk.PhotoImage(render_cta(text, font_path))
+            if disabled:
+                muted = ImageTk.PhotoImage(
+                    render_cta(text, font_path, top_color="#2e333a", bottom_color="#23272d",
+                               fg="#566066", icon=icon, icon_side=icon_side)
+                )
+                button = tk.Label(parent, image=muted, bg=bg, bd=0)
+                button._cta_rest = muted
+                return button
+            rest = ImageTk.PhotoImage(
+                render_cta(text, font_path, top_color=top, bottom_color=bottom, fg=fg,
+                           icon=icon, icon_side=icon_side)
+            )
             hot = ImageTk.PhotoImage(
-                render_cta(text, font_path, top_color="#d8faff", bottom_color="#2ee8ff")
+                render_cta(text, font_path, top_color=hover_top, bottom_color=hover_bottom, fg=fg,
+                           icon=icon, icon_side=icon_side)
             )
         except Exception:
-            return None
+            font = ("Space Grotesk", -14, "bold")
+            if disabled:
+                return self._flat_button(parent, text, command, bg=bottom, fg=fg, hover_bg=bottom,
+                                         font=font, icon=icon, icon_color=fg, icon_side=icon_side,
+                                         padx=18, pady=9, disabled=True)
+            return self._flat_button(parent, text, command, bg=bottom, fg=fg, hover_bg=hover_bottom,
+                                     font=font, icon=icon, icon_color=fg, icon_side=icon_side,
+                                     padx=18, pady=9)
         button = tk.Label(parent, image=rest, bg=bg, bd=0, cursor="hand2")
-        button._cta_rest = rest  # retain refs so Tk does not garbage-collect the images
+        button._cta_rest = rest
         button._cta_hot = hot
         button.bind("<Enter>", lambda _e: button.configure(image=hot))
         button.bind("<Leave>", lambda _e: button.configure(image=rest))

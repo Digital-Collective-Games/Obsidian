@@ -126,10 +126,13 @@ def render_cta(
     top_color: str = "#c3f5ff",
     bottom_color: str = "#00e5ff",
     fg: str = "#00363d",
+    icon: str | None = "check",
+    icon_side: str = "right",
     supersample: int = 2,
 ):
-    """Render the primary CTA (BIND_TASK) as one image: a vertical cyan gradient (top->bottom
-    'terminal glow' per the mockup), heavy Space Grotesk text, and a trailing check glyph.
+    """Render a CTA button as one image: a vertical gradient fill (the mockup's terminal
+    glow), heavy Space Grotesk text, and an optional leading/trailing glyph. Used for every
+    worktree action button so they share one size/font/treatment; colors vary by role.
     Raises if Pillow/the font is unavailable so the caller can fall back to a flat button."""
     from PIL import Image, ImageDraw, ImageFont
 
@@ -142,9 +145,10 @@ def render_cta(
     measure = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
     bbox = measure.textbbox((0, 0), text, font=font)
     text_w, text_h = bbox[2] - bbox[0], bbox[3] - bbox[1]
-    icon_px = icon_size * ss
+    has_icon = icon is not None
+    icon_px = icon_size * ss if has_icon else 0
     content_h = max(text_h, icon_px) + 2 * top_pad * ss
-    content_w = 2 * side_pad * ss + text_w + gap * ss + icon_px
+    content_w = 2 * side_pad * ss + text_w + ((gap * ss + icon_px) if has_icon else 0)
 
     image = Image.new("RGBA", (content_w, content_h), (0, 0, 0, 0))
     draw = ImageDraw.Draw(image)
@@ -154,9 +158,16 @@ def render_cta(
         row = tuple(round(top_rgb[i] + (bottom_rgb[i] - top_rgb[i]) * t) for i in range(3)) + (255,)
         draw.line([(0, y), (content_w, y)], fill=row)
 
-    draw.text((side_pad * ss - bbox[0], (content_h - text_h) // 2 - bbox[1]), text, font=font, fill=_hex_to_rgba(fg))
-    check = render_glyph("check", fg, icon_px, supersample=1)
-    image.alpha_composite(check, (side_pad * ss + text_w + gap * ss, (content_h - icon_px) // 2))
+    if has_icon and icon_side == "left":
+        icon_x = side_pad * ss
+        text_x = side_pad * ss + icon_px + gap * ss - bbox[0]
+    else:
+        text_x = side_pad * ss - bbox[0]
+        icon_x = side_pad * ss + text_w + gap * ss
+    draw.text((text_x, (content_h - text_h) // 2 - bbox[1]), text, font=font, fill=_hex_to_rgba(fg))
+    if has_icon:
+        glyph = render_glyph(icon, fg, icon_px, supersample=1)
+        image.alpha_composite(glyph, (icon_x, (content_h - icon_px) // 2))
     return image.resize((content_w // ss, content_h // ss), Image.LANCZOS)
 
 
